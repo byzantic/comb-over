@@ -22,6 +22,7 @@
 <div class="layout">
   <aside class="side"><nav><a class="current" href="manual.html">Manual</a>
 <ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
+<a class="" href="substrates.html">Substrate presets</a>
 <a class="" href="examples/index.html">Worked examples</a>
 <ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li></ol></nav></aside>
   <main class="doc">
@@ -233,6 +234,10 @@
 <td><code>.opt maxiter=N</code></td>
 <td>Optimiser iteration limit (default 400).</td>
 </tr>
+<tr>
+<td><code>.substrate ID [key=value …]</code></td>
+<td>PCB technology (§3.6). At most one per netlist.</td>
+</tr>
 </tbody></table></div>
 <p>Unknown directives are ignored with a warning.</p>
 <h3 id="35-nodes-ports-and-elements"><a class="anchor" href="#35-nodes-ports-and-elements" aria-hidden="true">#</a>3.5 Nodes, ports and elements</h3>
@@ -279,6 +284,75 @@
 </tbody></table></div>
 <p>Element names follow SPICE: the first letter selects the type (<code>C1</code>, <code>Cload</code>, <code>Lchoke</code>, <code>T5</code>).</p>
 <hr>
+<h3 id="36-substrates"><a class="anchor" href="#36-substrates" aria-hidden="true">#</a>3.6 Substrates</h3>
+<p><code>.substrate</code> names the PCB technology the design is meant for. Pick a preset, optionally overriding values, or describe a board of your own:</p>
+<pre><code>.substrate jlc-ro4350b-0.508                 # preset
+.substrate jlc-fr4-1.6 er=4.3 tand=0.018      # preset with overrides
+.substrate custom h=0.8mm er=3.0 tand=0.002 t=18u
+</code></pre>
+<p>The presets cover the JLCPCB 2-layer boards, each with its source and access date:</p>
+<ul>
+<li><strong>FR-4</strong> at 0.4–2.0 mm board thickness.</li>
+<li><strong>Rogers RO4350B</strong> at 0.508, 0.762 and 1.524 mm. These use the Rogers <em>design</em> Dk of 3.66, not the process Dk of 3.48 that JLCPCB quotes.</li>
+<li><strong>Four PTFE laminates</strong> at 0.762 and 1.524 mm.</li>
+</ul>
+<p>The full list, with every assumption flagged, is on the generated <a href="substrates.html">substrate presets</a> page.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>key</th>
+<th>meaning</th>
+<th>default (custom)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>h</code></td>
+<td>dielectric thickness</td>
+<td>required</td>
+</tr>
+<tr>
+<td><code>er</code></td>
+<td>relative permittivity</td>
+<td>required</td>
+</tr>
+<tr>
+<td><code>tand</code></td>
+<td>loss tangent, quoted at <code>ftand</code></td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>ftand</code></td>
+<td>frequency at which <code>tand</code> applies</td>
+<td>1 GHz</td>
+</tr>
+<tr>
+<td><code>t</code></td>
+<td>copper thickness</td>
+<td>1 oz (34.8 µm)</td>
+</tr>
+<tr>
+<td><code>sigma</code></td>
+<td>copper conductivity</td>
+<td>5.8×10⁷ S/m</td>
+</tr>
+<tr>
+<td><code>rough</code></td>
+<td>RMS copper roughness</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>mintrace</code>, <code>minspace</code>, <code>mindrill</code></td>
+<td>fabrication limits</td>
+<td>none</td>
+</tr>
+</tbody></table></div>
+<p>Behaviour:</p>
+<ul>
+<li><strong>Order.</strong> <code>.substrate</code> is processed in file order together with <code>.param</code>. Overrides may therefore use earlier parameters, including tuned ones, so slider and optimiser values flow into the substrate.</li>
+<li><strong>Expression names.</strong> Statements after it can use <code>sub_h</code>, <code>sub_er</code>, <code>sub_tand</code>, <code>sub_t</code> and <code>sub_sigma</code> in expressions, e.g. <code>er sub_er</code> in a <code>cline</code> block.</li>
+<li><strong>Display.</strong> The substrate&#39;s values, assumptions and sources are shown at the top of the info panel.</li>
+<li><strong>Effect on the simulation.</strong> In this version the substrate is descriptive: it does not change the simulation unless you use the <code>sub_*</code> names. Physical line models, layout and KiCad export will use it (issues #3–#10).</li>
+</ul>
 <h2 id="4-coupled-line-sections"><a class="anchor" href="#4-coupled-line-sections" aria-hidden="true">#</a>4. Coupled-line sections</h2>
 <h3 id="41-syntax"><a class="anchor" href="#41-syntax" aria-hidden="true">#</a>4.1 Syntax</h3>
 <pre><code>cline NAME [len=..] [er=..] [Q=..] [f0=..]

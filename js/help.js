@@ -11,7 +11,8 @@ Inside matrices and on statement lines, an expression must not contain spaces (e
 <pre>.freq START STOP POINTS [log]
 .ref F0                         # reference frequency for "deg" lengths (default: sweep centre)
 .param NAME = EXPR [tune LO HI] # tune → slider + optimiser variable
-.title text</pre>
+.title text
+.substrate ID|custom [h=..] [er=..] [tand=..] [t=..]   # PCB technology; see the substrate presets page</pre>
 
 <h4>Ports and lumped elements</h4>
 <pre>port NODE [Z0]            # numbered 1, 2, … in order of appearance (default 50 Ω)

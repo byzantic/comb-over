@@ -4,6 +4,7 @@
 import { parseExpr, evalReal, astHasDeg } from './expr.js';
 import { Section, fromY0, fromCnorm, fromEvenOdd, maxwellFromGroundMutual, C0 } from './section.js';
 import { rSymFunc } from './linalg.js';
+import { makeSubstrate, scopeOf, KEYS as SUB_KEYS } from './substrates.js';
 
 export const GROUND = new Set(['0', 'gnd', 'GND', 'ground']);
 export const OPEN = new Set(['-', 'open', 'OPEN', 'nc', 'NC']);
@@ -60,9 +61,25 @@ export function parseNetlist(text, overrides = {}) {
     try { return evalReal(parseExpr(s), d.scope); } catch (e) { fail(ln, e.message); }
   };
 
-  // ---- pass 1: params, in order (so later params may use earlier ones) ----
+  // ---- pass 1: params and .substrate, in file order (later ones may use earlier ones) ----
   lines.forEach((raw, ln) => {
     const line = stripComment(raw);
+    if (/^\.substrate\b/i.test(line)) {
+      if (d.substrate) fail(ln, 'only one .substrate statement is allowed');
+      const toks = splitTokens(line).slice(1);
+      if (!toks.length) fail(ln, '.substrate PRESET|custom [h=..] [er=..] [tand=..] [ftand=..] [t=..] [sigma=..] [rough=..]');
+      const ov = {};
+      for (const tk of toks.slice(1)) {
+        const k = kv(tk);
+        if (!k) fail(ln, `expected key=value, got "${tk}"`);
+        if (!(k[0].toLowerCase() in SUB_KEYS)) fail(ln, `unknown substrate key "${k[0]}" (use ${Object.keys(SUB_KEYS).join(', ')})`);
+        ov[k[0].toLowerCase()] = ev(k[1], ln);
+      }
+      try { d.substrate = makeSubstrate(toks[0], ov); } catch (e) { fail(ln, e.message); }
+      d.substrate.line = ln + 1;
+      Object.assign(d.scope, scopeOf(d.substrate));
+      return;
+    }
     if (!/^\.param\b/i.test(line)) return;
     const body = line.replace(/^\.param\s*/i, '');
     const m = /^([A-Za-z_]\w*)\s*=\s*(.*)$/.exec(body);
@@ -121,7 +138,7 @@ export function parseNetlist(text, overrides = {}) {
       return;
     }
 
-    if (kwl === '.param') return;
+    if (kwl === '.param' || kwl === '.substrate') return;
     if (kwl === '.freq') {
       const [a, b, n, mode] = toks.slice(1);
       d.freq = { start: ev(a, ln), stop: ev(b, ln), n: Math.max(2, Math.round(ev(n ?? '401', ln))), log: (mode || '').toLowerCase() === 'log' };
