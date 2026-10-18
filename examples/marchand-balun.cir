@@ -23,5 +23,5 @@ end
 wire m 0
 .goal db(S11) < -20 0.75G 1.25G
 .plot ylim=-40,0 db(S11) db(S21) db(S31)
-.plot title=Phase_balance_(deg) ang(S21/S31)
-.plot title=Amplitude_balance_(dB) db(S21/S31)
+.plot ylim=-5,5 title=Phase_imbalance:_deviation_from_180_deg ang(-S21/S31)
+.plot ylim=-1,1 title=Amplitude_imbalance_(dB) db(S21/S31)

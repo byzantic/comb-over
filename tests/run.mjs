@@ -149,5 +149,15 @@ end`;
   check('Q loss: |S21| = exp(-βℓ/2Q)', near(cabs(...at(r, 2, 1, 0)), want, 1e-10));
 }
 
+// ---- regression: internal resonance with ports shorted (Marchand at f0/2) must not corrupt S ----
+{
+  const net = `.freq 0.5G 0.5G 2\n.ref 1G\nport in\nport p\nport q
+cline S1\n  Zeo 204.19 30.613\n  len 90deg\n  A in 0\n  B mid p\nend
+cline S2\n  Zeo 204.19 30.613\n  len 90deg\n  A mid q\n  B - 0\nend`;
+  const { r } = run(net);
+  const a = cabs(...at(r, 2, 1, 0)), b = cabs(...at(r, 3, 1, 0));
+  check('Marchand balanced at f0/2 (singular shorted-port resonance)', near(a, b, 1e-12), `${a} ${b}`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

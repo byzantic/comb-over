@@ -19,6 +19,8 @@ export function csolve(A, B) {
   if (A.cols !== n || B.rows !== n) throw new Error('csolve: dimension mismatch');
   const ar = Float64Array.from(A.re), ai = Float64Array.from(A.im);
   const br = Float64Array.from(B.re), bi = Float64Array.from(B.im);
+  let scale = 0; for (let i = 0; i < n * n; i++) scale = Math.max(scale, Math.hypot(ar[i], ai[i]));
+  const tiny = scale * 1e-14;
   for (let k = 0; k < n; k++) {
     // pivot
     let p = k, best = -1;
@@ -26,7 +28,7 @@ export function csolve(A, B) {
       const v = Math.hypot(ar[i * n + k], ai[i * n + k]);
       if (v > best) { best = v; p = i; }
     }
-    if (!(best > 0) || !isFinite(best)) throw new Error('singular matrix');
+    if (!(best > tiny) || !isFinite(best)) throw new Error('singular matrix');
     if (p !== k) {
       for (let j = 0; j < n; j++) {
         let t = ar[k * n + j]; ar[k * n + j] = ar[p * n + j]; ar[p * n + j] = t;

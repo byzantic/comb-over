@@ -1,0 +1,16 @@
+.title Quarter-wave transformers, 50 to 100 ohm at 1 GHz: one section vs. two-section binomial
+# Two independent networks in one netlist: ports 1-2 and ports 3-4.
+.freq 0.2G 1.8G 801
+.ref 1G
+.param ZL = 100
+# single section: Z = sqrt(50 ZL)
+port a1 50      # 1
+port a2 ZL      # 2
+T1 a1 a2 Z0=sqrt(50*ZL) len=90deg
+# two-section binomial: Z1 = 50 (ZL/50)^(1/4), Z2 = 50 (ZL/50)^(3/4)
+port b1 50      # 3
+port b3 ZL      # 4
+T2 b1 b2 Z0=50*(ZL/50)^0.25 len=90deg
+T3 b2 b3 Z0=50*(ZL/50)^0.75 len=90deg
+.plot ylim=-50,0 title=Return_loss_(dB) db(S11) db(S33)
+.smith S11 S33

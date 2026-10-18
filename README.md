@@ -4,6 +4,18 @@ Browser-based analysis of N-port networks built from **coupled multiconductor TE
 
 No build step and no dependencies: plain ES modules plus canvas.
 
+## Documentation
+
+- **[Manual](docs/manual.md):** the interface, the full netlist language, plots, tuning and optimisation, synthesis, and the model and its limits.
+- **[Worked examples](docs/examples/README.md):**
+  1. transformers;
+  2. couplers, including microstrip directivity compensation;
+  3. comb-line from specification to loss budget;
+  4. interdigital by hand;
+  5. Marchand balun;
+  6. Schiffman;
+  7. a three-line section from field-solver C/L matrices.
+
 ## Run it
 
 Serve the folder (ES modules don't load from `file://`):

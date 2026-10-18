@@ -1,5 +1,6 @@
 export const HELP_HTML = `
 <h2>Netlist syntax</h2>
+<p>Quick reference. The full manual and worked examples are in <a href="docs/manual.md" target="_blank">docs/manual.md</a> and <a href="docs/examples/README.md" target="_blank">docs/examples</a> in the repository.</p>
 <p>One statement per line. Comments start with <code>#</code> or <code>//</code> (or <code>*</code> at line start).
 Numbers take SI prefixes: <code>f p n u m k M G T</code> (<code>m</code> = milli, <code>M</code>/<code>meg</code> = mega); trailing units are ignored
 (<code>2.2pF</code>, <code>1.5GHz</code>, <code>25mm</code> = 0.025). Special units: <code>mil</code>, <code>in</code>, <code>deg</code>.

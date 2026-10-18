@@ -1,0 +1,48 @@
+.title Interdigital 3-pole by hand: Chebyshev 0.1 dB, f0 = 3 GHz, 10 % ripple BW, stripline er = 2.2
+# Every design equation is written out as a .param, so this file IS the hand calculation.
+.freq 2G 4G 801
+.ref 3G
+.param fbw = 0.10
+.param er  = 2.2
+.param Zr  = 60          # resonator line impedance with neighbours grounded
+.param R0  = 50
+# Chebyshev 0.1 dB, n = 3 (Matthaei Table 4.05-2(a))
+.param g1 = 1.0316
+.param g2 = 1.1474
+.param g3 = 1.0316
+# couplings and external Q
+.param k12 = fbw/sqrt(g1*g2)
+.param Qe  = g1/fbw
+# interdigital resonator (theta0 = 90 deg): slope b = (pi/4) Ya ; J = Ym
+.param Ya  = 1/Zr
+.param b   = pi/4*Ya
+.param Ym  = k12*b
+# normalised capacitances C/eps = Y * eta,  eta = eta0/sqrt(er)
+.param eta = eta0/sqrt(er)
+.param cg1 = (Ya-Ym)*eta
+.param cg2 = (Ya-2*Ym)*eta
+.param cm  = Ym*eta
+# tap position from the shorted end: sin(theta_t) = sqrt(b R0 / Qe)
+.param tt  = asin(sqrt(b*R0/Qe))*180/pi
+
+port t1 R0
+port t3 R0
+# lines 1 and 3 shorted at A, line 2 shorted at B; taps on lines 1 and 3 at tt from A
+cline LOW
+  er er
+  len tt*1deg
+  Cg cg1 cg2 cg1
+  Cm cm cm
+  A 0  -   0
+  B t1 m2  t3
+end
+cline HIGH
+  er er
+  len (90-tt)*1deg
+  Cg cg1 cg2 cg1
+  Cm cm cm
+  A t1 m2 t3
+  B -  0  -
+end
+.plot ylim=-60,0 db(S11) db(S21) db(cheby(3,0.1,3G,0.1))
+.plot gd(S21)

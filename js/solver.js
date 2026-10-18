@@ -1,5 +1,5 @@
-// Nodal (admittance) solver: stamps sections and lumped elements, reduces to port nodes,
-// converts to S-parameters referenced to each port's (real) impedance.
+// Nodal (admittance) solver: stamps sections and lumped elements, terminates each port in its
+// reference conductance and solves for S directly (real reference impedances).
 
 import { CMat, csolve } from './linalg.js';
 import { GROUND, OPEN } from './netlist.js';
@@ -55,8 +55,6 @@ export function solve(d, freqs = frequencies(d.freq)) {
   const P = d.ports.length, n = nodes.n, nf = freqs.length;
   const portSet = new Set(nodes.portIdx);
   if (portSet.size !== P) throw new Error('two ports share a node; this is not supported');
-  const internal = []; for (let i = 0; i < n; i++) if (!portSet.has(i)) internal.push(i);
-  const ni = internal.length;
   const Sre = new Float64Array(nf * P * P), Sim = new Float64Array(nf * P * P);
   const zr = d.ports.map(p => p.z);
   let failures = 0;
@@ -92,36 +90,18 @@ export function solve(d, freqs = frequencies(d.freq)) {
       if (a >= 0 && b >= 0) { Y.add(a, b, -yr, -yi); Y.add(b, a, -yr, -yi); }
     });
     try {
-      // Kron reduction onto port nodes: Yp = Ypp − Ypi Yii⁻¹ Yip
+      // Terminated-network formulation (robust where the Kron-reduced Yii is singular, e.g. internal
+      // resonances with the ports shorted): A = Y + diag(G_port), A X = E_ports,
+      // S = 2 √G X_pp √G − I.
       const pi = nodes.portIdx;
-      const Yp = new CMat(P);
-      for (let i = 0; i < P; i++) for (let j = 0; j < P; j++) { const [r, im] = Y.get(pi[i], pi[j]); Yp.set(i, j, r, im); }
-      if (ni) {
-        const Yii = new CMat(ni), Yip = new CMat(ni, P);
-        for (let i = 0; i < ni; i++) {
-          for (let j = 0; j < ni; j++) { const [r, im] = Y.get(internal[i], internal[j]); Yii.set(i, j, r, im); }
-          for (let j = 0; j < P; j++) { const [r, im] = Y.get(internal[i], pi[j]); Yip.set(i, j, r, im); }
-        }
-        const X = csolve(Yii, Yip); // ni×P
-        for (let i = 0; i < P; i++) for (let j = 0; j < P; j++) {
-          let sr = 0, si = 0;
-          for (let q = 0; q < ni; q++) {
-            const [ar, ai] = Y.get(pi[i], internal[q]);
-            const br = X.re[q * P + j], bi = X.im[q * P + j];
-            sr += ar * br - ai * bi; si += ar * bi + ai * br;
-          }
-          Yp.add(i, j, -sr, -si);
-        }
-      }
-      // S = (I + y)⁻¹ (I − y), y = √R Y √R
-      const A = new CMat(P), B = new CMat(P);
+      const A = Y.clone(), E = new CMat(n, P);
+      for (let i = 0; i < P; i++) { A.add(pi[i], pi[i], 1 / zr[i], 0); E.set(pi[i], i, 1, 0); }
+      const X = csolve(A, E);
+      const S = new CMat(P);
       for (let i = 0; i < P; i++) for (let j = 0; j < P; j++) {
-        const s = Math.sqrt(zr[i] * zr[j]);
-        const [r, im] = Yp.get(i, j);
-        A.set(i, j, (i === j ? 1 : 0) + r * s, im * s);
-        B.set(i, j, (i === j ? 1 : 0) - r * s, -im * s);
+        const g = 2 / Math.sqrt(zr[i] * zr[j]);
+        S.set(i, j, g * X.re[pi[i] * P + j] - (i === j ? 1 : 0), g * X.im[pi[i] * P + j]);
       }
-      const S = csolve(A, B);
       if (S.re.some(x => !isFinite(x)) || S.im.some(x => !isFinite(x))) throw new Error('non-finite');
       Sre.set(S.re, k * P * P); Sim.set(S.im, k * P * P);
       retry = 0;

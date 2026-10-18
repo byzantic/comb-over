@@ -1,0 +1,50 @@
+.title Comb-line chebyshev n=5 0.0432dB, f0 = 1 GHz, FBW = 6 % (synthesised)
+# g = 1, 0.97136, 1.3721, 1.8013, 1.3721, 0.97136, 1
+# k = 0.051816, 0.03805, 0.03805, 0.051816;  Qe = 16.238
+# resonator lines: Zr = 70 ohm (neighbours grounded), theta0 = 39.916 deg at f0, er = 1
+# pre-distorted design values: f0 = 1.002106 GHz, FBW = 5.9819 %
+# tap: closed form 9.2928 deg, refined 9.4625 deg from the shorted end
+# resonator 1 (tap-loaded, others grounded): f = 1.00211 GHz, Qe = 16.238
+.freq 0.76G 1.24G 801
+.ref 1G
+.param th0 = 39.9159442
+.param tt = 9.6302 tune 5.678 13.25
+.param cg1 = 5.0444 tune 3.531 6.608
+.param cg2 = 4.8033 tune 3.358 6.287
+.param cg3 = 4.8891 tune 3.421 6.403
+.param cm12 = 342.98m tune 0.2358 0.438
+.param cm23 = 247.49m tune 0.1732 0.3217
+.param cl1 = 2.7417p tune 2.18898p 3.28348p
+.param cl = 2.7071p tune 2.43353p 2.97432p
+
+port t1 50
+port t5 50
+
+cline S1
+  er 1
+  len tt*1deg
+  Cg cg1 cg2 cg3 cg2 cg1
+  Cm cm12 cm23 cm23 cm12
+  A 0 0 0 0 0
+  B t1 x2_1 x3_1 x4_1 t5
+end
+cline S2
+  er 1
+  len (th0-tt)*1deg
+  Cg cg1 cg2 cg3 cg2 cg1
+  Cm cm12 cm23 cm23 cm12
+  A t1 x2_1 x3_1 x4_1 t5
+  B r1 r2 r3 r4 r5
+end
+C1 r1 0 cl1
+C2 r2 0 cl
+C3 r3 0 cl
+C4 r4 0 cl
+C5 r5 0 cl1
+
+.goal db(S11) < -20.04 971649900 1029249900
+.goal db(S21) < -18.29 760000000 952730290   # hold the synthesised skirt (ideal -20 dB point)
+.goal db(S21) < -20.69 1049615000 1240000000
+.plot ylim=-70,0 db(S11) db(S21) db(cheby(5,0.0432,1000000000,0.06))
+.plot gd(S21)
+.smith S11

@@ -1,0 +1,20 @@
+.title Symmetric three-line coupler from per-unit-length C and L matrices (inhomogeneous)
+# Illustrative matrices of the kind a 2-D field solver produces for three coupled microstrip lines
+# (not a specific geometry). Input on the centre line; the outer lines share the coupled power.
+.freq 0.5G 5.5G 1001
+.ref 3G
+port c_in     # 1  centre line, end A (input)
+port c_out    # 2  centre line, end B (through)
+port l_cpl    # 3  left line,  end A (coupled)
+port l_iso    # 4  left line,  end B (isolated)
+port r_cpl    # 5  right line, end A (coupled)
+port r_iso    # 6  right line, end B (isolated)
+cline TL3
+  C [110p -28p -4p; -28p 125p -28p; -4p -28p 110p]      # F/m (Maxwell matrix)
+  L [420n 140n 70n; 140n 400n 140n; 70n 140n 420n]      # H/m
+  len 90deg                                             # at .ref, mean modal velocity
+  A l_cpl c_in  r_cpl
+  B l_iso c_out r_iso
+end
+.plot ylim=-40,0 db(S11) db(S21) db(S31) db(S41)
+.plot title=Coupled-port_balance_(dB) db(S31/S51)

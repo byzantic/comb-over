@@ -1,0 +1,44 @@
+.title Interdigital chebyshev n=3 0.1dB, f0 = 3 GHz, FBW = 10 % (synthesised)
+# g = 1, 1.0316, 1.1474, 1.0316, 1
+# k = 0.090398, 0.090398;  Qe = 10.489
+# resonator lines: Zr = 60 ohm (neighbours grounded), theta0 = 89.85 deg at f0, er = 2.2
+# pre-distorted design values: f0 = 3.005001 GHz, FBW = 9.8349 %
+# tap: closed form 14.441 deg, refined 14.972 deg from the shorted end
+# resonator 1 (tap-loaded, others grounded): f = 3.005 GHz, Qe = 10.489
+.freq 1.8G 4.2G 801
+.ref 3G
+.param th0 = 89.8502071
+.param tt = 14.533 tune 8.983 20.96
+.param cg1 = 3.6326 tune 2.753 5.162
+.param cg2 = 3.6125 tune 2.542 4.771
+.param cm12 = 290.41m tune 0.2106 0.3912
+.param cl1 = 22.238f tune 0.00417998p 0.0278666p   # end-resonator trim (tap-loading compensation)
+
+port t1 50
+port t3 50
+
+cline S1
+  er 2.2
+  len tt*1deg
+  Cg cg1 cg2 cg1
+  Cm cm12 cm12
+  A 0 - 0
+  B t1 x2_1 t3
+end
+cline S2
+  er 2.2
+  len (th0-tt)*1deg
+  Cg cg1 cg2 cg1
+  Cm cm12 cm12
+  A t1 x2_1 t3
+  B r1 0 r3
+end
+C1 r1 0 cl1
+C3 r3 0 cl1
+
+.goal db(S11) < -16.43 2859747700 3147747700
+.goal db(S21) < -19.63 1800000000 2630809900   # hold the synthesised skirt (ideal -20 dB point)
+.goal db(S21) < -18.86 3420999800 4200000000
+.plot ylim=-70,0 db(S11) db(S21) db(cheby(3,0.1,3000000000,0.1))
+.plot gd(S21)
+.smith S11

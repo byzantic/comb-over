@@ -101,7 +101,7 @@ export function design(spec) {
   const s = { ...DEFAULTS, ...spec };
   const target = { f0: s.f0, fbw: s.fbw };
   let r = designAt({ ...s, target });
-  if (!s.refine) return r;
+  if (!s.refine) { addSkirt(r); r.netlist = toNetlist(r); return r; }
   let f0d = s.f0, fbwd = s.fbw;
   for (let it = 0; it < 6; it++) {
     if (r.warnings.length) break; // don't chase centre/bandwidth on a design that is already compromised
@@ -116,8 +116,28 @@ export function design(spec) {
     f0d *= ef; fbwd *= eb; r = next;
   }
   r.predistort = { f0: f0d, fbw: fbwd };
+  addSkirt(r);
   r.netlist = toNetlist(r);
   return r;
+}
+
+// Skirt goals for the optimiser: hold the rejection at the ideal −20 dB points to (realised + 0.5 dB),
+// so polishing the passband ripple cannot buy return loss by widening the band. The realised value
+// is used rather than the ideal one because comb-line skirts are inherently asymmetric.
+function addSkirt(r) {
+  const T = r.spec.target ?? r.spec, sp = { ...r.spec, ...T };
+  const edge = (side) => {
+    let lo = side < 0 ? T.f0 * 0.05 : T.f0, hi = side < 0 ? T.f0 : T.f0 * 4;
+    for (let i = 0; i < 100; i++) { const m = (lo + hi) / 2, v = idealS21(sp.type, sp.n, sp.ripple, T.f0, T.fbw, m); if ((v < 0.1) === (side < 0)) lo = m; else hi = m; }
+    return (lo + hi) / 2;
+  };
+  const fl = edge(-1), fh = edge(1);
+  try {
+    const d = parseNetlist(toNetlist(r).replace(/^\.freq .*$/m, `.freq ${fl} ${fh} 2`));
+    const S = solve(d).S(2, 1);
+    const a = [0, 1].map(k => 20 * Math.log10(Math.hypot(S.re[k], S.im[k])));
+    if (a.every(isFinite)) r.skirt = { fl, fh, al: a[0], ah: a[1] };
+  } catch { /* leave without skirt goals */ }
 }
 
 export function designAt(s) {
@@ -274,6 +294,10 @@ export function toNetlist(r) {
   L.push('');
   const ideal = s.type === 'chebyshev' ? `cheby(${n},${s.ripple},${fmt(f0, 9)},${fmt(fbw, 9)})` : `butter(${n},${fmt(f0, 9)},${fmt(fbw, 9)})`;
   if (s.type === 'chebyshev') L.push(`.goal db(S11) < ${fmt(-returnLossDb(s.ripple), 4)} ${fmt(fa + 0.02 * (fb - fa), 8)} ${fmt(fb - 0.02 * (fb - fa), 8)}`);
+  if (r.skirt) {
+    L.push(`.goal db(S21) < ${fmt(r.skirt.al + 0.5, 4)} ${fmt(fstart, 8)} ${fmt(r.skirt.fl, 8)}   # hold the synthesised skirt (ideal -20 dB point)`);
+    L.push(`.goal db(S21) < ${fmt(r.skirt.ah + 0.5, 4)} ${fmt(r.skirt.fh, 8)} ${fmt(fstop, 8)}`);
+  }
   L.push(`.plot ylim=-70,0 db(S11) db(S21) db(${ideal})`);
   L.push(`.plot gd(S21)`);
   L.push(`.smith S11`);
