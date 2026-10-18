@@ -5,6 +5,8 @@ import { drawRect, drawSmith, rectIndexAt, palette } from './plot.js';
 import { touchstone } from './touchstone.js';
 import { optimise, writeBack, fmtSI, goalCost } from './optimize.js';
 import { HELP_HTML } from './help.js';
+import { design, returnLossDb } from './synth.js';
+import { evalRealStr } from './expr.js';
 
 const $ = (id) => document.getElementById(id);
 const editor = $('editor'), gutter = $('gutter'), status = $('status');
@@ -210,6 +212,40 @@ $('btn-opt').onclick = async () => {
   state.optRunning = false; btn.textContent = 'Optimise'; btn.classList.remove('running');
   if (last) { editor.value = writeBack(editor.value, last.best); state.overrides = {}; state.paramSig = ''; run(); }
 };
+
+// ---------- synthesis ----------
+{
+  const dlg = $('synth'), form = $('synth-form'), msg = $('synth-msg');
+  const SKEY = 'comb-over:synth';
+  try { const saved = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (saved) for (const [k, v] of Object.entries(saved)) { const el = form.elements[k]; if (el) el.type === 'checkbox' ? (el.checked = v) : (el.value = v); } } catch {}
+  const sync = () => {
+    dlg.classList.toggle('hide-comb', form.elements.structure.value !== 'comb');
+    const cheb = form.elements.type.value === 'chebyshev';
+    form.elements.ripple.disabled = !cheb;
+    const r = parseFloat(form.elements.ripple.value);
+    form.querySelector('.rl').textContent = cheb && r > 0 ? `return loss ${returnLossDb(r).toFixed(2)} dB` : '';
+  };
+  form.addEventListener('input', sync);
+  $('btn-synth').onclick = () => { msg.textContent = ''; msg.className = 'status'; sync(); dlg.showModal(); };
+  $('synth-go').onclick = (e) => {
+    e.preventDefault();
+    const F = form.elements;
+    const num = (name) => { const v = evalRealStr(F[name].value, {}); if (!isFinite(v)) throw new Error(`${name}: not a number`); return v; };
+    let r;
+    try {
+      const spec = {
+        structure: F.structure.value, type: F.type.value, n: Math.round(num('n')), ripple: F.type.value === 'chebyshev' ? num('ripple') : 0,
+        f0: num('f0'), fbw: num('fbw') / 100, theta0Deg: num('theta0Deg'), Zr: num('Zr'), er: num('er'), R0: num('R0'), refine: F.refine.checked,
+      };
+      msg.textContent = 'synthesising…'; msg.className = 'status';
+      r = design(spec);
+    } catch (err) { msg.textContent = err.message; msg.className = 'status err'; return; }
+    try { localStorage.setItem(SKEY, JSON.stringify(Object.fromEntries([...form.elements].filter(x => x.name).map(x => [x.name, x.type === 'checkbox' ? x.checked : x.value])))); } catch {}
+    dlg.close();
+    editor.value = r.netlist; state.overrides = {}; state.paramSig = ''; state.hoverK = null; run();
+    if (F.polish.checked && r.spec.type === 'chebyshev') $('btn-opt').click();
+  };
+}
 
 // ---------- files / export ----------
 function download(name, text, type = 'text/plain') {

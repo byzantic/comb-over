@@ -17,7 +17,7 @@ or enable **GitHub Pages** (Settings → Pages → Deploy from branch → `main`
 Tests (Node ≥ 18):
 
 ```sh
-npm test
+npm test          # engine + synthesis tests
 ```
 
 ## What it does
@@ -50,6 +50,38 @@ end
 ```
 
 More examples are in `examples/` and in the **Examples** menu: comb-line, interdigital, 3 dB stripline coupler, 10 dB microstrip coupler, Lange, Marchand, and Schiffman.
+
+## Synthesis
+
+**Synthesise…** designs a tapped **comb-line** or **interdigital** band-pass filter from a Chebyshev or Butterworth prototype. It writes the result as an ordinary netlist, which you can then inspect, tune or optimise.
+
+1. **Prototype → couplings.** The g-values give k<sub>i,i+1</sub> = FBW/√(g<sub>i</sub>g<sub>i+1</sub>) and Q<sub>e</sub> = g₀g₁/FBW.
+2. **Closed form.** Each resonator's open end is treated as a node, with all other resonator nodes grounded. Y<sub>a</sub> = 1/Z<sub>r</sub> is a line's admittance with its neighbours grounded.
+   - comb-line:
+     - resonator slope b = (Y<sub>a</sub>/2)(cot θ₀ + θ₀ csc² θ₀)
+     - inverter J = Y<sub>m</sub> cot θ₀
+     - end capacitor C<sub>l</sub> = Y<sub>a</sub> cot θ₀/ω₀
+   - interdigital (θ₀ = 90°):
+     - resonator slope b = πY<sub>a</sub>/4
+     - inverter J = Y<sub>m</sub>
+   - Then Y<sub>m</sub> = k·b/(J/Y<sub>m</sub>), and the normalised capacitances are Cg = (Y<sub>a</sub> − ΣY<sub>m</sub>)η and Cm = Y<sub>m</sub>η.
+   - Tap position: sin θ<sub>t</sub> = sin θ₀ √(b R₀/Q<sub>e</sub>), from the resonator voltage being ∝ sin βz measured from the short.
+3. **Refinement** (optional):
+   - Each Y<sub>m</sub> is corrected so the isolated pair's split-mode coupling (f<sub>o</sub>² − f<sub>e</sub>²)/(f<sub>o</sub>² + f<sub>e</sub>²) equals the target. This is exact within the model and solved by root finding.
+   - The tap position and end-resonator capacitor are corrected using the full multiconductor model of the singly loaded first resonator. Q<sub>e</sub> = ω<sub>r</sub>τ<sub>max</sub>/4 is taken from the S11 group delay.
+   - Finally the design f₀ and FBW are pre-distorted so the realised centre and −3 dB bandwidth land on target.
+4. **Polish** (optional): the generated netlist includes tune ranges and a return-loss `.goal`, so the optimiser can remove the remaining ripple error.
+
+Measured on n = 5, 0.0432 dB ripple designs (`npm test` checks a subset):
+
+| | closed form | refined | refined + polish |
+|---|---|---|---|
+| centre / −3 dB BW error | up to −2.7 % / +5 % at 20 % BW (comb) | < 0.05 % / < 0.5 % | same |
+| in-band return loss (target 20 dB), 2–20 % BW | 6.5–14 dB | 12–19 dB | ≥ 20 dB |
+
+The remaining ripple error after refinement comes mostly from couplings the nodal model ignores. The main one is direct tap-to-resonator-2 coupling through the coupled segment, which is why the optimiser is needed for the last step.
+
+The trace functions `cheby(n,ripple,f0,fbw)` and `butter(n,f0,fbw)` plot the ideal |S21| for comparison.
 
 ## Model
 
@@ -95,8 +127,9 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 
 ## Roadmap
 
-- Synthesis front end:
-  - prototype → coupling matrix → comb-line / interdigital C/ε (Cristal / Matthaei);
-  - dimensional extraction via coupling coefficients and external Q.
+- Synthesis:
+  - Matthaei-style input/output-line coupling as an alternative to taps;
+  - cross-coupled (transmission-zero) comb-line designs;
+  - an inhomogeneous (microstrip) comb-line variant.
 - Geometry → C/L via a 2-D field solver (stripline / coax-bar first, then microstrip).
 - Varactor tuning sweeps, Monte-Carlo tolerances.

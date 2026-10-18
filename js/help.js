@@ -50,6 +50,15 @@ end</pre>
 <p>Nelder–Mead over all <code>tune</code> parameters within their ranges (log-scaled when the range spans more than a decade).
 Cost per goal = w·(mean(v²) + max(v)²) of the violation v over sweep points in [F1, F2].</p>
 
+<h4>Synthesis (Synthesise… button)</h4>
+<p>Tapped comb-line or interdigital band-pass from a Chebyshev or Butterworth prototype:
+k<sub>i,i+1</sub> = FBW/√(g<sub>i</sub>g<sub>i+1</sub>), Q<sub>e</sub> = g<sub>0</sub>g<sub>1</sub>/FBW. Closed form (nodal, neighbours grounded, Y<sub>a</sub> = 1/Z<sub>r</sub>):
+comb b = (Y<sub>a</sub>/2)(cot θ0 + θ0 csc² θ0), J = Y<sub>m</sub> cot θ0, C<sub>l</sub> = Y<sub>a</sub> cot θ0/ω0;
+interdigital b = πY<sub>a</sub>/4, J = Y<sub>m</sub>; tap sin θt = sin θ0 √(bR0/Q<sub>e</sub>).
+Refinement: exact split-mode k for each pair, tap Q<sub>e</sub> and end-resonator frequency from the full multiconductor model (S11 group delay),
+then pre-distortion of f0 and FBW to land the realised centre and −3 dB bandwidth. The generated netlist carries tune ranges and a return-loss goal,
+so the optimiser can polish the remaining ripple error. The trace functions <code>cheby(n,ripple,f0,fbw)</code> and <code>butter(n,f0,fbw)</code> give the ideal |S21|.</p>
+
 <h4>Model</h4>
 <p>Each section is solved by modal decomposition of LC (M = C<sup>½</sup>LC<sup>½</sup> = PΛPᵀ, W = C<sup>½</sup>P):
 Y<sub>11</sub> = W diag(v<sub>i</sub> coth γ<sub>i</sub>ℓ) Wᵀ, Y<sub>12</sub> = −W diag(v<sub>i</sub> csch γ<sub>i</sub>ℓ) Wᵀ.

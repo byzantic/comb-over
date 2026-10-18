@@ -14,6 +14,7 @@
   <div class="toolbar">
     <select id="preset" title="Load an example"></select>
     <button id="btn-run" title="Ctrl+Enter">Run</button>
+    <button id="btn-synth" title="Synthesise a comb-line or interdigital filter">Synthesise…</button>
     <button id="btn-opt" title="Optimise .param … tune values against .goal statements">Optimise</button>
     <span class="sep"></span>
     <button id="btn-open">Open…</button>
@@ -37,6 +38,27 @@
   </section>
   <section class="right" id="plots"></section>
 </main>
+<dialog id="synth">
+  <form id="synth-form" method="dialog">
+    <h2>Synthesise band-pass filter</h2>
+    <div class="grid">
+      <label><span>Structure</span> <select name="structure"><option value="comb">Comb-line (tapped)</option><option value="interdigital">Interdigital (tapped)</option></select></label>
+      <label><span>Response</span> <select name="type"><option value="chebyshev">Chebyshev</option><option value="butterworth">Butterworth</option></select></label>
+      <label><span>Order n</span> <input name="n" type="number" min="2" max="12" value="5"></label>
+      <label><span>Ripple (dB)</span> <input name="ripple" value="0.0432"> <small class="rl"></small></label>
+      <label><span>Centre f0</span> <input name="f0" value="1G"></label>
+      <label><span>Bandwidth (%)</span> <input name="fbw" value="10"> <small>ripple BW (Chebyshev), 3 dB BW (Butterworth)</small></label>
+      <label class="comb-only"><span>Line length θ0 (°)</span> <input name="theta0Deg" value="45"></label>
+      <label><span>Resonator Z<sub>r</sub> (Ω)</span> <input name="Zr" value="70"> <small>line impedance with neighbours grounded</small></label>
+      <label><span>ε<sub>r</sub></span> <input name="er" value="1"></label>
+      <label><span>Port R0 (Ω)</span> <input name="R0" value="50"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="refine" checked> Refine numerically (pair k, tap Qe, centre and bandwidth)</label>
+    <label class="check"><input type="checkbox" name="polish" checked> Polish with the optimiser afterwards</label>
+    <div id="synth-msg" class="status"></div>
+    <div class="actions"><button value="cancel" formnovalidate>Cancel</button> <button id="synth-go" value="go" class="primary">Generate netlist</button></div>
+  </form>
+</dialog>
 <dialog id="help">
   <form method="dialog"><button class="close">×</button></form>
   <div id="help-body"></div>

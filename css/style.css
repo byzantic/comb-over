@@ -80,3 +80,16 @@ dialog .close { position: sticky; top: 0; float: right; font-size: 18px; padding
   .editor-wrap { flex-basis: 300px; }
   header { padding: 10px 16px; }
 }
+
+#synth { width: min(760px, 94vw); }
+#synth h2 { font: 600 16px var(--sans); margin: 0 0 12px; }
+#synth .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 16px; }
+#synth label > span { color: var(--muted); }
+#synth label { display: flex; flex-direction: column; gap: 3px; font: 500 12px var(--sans); color: var(--muted); }
+#synth label small { font-weight: 400; font-size: 11px; }
+#synth label.check { flex-direction: row; align-items: center; gap: 8px; margin-top: 10px; color: var(--ink); }
+#synth input:not([type=checkbox]), #synth select { font: 13px var(--mono); color: var(--ink); background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+#synth .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#synth .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#synth .status { border: 0; padding: 6px 0 0; }
+#synth.hide-comb .comb-only { display: none; }

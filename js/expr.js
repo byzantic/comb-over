@@ -1,3 +1,5 @@
+import { idealS21 } from './synth-ideal.js';
+
 // Numbers with SI suffixes, and a small expression language used for
 // netlist values (real scalars) and plot traces (complex arrays over frequency).
 
@@ -166,7 +168,11 @@ function unwrapDeg(ph) {
 }
 function realOut(n, f, unit) { const re = new Float64Array(n); for (let k = 0; k < n; k++) re[k] = f(k); return { re, im: new Float64Array(n), unit, real: true }; }
 
+const scalarArg = (x, name) => { const v = x.re[0]; if (!x.re.every(y => y === v)) throw new Error(`${name}: arguments must be constants`); return v; };
 const CFN = {
+  // ideal band-pass prototype responses |S21| (real):  cheby(n, ripple_dB, f0, fbw), butter(n, f0, fbw)
+  cheby: (ctx, n, r, f0, fbw) => realOut(ctx.n, k => idealS21('chebyshev', scalarArg(n, 'cheby'), scalarArg(r, 'cheby'), scalarArg(f0, 'cheby'), scalarArg(fbw, 'cheby'), ctx.freq[k]), ''),
+  butter: (ctx, n, f0, fbw) => realOut(ctx.n, k => idealS21('butterworth', scalarArg(n, 'butter'), 0, scalarArg(f0, 'butter'), scalarArg(fbw, 'butter'), ctx.freq[k]), ''),
   db: (ctx, x) => realOut(ctx.n, k => 20 * Math.log10(Math.hypot(x.re[k], x.im[k])), 'dB'),
   db10: (ctx, x) => realOut(ctx.n, k => 10 * Math.log10(Math.hypot(x.re[k], x.im[k])), 'dB'),
   mag: (ctx, x) => realOut(ctx.n, k => Math.hypot(x.re[k], x.im[k]), ''),
