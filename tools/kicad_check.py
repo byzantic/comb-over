@@ -49,6 +49,10 @@ only_ours = sorted(set(a) - set(b)); only_kicad = sorted(set(b) - set(a))
 print(f'structural diff (uuids, generator and item order ignored): {len(only_ours)} item(s) only in ours, {len(only_kicad)} only in KiCad\'s re-save')
 for x in only_ours[:12]: print('  ours :', x[:400])
 for x in only_kicad[:12]: print('  kicad:', x[:400])
+strict_fail = bool(only_ours or only_kicad)
 b = pcbnew.LoadBoard(glob.glob(os.path.join(d, 'check', '*.kicad_pcb'))[0])
 bfp = [f for f in b.GetFootprints() if f.GetFPID().GetLibItemName() == name][0]
 print('board copy at', pcbnew.ToMM(bfp.GetPosition().x), pcbnew.ToMM(bfp.GetPosition().y), 'pads with nets:', [(p.GetNumber(), p.GetNetname()) for p in bfp.Pads()])
+if strict_fail:
+    print('FAIL: KiCad re-saves the footprint differently from what we wrote')
+    sys.exit(1)

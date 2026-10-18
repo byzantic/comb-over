@@ -71,7 +71,7 @@ for (const [file, f0, nPorts, gnd] of [['coupler-10dB-ro4350b.cir', 5e9, 4, fals
   const th = pads.filter(p => p[2] === 'thru_hole');
   check(`${tag}: grounding vias as thru-hole pads`, gnd ? th.length === L.core.vias.length && th.length > 0 : th.length === 0);
   const zone = kid(fp, 'zone');
-  check(`${tag}: footprint has an F.Cu keepout that only forbids copper pour`, zone && s(kid(zone, 'layers')[1]) === 'F.Cu' && s(kid(kid(zone, 'keepout'), 'copperpour')[1]) === 'not_allowed' && s(kid(kid(zone, 'keepout'), 'tracks')[1]) === 'allowed');
+  check(`${tag}: footprint has an F.Cu keepout that only forbids copper pour`, zone && s(kid(zone, 'layer')[1]) === 'F.Cu' && s(kid(kid(zone, 'keepout'), 'copperpour')[1]) === 'not_allowed' && s(kid(kid(zone, 'keepout'), 'tracks')[1]) === 'allowed');
   const props = Object.fromEntries(kids(fp, 'property').map(p => [s(p[1]), s(p[2])]));
   check(`${tag}: substrate and netlist hash recorded`, /h=\d/.test(props.Substrate) && props['Netlist hash'] === lib.hash && /^[0-9a-f]{8}$/.test(lib.hash));
   // symbol
@@ -96,6 +96,7 @@ for (const [file, f0, nPorts, gnd] of [['coupler-10dB-ro4350b.cir', 5e9, 4, fals
   const nets = Object.fromEntries(kids(pcb, 'net').map(n => [n[1], s(n[2])]));
   const efp = kids(pcb, 'footprint').find(f => s(f[1]).endsWith(lib.name));
   check(`${tag}: embedded part pads carry their nets`, kids(efp, 'pad').every(p => { const n = kid(p, 'net'); return n && nets[n[1]] === s(n[2]); }));
+  check(`${tag}: pin function only on the board copy (as KiCad writes it)`, !/pinfunction/.test(fpText) && kids(efp, 'pad').every(p => kid(p, 'pinfunction')));
   check(`${tag}: a feed track per port`, new Set(kids(pcb, 'segment').map(t => kid(t, 'net')[1])).size === nPorts);
   check(`${tag}: project file sets clearance to the fab minimum space`, JSON.parse(b.project).net_settings.classes[0].clearance === Math.max(0.1, L.substrate.fab.minSpace * 1e3));
 }

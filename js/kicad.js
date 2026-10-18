@@ -90,6 +90,8 @@ export function footprint(layout, opts = {}) {
   const maskLayers = opts.mask === 'covered' ? '' : ' "F.Mask"';
   const netOf = (node) => opts.nets?.[node];
   const netTok = (node) => { const n = netOf(node); return n ? `\n\t\t(net ${n[0]} ${q(n[1])})` : ''; };
+  // pin function/type come from the schematic: only on a board copy, as KiCad itself writes them
+  const pinTok = (node) => (opts.nets ? `\n\t\t(pinfunction ${q(node)})\n\t\t(pintype "passive")` : '');
   const L = [];
   const embedded = !!opts.embed;
   L.push(`(footprint ${q(embedded ? `${opts.lib || name}:${name}` : name)}`);
@@ -128,14 +130,14 @@ export function footprint(layout, opts = {}) {
     const a = 0.05;   // anchor square, inside the copper (the anchor point is inset ≥ 0.025 mm)
     const [px, py] = R(p.at);
     const prims = p.polys.map(poly => `\t\t\t(gr_poly\n\t\t\t\t(pts\n\t\t\t\t\t${xy(poly.map(pt => { const [x, y] = R(pt); return [x - px, y - py]; }))}\n\t\t\t\t)\n\t\t\t\t(width 0)\n\t\t\t\t(fill yes)\n\t\t\t)`).join('\n');
-    L.push(`\t(pad ${q(p.num)} smd custom\n\t\t(at ${num(px)} ${num(py)})\n\t\t(size ${num(a)} ${num(a)})\n\t\t(layers "F.Cu"${maskLayers})${netTok(p.node)}\n\t\t(pinfunction ${q(p.node)})\n\t\t(pintype "passive")\n\t\t(zone_connect 2)\n\t\t(options\n\t\t\t(clearance outline)\n\t\t\t(anchor rect)\n\t\t)\n\t\t(primitives\n${prims}\n\t\t)\n\t\t(uuid ${q(uuid())})\n\t)`);
+    L.push(`\t(pad ${q(p.num)} smd custom\n\t\t(at ${num(px)} ${num(py)})\n\t\t(size ${num(a)} ${num(a)})\n\t\t(layers "F.Cu"${maskLayers})${netTok(p.node)}${pinTok(p.node)}\n\t\t(zone_connect 2)\n\t\t(options\n\t\t\t(clearance outline)\n\t\t\t(anchor rect)\n\t\t)\n\t\t(primitives\n${prims}\n\t\t)\n\t\t(uuid ${q(uuid())})\n\t)`);
   }
   for (const v of core.vias) {
     const [x, y] = R([v.x, v.y]);
-    L.push(`\t(pad ${q(v.num)} thru_hole circle\n\t\t(at ${num(x)} ${num(y)})\n\t\t(size ${num(v.pad)} ${num(v.pad)})\n\t\t(drill ${num(v.drill)})\n\t\t(layers "*.Cu")\n\t\t(remove_unused_layers no)${netTok(v.node)}\n\t\t(pinfunction ${q(v.node)})\n\t\t(pintype "passive")\n\t\t(zone_connect 2)\n\t\t(uuid ${q(uuid())})\n\t)`);
+    L.push(`\t(pad ${q(v.num)} thru_hole circle\n\t\t(at ${num(x)} ${num(y)})\n\t\t(size ${num(v.pad)} ${num(v.pad)})\n\t\t(drill ${num(v.drill)})\n\t\t(layers "*.Cu")\n\t\t(remove_unused_layers no)${netTok(v.node)}${pinTok(v.node)}\n\t\t(zone_connect 2)\n\t\t(uuid ${q(uuid())})\n\t)`);
   }
   // keepout: no copper pour on F.Cu near the coupled lines (tracks, vias and pads allowed)
-  L.push(`\t(zone\n\t\t(net 0)\n\t\t(net_name "")\n\t\t(layers "F.Cu")\n\t\t(uuid ${q(uuid())})\n\t\t(name "RF keepout")\n\t\t(hatch edge 0.5)\n\t\t(connect_pads\n\t\t\t(clearance 0)\n\t\t)\n\t\t(min_thickness 0.25)\n\t\t(filled_areas_thickness no)\n\t\t(keepout\n\t\t\t(tracks allowed)\n\t\t\t(vias allowed)\n\t\t\t(pads allowed)\n\t\t\t(copperpour not_allowed)\n\t\t\t(footprints allowed)\n\t\t)\n\t\t(placement\n\t\t\t(enabled no)\n\t\t\t(sheetname "")\n\t\t)\n\t\t(fill\n\t\t\t(thermal_gap 0.5)\n\t\t\t(thermal_bridge_width 0.5)\n\t\t)\n\t\t(polygon\n\t\t\t(pts\n\t\t\t\t${xy(rectPts(ko).map(([x, y]) => (embedded ? [x + opts.embed.at[0], y + opts.embed.at[1]] : [x, y])))}\n\t\t\t)\n\t\t)\n\t)`);   // zones in a board footprint are in board coordinates
+  L.push(`\t(zone\n\t\t(net 0)\n\t\t(net_name "")\n\t\t(layer "F.Cu")\n\t\t(uuid ${q(uuid())})\n\t\t(name "RF keepout")\n\t\t(hatch edge 0.5)\n\t\t(connect_pads\n\t\t\t(clearance 0)\n\t\t)\n\t\t(min_thickness 0.25)\n\t\t(filled_areas_thickness no)\n\t\t(keepout\n\t\t\t(tracks allowed)\n\t\t\t(vias allowed)\n\t\t\t(pads allowed)\n\t\t\t(copperpour not_allowed)\n\t\t\t(footprints allowed)\n\t\t)\n\t\t(placement\n\t\t\t(enabled no)\n\t\t\t(sheetname "")\n\t\t)\n\t\t(fill\n\t\t\t(thermal_gap 0.5)\n\t\t\t(thermal_bridge_width 0.5)\n\t\t)\n\t\t(polygon\n\t\t\t(pts\n\t\t\t\t${xy(rectPts(ko).map(([x, y]) => (embedded ? [x + opts.embed.at[0], y + opts.embed.at[1]] : [x, y])))}\n\t\t\t)\n\t\t)\n\t)`);   // zones in a board footprint are in board coordinates
   L.push(`\t(embedded_fonts no)`);
   L.push(')');
   return { text: L.join('\n') + '\n', name, origin: { ox, oy }, keepout: keep };
