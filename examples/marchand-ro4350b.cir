@@ -1,0 +1,28 @@
+.title Marchand balun on JLC RO4350B 1.524 mm, 1 GHz (layout demo)
+# LAYOUT DEMONSTRATION. Z0e/Z0o = 110 / 40 ohm (W 1.32 mm, S 0.139 mm) is about the tightest
+# coupling edge-coupled microstrip reaches at JLC's 0.1 mm gap on this board, and it is not enough
+# for a good Marchand: the input return loss is only about 6 dB, and the optimiser cannot do much
+# better within the fab limits. The 204 / 31 ohm of Example 5 needs broadside (multilayer) or
+# suspended coupled lines.
+.freq 0.3G 1.7G 561
+.ref 1G
+.substrate jlc-ro4350b-1.524
+.param w = 1.3229mm tune 0.8mm 2mm
+.param s = 0.139mm tune 0.1mm 0.4mm
+port in    # 1
+port outp  # 2
+port outn  # 3
+cline S1 geom=msl W=w S=s
+  len 90deg
+  A in m
+  B mid outp
+end
+cline S2 geom=msl W=w S=s
+  len 90deg
+  A mid outn
+  B -   0
+end
+wire m 0
+.layout marchand S1 S2
+.plot ylim=-40,0 db(S11) db(S21) db(S31)
+.plot ylim=-5,5 title=Phase_imbalance:_deviation_from_180_deg ang(-S21/S31)

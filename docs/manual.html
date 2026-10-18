@@ -235,6 +235,10 @@
 <td>Optimiser iteration limit (default 400).</td>
 </tr>
 <tr>
+<td><code>.layout TEMPLATE SECTION… [key=value …]</code></td>
+<td>Board layout preview from a template (§8.1). At most one per netlist.</td>
+</tr>
+<tr>
 <td><code>.substrate ID [key=value …]</code></td>
 <td>PCB technology (§3.6). At most one per netlist. Required by lines given by dimensions.</td>
 </tr>
@@ -866,6 +870,80 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <p><strong>Example links.</strong> <code>index.html?example=NAME.cir</code> opens a file from <code>examples/</code>; the worked-example pages use this for their &quot;open in designer&quot; links.</p>
 <p>When a netlist arrives from a link of either kind and you already had a different one in the editor, your previous netlist is kept and a <strong>Restore it</strong> button appears above the status line. The query string is removed after loading, so reloading the page keeps your edits.</p>
 <p><strong>Save .cir / Open….</strong> Plain text netlists.</p>
+<h3 id="81-layout"><a class="anchor" href="#81-layout" aria-hidden="true">#</a>8.1 Layout</h3>
+<p>A <code>.layout</code> statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it above the plots.</p>
+<p><figure><img src="img/ui-layout.png" alt="Layout preview" loading="lazy"><figcaption>Layout preview</figcaption></figure></p>
+<pre><code>.layout coupler K                         # 4-port coupled-line coupler
+.layout schiffman CS TREF                 # C-section (far ends joined) + reference line
+.layout marchand S1 S2                    # two coupled sections, grounded secondaries
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>option</th>
+<th>default</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>pitch</code></td>
+<td>10 mm</td>
+<td>spacing between neighbouring ports on the same edge (room for the edge-launch SMA bodies)</td>
+</tr>
+<tr>
+<td><code>feed</code></td>
+<td>5 mm</td>
+<td>length of the straight port-impedance feed at each port</td>
+</tr>
+<tr>
+<td><code>margin</code></td>
+<td>4 mm</td>
+<td>board margin beyond the copper, at the board edges without ports</td>
+</tr>
+<tr>
+<td><code>gap</code> (marchand)</td>
+<td>0.5 mm or the fab minimum</td>
+<td>separation between the two sections&#39; secondary lines, where the outputs come out</td>
+</tr>
+<tr>
+<td><code>drill</code> (marchand)</td>
+<td>0.3 mm or the fab minimum</td>
+<td>grounding-via drill; the pad is 0.3 mm larger</td>
+</tr>
+<tr>
+<td><code>vias</code> (marchand)</td>
+<td>2</td>
+<td>grounding vias at each grounded end</td>
+</tr>
+</tbody></table></div>
+<p><strong>What the templates do:</strong></p>
+<ul>
+<li><strong>Coordinates.</strong> Everything is in millimetres, with the y axis pointing down as in KiCad.</li>
+<li><strong>Port feeds.</strong> Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.</li>
+<li><strong>Leaving a coupled line.</strong> A feed first runs diagonally (45°) at the coupled-line width, and widens to the feed width as soon as it is clear of its neighbour by the coupling gap.</li>
+<li><strong>Ground.</strong> The back of the board is a full ground pour.</li>
+<li><strong>Schiffman reference line.</strong> It is lengthened by the length of the C-section&#39;s feeds, so the designed phase difference between the two networks is kept.</li>
+<li><strong>Marchand.</strong> The secondary lines get via pads at their grounded ends. The two sections are separated by <code>gap</code> so that both outputs can leave from between them, which adds a short uncoupled piece of main line.</li>
+</ul>
+<p><strong>Checks.</strong> The layout is checked against the substrate&#39;s fabrication limits:</p>
+<ul>
+<li>copper-to-copper spacing between different nets (and shorts);</li>
+<li>trace width and via drill;</li>
+<li>copper too close to the board edge or outside it.</li>
+</ul>
+<p>Results appear under the preview.</p>
+<p><strong>As-built netlist.</strong> The <strong>As-built netlist</strong> button opens the netlist of what is laid out: the original sections plus every feed line. Simulate it to see what the feeds do to the response; your previous netlist is kept for <strong>Restore it</strong>.</p>
+<p>For the 10 dB coupler at 5 GHz the as-built coupling is −10.20 dB, against −10.07 dB for the bare section, and the match stays below −33 dB. The as-built netlist does not model:</p>
+<ul>
+<li>bends and width steps;</li>
+<li>coupling between the diverging feed sections;</li>
+<li>the Schiffman bridge;</li>
+<li>grounding-via inductance (issue #5).</li>
+</ul>
+<p><strong>SVG</strong> downloads the preview. From the command line:</p>
+<pre><code class="language-sh">node tools/layout.mjs examples/coupler-10dB-ro4350b.cir --svg coupler.svg --netlist asbuilt.cir
+</code></pre>
+<p>KiCad export comes with issues #7 and #8.</p>
 <hr>
 <h2 id="9-the-model-its-assumptions-and-limits"><a class="anchor" href="#9-the-model-its-assumptions-and-limits" aria-hidden="true">#</a>9. The model, its assumptions and limits</h2>
 <h3 id="91-section-admittance-matrix"><a class="anchor" href="#91-section-admittance-matrix" aria-hidden="true">#</a>9.1 Section admittance matrix</h3>
@@ -957,6 +1035,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>node tools/mscalc.mjs --sub ID (--z0 Z | --ze Ze --zo Zo | --w W [--s S]) [--f F]</code></td>
 <td>Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). <code>--list</code> shows the substrate presets.</td>
+</tr>
+<tr>
+<td><code>node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]</code></td>
+<td>Builds the <code>.layout</code> of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule.</td>
 </tr>
 <tr>
 <td><code>npm run docs</code></td>

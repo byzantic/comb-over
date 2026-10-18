@@ -33,7 +33,15 @@
   },
   {
     "file": "coupler-10dB-ro4350b.cir",
-    "name": "10 dB coupler from copper dimensions, RO4350B (Example 2)"
+    "name": "10 dB coupler from copper dimensions + layout, RO4350B (Example 2)"
+  },
+  {
+    "file": "schiffman-ro4350b.cir",
+    "name": "Schiffman layout demo, RO4350B 1.524 mm"
+  },
+  {
+    "file": "marchand-ro4350b.cir",
+    "name": "Marchand layout demo, RO4350B 1.524 mm"
   },
   {
     "file": "lange-4finger.cir",

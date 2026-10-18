@@ -83,3 +83,13 @@ table.modes.sub td { text-align: left; }
 .panel h3 + h3, .panel details + h3 { margin-top: 14px; }
 .sub-notes a { color: var(--accent); }
 table.modes caption .geo { font-weight: 400; color: var(--muted); }
+.plots { display: flex; flex-direction: column; gap: 14px; }
+#layout-card:empty { display: none; }
+.layout-card .ptitle { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.layout-card .ptitle button { font-size: 12px; padding: 2px 8px; }
+.layout-card .svgbox { margin-top: 6px; background: #12151a; border-radius: 6px; padding: 6px; }
+.layout-card .svgbox svg { width: 100%; height: auto; display: block; max-height: 420px; }
+.layout-card .drc { font: 12px var(--mono); margin: 6px 0 0; padding-left: 18px; }
+.layout-card .drc.ok { color: var(--ok); list-style: none; padding-left: 0; }
+.layout-card .drc.bad { color: var(--err); }
+.layout-card .lnotes { font-size: 12px; color: var(--muted); margin: 4px 0 0; padding-left: 18px; }

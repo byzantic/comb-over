@@ -20,3 +20,4 @@ end
 .goal db(S11) < -25 4G 6G
 .plot ylim=-50,0 db(S11) db(S21) db(S31) db(S41)
 .plot title=Directivity_(dB) db(S31/S41)
+.layout coupler K
