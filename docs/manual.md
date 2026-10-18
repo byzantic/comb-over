@@ -122,7 +122,7 @@ Values anywhere in the netlist are expressions:
 | `.smith TRACE …` | Smith chart of complex traces. |
 | `.goal TRACE OP VALUE [F1 F2] [w=W]` | Optimisation goal. OP is `<`, `>` or `=` (§6). |
 | `.opt maxiter=N` | Optimiser iteration limit (default 400). |
-| `.substrate ID [key=value …]` | PCB technology (§3.6). At most one per netlist. |
+| `.substrate ID [key=value …]` | PCB technology (§3.6). At most one per netlist. Required by lines given by dimensions. |
 
 Unknown directives are ignored with a warning.
 
@@ -139,6 +139,7 @@ Unknown directives are ignored with a warning.
 | `C<name> N1 N2 VALUE [Q=..]` | Capacitor. With Q, it has a shunt conductance ωC/Q. |
 | `L<name> N1 N2 VALUE [Q=..]` | Inductor. With Q, it has a series resistance ωL/Q. |
 | `T<name> N1 N2 Z0=.. len=.. [er=..] [Q=..] [f0=..]` | Single uncoupled line, both ends referenced to ground. |
+| `T<name> N1 N2 W=.. len=.. [Q=..] [f0=..]` | Single microstrip line of width W on the `.substrate` (§4.6). |
 | `wire N1 N2 [N3 …]` | Joins nodes (a zero-ohm short). Use this instead of a 0 Ω resistor. |
 | `cline NAME … end` | Coupled multiconductor section (§4). |
 
@@ -180,7 +181,7 @@ Behaviour:
 - **Order.** `.substrate` is processed in file order together with `.param`. Overrides may therefore use earlier parameters, including tuned ones, so slider and optimiser values flow into the substrate.
 - **Expression names.** Statements after it can use `sub_h`, `sub_er`, `sub_tand`, `sub_t` and `sub_sigma` in expressions, e.g. `er sub_er` in a `cline` block.
 - **Display.** The substrate's values, assumptions and sources are shown at the top of the info panel.
-- **Effect on the simulation.** In this version the substrate is descriptive: it does not change the simulation unless you use the `sub_*` names. Physical line models, layout and KiCad export will use it (issues #3–#10).
+- **Effect on the simulation.** Lines given by physical dimensions (`T … W=`, `cline … W= S=`) take their impedances, effective permittivities and losses from the substrate (§4.6). Otherwise the substrate only affects the simulation through the `sub_*` names. Layout and KiCad export will also use it (issues #5–#10).
 
 ## 4. Coupled-line sections
 
@@ -228,6 +229,7 @@ Use exactly one of these. Lines are numbered 1..N in the order used by `A`/`B`.
 | `Cn [ … ]` | homogeneous | Normalised Maxwell capacitance matrix C/ε (dimensionless, ε = ε0·εr). Matthaei/Getsinger convention. |
 | `Cg g1 … gN` + `Cm m12 m23 …` | homogeneous | Normalised ground capacitances and adjacent mutual capacitances (all positive). Add non-adjacent terms with `Cm(i,j) value`. |
 | `C [ … ]` and `L [ … ]` | general | Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives. |
+| `geom msl` + `W …` + `S …` | `.substrate` | Coupled microstrip pair given by strip width and gap. Two lines only; N-line geometry needs the field solver (issue #12). Also accepted inline: `cline K geom=msl W=0.88mm S=0.1mm`. |
 
 Matrices are written `[a b c; d e f; g h i]`, with rows separated by `;` and entries by spaces or commas. They must be square and symmetric, and C must be positive definite.
 
@@ -264,7 +266,27 @@ In a homogeneous medium all modes have the same velocity, so any basis is valid.
 
 ### 4.6 Microstrip models
 
-`js/microstrip.js` gives physical models for single microstrip lines and coupled pairs (issue #3). They are not in the netlist language yet: geometry-based `T` and `cline` elements come in issue #4. For now you can use them through the command-line calculator or from JavaScript:
+`js/microstrip.js` gives physical models for single microstrip lines and coupled pairs. Netlists use them through lines given by dimensions on the `.substrate`:
+
+```
+.substrate jlc-ro4350b-0.508
+.param w = 0.883mm tune 0.5mm 1.3mm
+T1 a b W=1.07mm len=20mm                 # single microstrip line
+cline K geom=msl W=w S=0.1025mm          # coupled pair (geom msl is the default when W and S are given)
+  len 90deg
+  A in   cpl
+  B thru iso
+end
+```
+
+How these lines are modelled:
+
+- **Evaluation frequency.** The models are evaluated once, at the section's `f0` (or `.ref`), including dispersion of εeff. The section then behaves as a TEM line with those values across the sweep. Away from `f0` this ignores the change of εeff and Z with frequency. For example, for the 10 dB coupler on 0.508 mm RO4350B the even-mode εeff goes from 2.995 at 1 GHz to 3.025 at 5 GHz and 3.058 at 9 GHz: about ±1 %, or ±0.5 % in phase velocity. Frequency-dependent sections are a possible follow-up.
+- **Losses.** Substrate losses are included by default: conductor loss with roughness, plus dielectric loss, evaluated at `f0` and applied as a Q. A coupled pair gets separate Q values for its even and odd modes. Write `Q=` to override this; a very large `Q` (e.g. `Q=1e30`) makes the line lossless.
+- **Tuning.** W and S are ordinary expressions, so `tune` parameters let the sliders and the optimiser adjust the actual copper dimensions.
+- **Warnings.** Model-range and fab-rule warnings (e.g. a gap below JLC's 0.1 mm) appear in the status line. The Line sections panel shows the resulting Z or Ze/Zo and the Q values.
+
+You can also use the models directly, through the command-line calculator or from JavaScript:
 
 ```sh
 node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --z0 50 --f 2G          # width for 50 Ω

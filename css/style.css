@@ -82,3 +82,4 @@ table.modes.sub td { text-align: left; }
 .sub-notes .label { margin: 6px 0 0; font-weight: 500; }
 .panel h3 + h3, .panel details + h3 { margin-top: 14px; }
 .sub-notes a { color: var(--accent); }
+table.modes caption .geo { font-weight: 400; color: var(--muted); }

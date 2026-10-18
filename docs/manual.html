@@ -236,7 +236,7 @@
 </tr>
 <tr>
 <td><code>.substrate ID [key=value …]</code></td>
-<td>PCB technology (§3.6). At most one per netlist.</td>
+<td>PCB technology (§3.6). At most one per netlist. Required by lines given by dimensions.</td>
 </tr>
 </tbody></table></div>
 <p>Unknown directives are ignored with a warning.</p>
@@ -272,6 +272,10 @@
 <tr>
 <td><code>T&lt;name&gt; N1 N2 Z0=.. len=.. [er=..] [Q=..] [f0=..]</code></td>
 <td>Single uncoupled line, both ends referenced to ground.</td>
+</tr>
+<tr>
+<td><code>T&lt;name&gt; N1 N2 W=.. len=.. [Q=..] [f0=..]</code></td>
+<td>Single microstrip line of width W on the <code>.substrate</code> (§4.6).</td>
 </tr>
 <tr>
 <td><code>wire N1 N2 [N3 …]</code></td>
@@ -351,7 +355,7 @@
 <li><strong>Order.</strong> <code>.substrate</code> is processed in file order together with <code>.param</code>. Overrides may therefore use earlier parameters, including tuned ones, so slider and optimiser values flow into the substrate.</li>
 <li><strong>Expression names.</strong> Statements after it can use <code>sub_h</code>, <code>sub_er</code>, <code>sub_tand</code>, <code>sub_t</code> and <code>sub_sigma</code> in expressions, e.g. <code>er sub_er</code> in a <code>cline</code> block.</li>
 <li><strong>Display.</strong> The substrate&#39;s values, assumptions and sources are shown at the top of the info panel.</li>
-<li><strong>Effect on the simulation.</strong> In this version the substrate is descriptive: it does not change the simulation unless you use the <code>sub_*</code> names. Physical line models, layout and KiCad export will use it (issues #3–#10).</li>
+<li><strong>Effect on the simulation.</strong> Lines given by physical dimensions (<code>T … W=</code>, <code>cline … W= S=</code>) take their impedances, effective permittivities and losses from the substrate (§4.6). Otherwise the substrate only affects the simulation through the <code>sub_*</code> names. Layout and KiCad export will also use it (issues #5–#10).</li>
 </ul>
 <h2 id="4-coupled-line-sections"><a class="anchor" href="#4-coupled-line-sections" aria-hidden="true">#</a>4. Coupled-line sections</h2>
 <h3 id="41-syntax"><a class="anchor" href="#41-syntax" aria-hidden="true">#</a>4.1 Syntax</h3>
@@ -427,6 +431,11 @@ end
 <td>general</td>
 <td>Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives.</td>
 </tr>
+<tr>
+<td><code>geom msl</code> + <code>W …</code> + <code>S …</code></td>
+<td><code>.substrate</code></td>
+<td>Coupled microstrip pair given by strip width and gap. Two lines only; N-line geometry needs the field solver (issue #12). Also accepted inline: <code>cline K geom=msl W=0.88mm S=0.1mm</code>.</td>
+</tr>
 </tbody></table></div>
 <p>Matrices are written <code>[a b c; d e f; g h i]</code>, with rows separated by <code>;</code> and entries by spaces or commas. They must be square and symmetric, and C must be positive definite.</p>
 <p>The <strong>Maxwell capacitance matrix</strong> has positive diagonal entries (each line&#39;s total capacitance with all other lines grounded) and negative off-diagonal entries. Ground and mutual capacitances convert to it as</p>
@@ -466,7 +475,24 @@ end
 <h3 id="45-loss"><a class="anchor" href="#45-loss" aria-hidden="true">#</a>4.5 Loss</h3>
 <p><code>Q</code> on a section gives every mode an attenuation αᵢ = βᵢ/(2Q). The characteristic admittances are left real. This is a low-loss, frequency-independent-Q approximation: it gives the right insertion loss and dissipation of a high-Q resonator, but not the √f behaviour of conductor loss.</p>
 <h3 id="46-microstrip-models"><a class="anchor" href="#46-microstrip-models" aria-hidden="true">#</a>4.6 Microstrip models</h3>
-<p><code>js/microstrip.js</code> gives physical models for single microstrip lines and coupled pairs (issue #3). They are not in the netlist language yet: geometry-based <code>T</code> and <code>cline</code> elements come in issue #4. For now you can use them through the command-line calculator or from JavaScript:</p>
+<p><code>js/microstrip.js</code> gives physical models for single microstrip lines and coupled pairs. Netlists use them through lines given by dimensions on the <code>.substrate</code>:</p>
+<pre><code>.substrate jlc-ro4350b-0.508
+.param w = 0.883mm tune 0.5mm 1.3mm
+T1 a b W=1.07mm len=20mm                 # single microstrip line
+cline K geom=msl W=w S=0.1025mm          # coupled pair (geom msl is the default when W and S are given)
+  len 90deg
+  A in   cpl
+  B thru iso
+end
+</code></pre>
+<p>How these lines are modelled:</p>
+<ul>
+<li><strong>Evaluation frequency.</strong> The models are evaluated once, at the section&#39;s <code>f0</code> (or <code>.ref</code>), including dispersion of εeff. The section then behaves as a TEM line with those values across the sweep. Away from <code>f0</code> this ignores the change of εeff and Z with frequency. For example, for the 10 dB coupler on 0.508 mm RO4350B the even-mode εeff goes from 2.995 at 1 GHz to 3.025 at 5 GHz and 3.058 at 9 GHz: about ±1 %, or ±0.5 % in phase velocity. Frequency-dependent sections are a possible follow-up.</li>
+<li><strong>Losses.</strong> Substrate losses are included by default: conductor loss with roughness, plus dielectric loss, evaluated at <code>f0</code> and applied as a Q. A coupled pair gets separate Q values for its even and odd modes. Write <code>Q=</code> to override this; a very large <code>Q</code> (e.g. <code>Q=1e30</code>) makes the line lossless.</li>
+<li><strong>Tuning.</strong> W and S are ordinary expressions, so <code>tune</code> parameters let the sliders and the optimiser adjust the actual copper dimensions.</li>
+<li><strong>Warnings.</strong> Model-range and fab-rule warnings (e.g. a gap below JLC&#39;s 0.1 mm) appear in the status line. The Line sections panel shows the resulting Z or Ze/Zo and the Q values.</li>
+</ul>
+<p>You can also use the models directly, through the command-line calculator or from JavaScript:</p>
 <pre><code class="language-sh">node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --z0 50 --f 2G          # width for 50 Ω
 node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --ze 69.4 --zo 36 --f 5G  # W and S for a 10 dB coupler
 node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analyse a geometry

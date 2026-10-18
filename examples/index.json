@@ -1,14 +1,54 @@
 [
-  {"file": "combline-synth-5pole.cir", "name": "Comb-line 5-pole, synthesised (Example 3)"},
-  {"file": "combline-4pole.cir", "name": "Comb-line bandpass, 4 resonators (Matthaei-style I/O lines)"},
-  {"file": "interdigital-by-hand.cir", "name": "Interdigital 3-pole by hand (Example 4)"},
-  {"file": "interdigital-synth-3pole.cir", "name": "Interdigital 3-pole, synthesised (Example 4)"},
-  {"file": "interdigital-4pole.cir", "name": "Interdigital bandpass, 4 resonators"},
-  {"file": "transformers.cir", "name": "Quarter-wave transformers (Example 1)"},
-  {"file": "coupler-3dB-stripline.cir", "name": "3 dB coupled-line coupler, stripline (Example 2)"},
-  {"file": "coupler-10dB-microstrip.cir", "name": "10 dB coupler, microstrip (Example 2)"},
-  {"file": "lange-4finger.cir", "name": "Lange coupler, 4 fingers"},
-  {"file": "marchand-balun.cir", "name": "Marchand balun (Example 5)"},
-  {"file": "schiffman-90.cir", "name": "Schiffman 90° phase shifter (Example 6)"},
-  {"file": "three-line-CL.cir", "name": "Three-line section from C and L (Example 7)"}
+  {
+    "file": "combline-synth-5pole.cir",
+    "name": "Comb-line 5-pole, synthesised (Example 3)"
+  },
+  {
+    "file": "combline-4pole.cir",
+    "name": "Comb-line bandpass, 4 resonators (Matthaei-style I/O lines)"
+  },
+  {
+    "file": "interdigital-by-hand.cir",
+    "name": "Interdigital 3-pole by hand (Example 4)"
+  },
+  {
+    "file": "interdigital-synth-3pole.cir",
+    "name": "Interdigital 3-pole, synthesised (Example 4)"
+  },
+  {
+    "file": "interdigital-4pole.cir",
+    "name": "Interdigital bandpass, 4 resonators"
+  },
+  {
+    "file": "transformers.cir",
+    "name": "Quarter-wave transformers (Example 1)"
+  },
+  {
+    "file": "coupler-3dB-stripline.cir",
+    "name": "3 dB coupled-line coupler, stripline (Example 2)"
+  },
+  {
+    "file": "coupler-10dB-microstrip.cir",
+    "name": "10 dB coupler, microstrip (Example 2)"
+  },
+  {
+    "file": "coupler-10dB-ro4350b.cir",
+    "name": "10 dB coupler from copper dimensions, RO4350B (Example 2)"
+  },
+  {
+    "file": "lange-4finger.cir",
+    "name": "Lange coupler, 4 fingers"
+  },
+  {
+    "file": "marchand-balun.cir",
+    "name": "Marchand balun (Example 5)"
+  },
+  {
+    "file": "schiffman-90.cir",
+    "name": "Schiffman 90\u00b0 phase shifter (Example 6)"
+  },
+  {
+    "file": "three-line-CL.cir",
+    "name": "Three-line section from C and L (Example 7)"
+  }
 ]

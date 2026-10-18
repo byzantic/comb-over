@@ -5,6 +5,7 @@ import { parseExpr, evalReal, astHasDeg } from './expr.js';
 import { Section, fromY0, fromCnorm, fromEvenOdd, maxwellFromGroundMutual, C0 } from './section.js';
 import { rSymFunc } from './linalg.js';
 import { makeSubstrate, scopeOf, KEYS as SUB_KEYS } from './substrates.js';
+import { msline, mscoupled, mslineLoss, mscoupledLoss, fromSubstrate, fabCheck } from './microstrip.js';
 
 export const GROUND = new Set(['0', 'gnd', 'GND', 'ground']);
 export const OPEN = new Set(['-', 'open', 'OPEN', 'nc', 'NC']);
@@ -114,7 +115,10 @@ export function parseNetlist(text, overrides = {}) {
         case 'er': block.er = ev(args[0], ln); break;
         case 'len': case 'length': block.lenStr = args[0]; block.lenLine = ln; break;
         case 'f0': block.f0 = ev(args[0], ln); break;
-        case 'q': block.Q = ev(args[0], ln); break;
+        case 'q': block.Q = ev(args[0], ln); block.Qset = true; break;
+        case 'geom': block.geom = String(args[0] || '').toLowerCase(); break;
+        case 'w': block.W = ev(args[0], ln); break;
+        case 's': block.S = ev(args[0], ln); break;
         case 'a': block.A = args; block.Aline = ln; break;
         case 'b': block.B = args; block.Bline = ln; break;
         case 'zeo': {
@@ -178,7 +182,7 @@ export function parseNetlist(text, overrides = {}) {
       if (!toks[1]) fail(ln, 'cline needs a name');
       block = { name: toks[1], line: ln, er: 1, Q: Infinity };
       // allow inline key=value on the cline line
-      for (const x of toks.slice(2)) { const k = kv(x); if (!k) fail(ln, `unexpected "${x}"`); const key = k[0].toLowerCase(); if (key === 'len') { block.lenStr = k[1]; block.lenLine = ln; } else if (key === 'er') block.er = ev(k[1], ln); else if (key === 'q') block.Q = ev(k[1], ln); else if (key === 'f0') block.f0 = ev(k[1], ln); else fail(ln, `unknown cline option ${k[0]}`); }
+      for (const x of toks.slice(2)) { const k = kv(x); if (!k) fail(ln, `unexpected "${x}"`); const key = k[0].toLowerCase(); if (key === 'len') { block.lenStr = k[1]; block.lenLine = ln; } else if (key === 'er') block.er = ev(k[1], ln); else if (key === 'q') { block.Q = ev(k[1], ln); block.Qset = true; } else if (key === 'f0') block.f0 = ev(k[1], ln); else if (key === 'geom') block.geom = k[1].toLowerCase(); else if (key === 'w') block.W = ev(k[1], ln); else if (key === 's') block.S = ev(k[1], ln); else fail(ln, `unknown cline option ${k[0]}`); }
       return;
     }
     if (kwl === 'port') {
@@ -201,18 +205,22 @@ export function parseNetlist(text, overrides = {}) {
     if (type === 'T') {
       if (toks.length < 3) fail(ln, 'T element: NAME N1 N2 Z0=.. len=.. [er=..] [Q=..]');
       const b = { name: kw, line: ln, er: 1, Q: Infinity, A: [toks[1]], B: [toks[2]], Aline: ln, Bline: ln };
-      let z0 = 50;
+      let z0 = null, W = null, erSet = false;
       for (const x of toks.slice(3)) {
         const k = kv(x); if (!k) fail(ln, `unexpected "${x}"`);
         const key = k[0].toLowerCase();
         if (key === 'z0' || key === 'z') z0 = ev(k[1], ln);
+        else if (key === 'w') W = ev(k[1], ln);
         else if (key === 'len') { b.lenStr = k[1]; b.lenLine = ln; }
-        else if (key === 'er' || key === 'eeff') b.er = ev(k[1], ln);
-        else if (key === 'q') b.Q = ev(k[1], ln);
+        else if (key === 'er' || key === 'eeff') { b.er = ev(k[1], ln); erSet = true; }
+        else if (key === 'q') { b.Q = ev(k[1], ln); b.Qset = true; }
         else if (key === 'f0') b.f0 = ev(k[1], ln);
         else fail(ln, `unknown T option ${k[0]}`);
       }
-      b.spec = { kind: 'y0', M: [[1 / z0]] };
+      if (W != null) {
+        if (z0 != null || erSet) fail(ln, `${kw}: give either W= (microstrip on the .substrate) or Z0=/er=, not both`);
+        b.spec = { kind: 'msl1' }; b.W = W;
+      } else b.spec = { kind: 'y0', M: [[1 / (z0 ?? 50)]] };
       pendingSections.push(b);
       return;
     }
@@ -228,14 +236,47 @@ export function parseNetlist(text, overrides = {}) {
   // ---- build sections ----
   for (const b of pendingSections) {
     const ln = b.line;
-    if (!b.spec) fail(ln, `${b.name}: no line parameters (Zeo, Y0, Z0, Cn, Cg/Cm, or C+L)`);
-    let CL;
+    if (b.W != null && b.spec?.kind !== 'msl1') {
+      if (b.spec) fail(ln, `${b.name}: give either a geometry (W, S) or electrical line constants, not both`);
+      if (b.geom && b.geom !== 'msl') fail(ln, `${b.name}: geometry "${b.geom}" not supported (only msl, coupled microstrip)`);
+      b.spec = { kind: 'msl2' };
+    } else if (b.geom && b.W == null) fail(ln, `${b.name}: geom ${b.geom} needs W and S`);
+    if (!b.spec) fail(ln, `${b.name}: no line parameters (Zeo, Y0, Z0, Cn, Cg/Cm, C+L, or W and S)`);
+    const f0 = b.f0 ?? fref;
+    let CL, geom = null;
+    if (b.spec.kind === 'msl1' || b.spec.kind === 'msl2') {
+      if (!d.substrate) fail(ln, `${b.name}: a physical geometry (W=) needs a .substrate statement`);
+      const g = fromSubstrate(d.substrate);
+      const warn = (list) => list.forEach(w => { const m = `${b.name}: ${w}`; if (!d.warnings.includes(m)) d.warnings.push(m); });
+      try {
+        if (b.spec.kind === 'msl1') {
+          if (!(b.W > 0)) fail(ln, `${b.name}: W must be > 0`);
+          const l = msline({ W: b.W, ...g, f: f0 });
+          CL = fromY0([[1 / l.Z0]], l.epsEff);
+          geom = { kind: 'msl1', W: b.W, Z0: l.Z0, epsEff: l.epsEff, f0 };
+          if (!b.Qset) { const L = mslineLoss({ W: b.W, ...g, f: f0 }); b.Q = L.Q; geom.Q = L.Q; warn(L.warnings); } else warn(l.warnings);
+          warn(fabCheck({ W: b.W }, d.substrate));
+        } else {
+          if (!(b.W > 0) || !(b.S > 0)) fail(ln, `${b.name}: coupled microstrip needs W and S (both > 0)`);
+          const c = mscoupled({ W: b.W, S: b.S, ...g, f: f0 });
+          CL = fromEvenOdd(c.Ze, c.Zo, c.epse, c.epso);
+          geom = { kind: 'msl2', W: b.W, S: b.S, Ze: c.Ze, Zo: c.Zo, epse: c.epse, epso: c.epso, f0 };
+          if (!b.Qset) {
+            const L = mscoupledLoss({ W: b.W, S: b.S, ...g, f: f0 });
+            geom.Qe = L.even.Q; geom.Qo = L.odd.Q;
+            b.Q = (v) => (Math.abs(v[0] + v[1]) >= Math.abs(v[0] - v[1]) ? L.even.Q : L.odd.Q);
+          }
+          warn(c.warnings);
+          warn(fabCheck({ W: b.W, S: b.S }, d.substrate));
+        }
+      } catch (e) { if (e.line) throw e; fail(ln, e.message); }
+    }
     const sym = (M, what) => {
       if (!M.length || M.some(r => r.length !== M.length)) fail(ln, `${b.name}: ${what} must be square`);
       for (let i = 0; i < M.length; i++) for (let j = 0; j < i; j++) if (Math.abs(M[i][j] - M[j][i]) > 1e-9 * (Math.abs(M[i][j]) + Math.abs(M[j][i]) + 1e-300)) fail(ln, `${b.name}: ${what} not symmetric`);
       return M;
     };
-    try {
+    if (!CL) try {
       switch (b.spec.kind) {
         case 'zeo': {
           const [Ze, Zo, ee, eo] = b.spec.v;
@@ -274,7 +315,6 @@ export function parseNetlist(text, overrides = {}) {
     let lenAst; try { lenAst = parseExpr(b.lenStr); } catch (e) { fail(b.lenLine, e.message); }
     const lenVal = (() => { try { return evalReal(lenAst, d.scope); } catch (e) { fail(b.lenLine, e.message); } })();
     const isDeg = astHasDeg(lenAst);
-    const f0 = b.f0 ?? fref;
     let sec;
     try {
       sec = new Section({
@@ -284,6 +324,7 @@ export function parseNetlist(text, overrides = {}) {
       });
     } catch (e) { fail(ln, e.message); }
     sec.line = ln + 1;
+    sec.geom = geom;
     d.sections.push(sec);
   }
   return d;
