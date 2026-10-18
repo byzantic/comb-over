@@ -6,22 +6,28 @@
 set -u
 out=${1:?usage: kicad-check.sh OUTDIR}
 export HOME=${HOME:-/tmp}
-kicad-cli version
+note notice "kicad-cli" "$(kicad-cli version 2>&1)"
 status=0
+# GitHub annotation with a whole file (or text) as its message, so results are visible without the log
+note() { local level=$1 title=$2; shift 2; local msg; msg=$(printf '%s' "$*" | head -c 60000 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g'); echo "::${level} title=${title}::${msg}"; }
+run() { local log; log=$("$@" 2>&1); local rc=$?; echo "$log"; LAST="$log"; return $rc; }
 for d in "$out"/*/; do
   d=${d%/}; name=$(basename "$d")
   echo "=== $name"
   pretty=$(ls -d "$d"/*.pretty | head -1); sym=$(ls "$d"/*.kicad_sym | head -1)
   board=$(ls "$d"/check/*.kicad_pcb | head -1)
-  kicad-cli fp export svg --output "$d/svg" "$pretty" || { echo "FAIL footprint parse: $name"; status=1; }
-  kicad-cli sym export svg --output "$d/svg" "$sym" || { echo "FAIL symbol parse: $name"; status=1; }
+  run kicad-cli fp export svg --output "$d/svg" "$pretty" || { note error "$name footprint" "$LAST"; status=1; }
+  run kicad-cli sym export svg --output "$d/svg" "$sym" || { note error "$name symbol" "$LAST"; status=1; }
   kicad-cli pcb drc --refill-zones --severity-all --format json --units mm --output "$d/drc-all.json" "$board" || true
   kicad-cli pcb drc --refill-zones --severity-all --units mm --output "$d/drc-all.rpt" "$board" || true
   cat "$d/drc-all.rpt"
-  if ! kicad-cli pcb drc --refill-zones --severity-error --exit-code-violations --units mm --output "$d/drc-err.rpt" "$board"; then
-    echo "FAIL DRC errors: $name"; status=1
+  if ! run kicad-cli pcb drc --refill-zones --severity-error --exit-code-violations --units mm --output "$d/drc-err.rpt" "$board"; then
+    note error "$name DRC" "$LAST
+$(cat "$d/drc-all.rpt" 2>/dev/null)"; status=1
+  else
+    note notice "$name DRC" "$(cat "$d/drc-all.rpt" 2>/dev/null)"
   fi
-  kicad-cli pcb export gerbers --output "$d/gerbers/" "$board" || { echo "FAIL gerber export: $name"; status=1; }
+  run kicad-cli pcb export gerbers --output "$d/gerbers/" "$board" || { note error "$name gerbers" "$LAST"; status=1; }
   ls "$d/gerbers" | head -20
 done
 exit $status
