@@ -135,7 +135,7 @@ export function footprint(layout, opts = {}) {
     L.push(`\t(pad ${q(v.num)} thru_hole circle\n\t\t(at ${num(x)} ${num(y)})\n\t\t(size ${num(v.pad)} ${num(v.pad)})\n\t\t(drill ${num(v.drill)})\n\t\t(layers "*.Cu")\n\t\t(remove_unused_layers no)${netTok(v.node)}\n\t\t(pinfunction ${q(v.node)})\n\t\t(pintype "passive")\n\t\t(zone_connect 2)\n\t\t(uuid ${q(uuid())})\n\t)`);
   }
   // keepout: no copper pour on F.Cu near the coupled lines (tracks, vias and pads allowed)
-  L.push(`\t(zone\n\t\t(net 0)\n\t\t(net_name "")\n\t\t(layers "F.Cu")\n\t\t(uuid ${q(uuid())})\n\t\t(name "RF keepout")\n\t\t(hatch edge 0.5)\n\t\t(connect_pads\n\t\t\t(clearance 0)\n\t\t)\n\t\t(min_thickness 0.25)\n\t\t(filled_areas_thickness no)\n\t\t(keepout\n\t\t\t(tracks allowed)\n\t\t\t(vias allowed)\n\t\t\t(pads allowed)\n\t\t\t(copperpour not_allowed)\n\t\t\t(footprints allowed)\n\t\t)\n\t\t(placement\n\t\t\t(enabled no)\n\t\t\t(sheetname "")\n\t\t)\n\t\t(fill\n\t\t\t(thermal_gap 0.5)\n\t\t\t(thermal_bridge_width 0.5)\n\t\t)\n\t\t(polygon\n\t\t\t(pts\n\t\t\t\t${xy(rectPts(ko))}\n\t\t\t)\n\t\t)\n\t)`);
+  L.push(`\t(zone\n\t\t(net 0)\n\t\t(net_name "")\n\t\t(layers "F.Cu")\n\t\t(uuid ${q(uuid())})\n\t\t(name "RF keepout")\n\t\t(hatch edge 0.5)\n\t\t(connect_pads\n\t\t\t(clearance 0)\n\t\t)\n\t\t(min_thickness 0.25)\n\t\t(filled_areas_thickness no)\n\t\t(keepout\n\t\t\t(tracks allowed)\n\t\t\t(vias allowed)\n\t\t\t(pads allowed)\n\t\t\t(copperpour not_allowed)\n\t\t\t(footprints allowed)\n\t\t)\n\t\t(placement\n\t\t\t(enabled no)\n\t\t\t(sheetname "")\n\t\t)\n\t\t(fill\n\t\t\t(thermal_gap 0.5)\n\t\t\t(thermal_bridge_width 0.5)\n\t\t)\n\t\t(polygon\n\t\t\t(pts\n\t\t\t\t${xy(rectPts(ko).map(([x, y]) => (embedded ? [x + opts.embed.at[0], y + opts.embed.at[1]] : [x, y])))}\n\t\t\t)\n\t\t)\n\t)`);   // zones in a board footprint are in board coordinates
   L.push(`\t(embedded_fonts no)`);
   L.push(')');
   return { text: L.join('\n') + '\n', name, origin: { ox, oy }, keepout: keep };
@@ -269,7 +269,9 @@ export function checkBoard(layout, opts = {}) {
   for (const f of layout.feeds) {
     const [e, nxt] = f.path, u = [nxt[0] - e[0], nxt[1] - e[1]], l = Math.hypot(...u);
     const ux = u[0] / l, uy = u[1] / l, pl = Math.min(1, l / 2);
-    const c = [e[0] + ux * (edgeClr + pl / 2), e[1] + uy * (edgeClr + pl / 2)];
+    // pad and the track's round end must both stay clear of the edge
+    const back = edgeClr + 0.05 + Math.max(pl, f.width) / 2;
+    const c = [e[0] + ux * back, e[1] + uy * back];
     const sz = Math.abs(ux) > Math.abs(uy) ? [pl, f.width] : [f.width, pl];
     L.push(`\t(footprint "comb-over:FeedEnd"\n\t\t(layer "F.Cu")\n\t\t(uuid ${q(uuid())})\n\t\t(at ${num(c[0])} ${num(c[1])})\n\t\t(property "Reference" "TP${++k}"\n\t\t\t(at 0 0 0)\n\t\t\t(layer "F.Fab")\n\t\t\t(hide yes)\n\t\t\t(uuid ${q(uuid())})\n\t\t\t(effects\n\t\t\t\t(font (size 1 1) (thickness 0.15))\n\t\t\t)\n\t\t)\n\t\t(property "Value" "FeedEnd"\n\t\t\t(at 0 0 0)\n\t\t\t(layer "F.Fab")\n\t\t\t(hide yes)\n\t\t\t(uuid ${q(uuid())})\n\t\t\t(effects\n\t\t\t\t(font (size 1 1) (thickness 0.15))\n\t\t\t)\n\t\t)\n\t\t(attr smd exclude_from_pos_files exclude_from_bom allow_missing_courtyard)\n\t\t(pad "1" smd rect\n\t\t\t(at 0 0)\n\t\t\t(size ${num(sz[0])} ${num(sz[1])})\n\t\t\t(layers "F.Cu" "F.Mask")\n\t\t\t(net ${nets[f.node][0]} ${q(f.node)})\n\t\t\t(uuid ${q(uuid())})\n\t\t)\n\t\t(embedded_fonts no)\n\t)`);
     // track from the test pad centre along the feed path to the reference plane
@@ -279,6 +281,13 @@ export function checkBoard(layout, opts = {}) {
     }
   }
   const o = layout.outline;
+  // GND vias near the board corners so the B.Cu pour is not an isolated island
+  if (!core.vias.length) {
+    const xs = o.map(p => p[0]), ys = o.map(p => p[1]), m = 1;
+    for (const [x, y] of [[Math.min(...xs) + m, Math.min(...ys) + m], [Math.max(...xs) - m, Math.min(...ys) + m], [Math.max(...xs) - m, Math.max(...ys) - m], [Math.min(...xs) + m, Math.max(...ys) - m]]) {
+      L.push(`\t(via\n\t\t(at ${num(x)} ${num(y)})\n\t\t(size 0.6)\n\t\t(drill ${num(Math.max(0.3, (fab.minDrill ?? 0.3) * 1e3))})\n\t\t(layers "F.Cu" "B.Cu")\n\t\t(net ${nets.GND[0]})\n\t\t(uuid ${q(uuid())})\n\t)`);
+    }
+  }
   for (let i = 0; i < o.length; i++) {
     const a = o[i], b = o[(i + 1) % o.length];
     L.push(`\t(gr_line\n\t\t(start ${num(a[0])} ${num(a[1])})\n\t\t(end ${num(b[0])} ${num(b[1])})\n\t\t(stroke (width 0.05) (type default))\n\t\t(layer "Edge.Cuts")\n\t\t(uuid ${q(uuid())})\n\t)`);

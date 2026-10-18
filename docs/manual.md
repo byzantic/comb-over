@@ -566,7 +566,43 @@ For the 10 dB coupler at 5 GHz the as-built coupling is −10.20 dB, against −
 node tools/layout.mjs examples/coupler-10dB-ro4350b.cir --svg coupler.svg --netlist asbuilt.cir
 ```
 
-KiCad export comes with issues #7 and #8.
+### 8.2 KiCad component library
+
+**KiCad library** (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it (feeds, SMA connectors, ground pour) is a separate step (issues #7, #8).
+
+The zip holds one folder:
+
+| file | contents |
+|---|---|
+| `LIB.pretty/PART.kicad_mod` | footprint (board file version 20241229, as written by KiCad 9.0) |
+| `LIB.kicad_sym` | symbol, one pin per port (plus GND for the Marchand); its Footprint field is `LIB:PART` |
+| `fp-lib-table`, `sym-lib-table` | project library tables using `${KIPRJMOD}`: put them next to your `.kicad_pro`, or add the library under Preferences → Manage Libraries |
+| `PART.cir` | the **core netlist**: the part alone, with its ports at the reference planes |
+| `README.txt` | the pin list, substrate and notes |
+
+The part name carries the template, f0 and substrate, e.g. `COUPLER_5G00_jlc-ro4350b-0.508`, because the copper is only right on that stack-up. The library name is the same as the part name.
+
+**What is in the footprint:**
+
+- **Reference planes.** The part ends where the feeds change to the port-impedance width: the split points of §8.1 on coupled lines, and the ends of the reference line's matched feeds (Schiffman). They are drawn dashed on F.Fab. Attach each feed at its pad end.
+- **Pads.** Every conductor is a custom-shape SMD pad on F.Cu, so the copper has a net and DRC treats it as such. A conductor that carries two ports, like a coupler's through line, is cut at mid-length into two abutting pads.
+- **Net ties.** Those pad pairs are declared in `net_tie_pad_groups`, so KiCad accepts the DC path between two different nets. On the Marchand the two outputs and GND form one group, since both secondaries are grounded.
+- **Grounding vias** (Marchand) are thru-hole pads on the GND pad number, with solid zone connection.
+- **Keepout.** A rule area named "RF keepout" forbids copper pour on F.Cu within max(3h, 1 mm) of the copper. Tracks, vias and pads are still allowed in it, so feeds can enter.
+- **Solder mask** is opened over the conductors, which matches the model (no mask dielectric). The paste layer is not used.
+- **Properties:** the substrate (h, εr, tanδ, copper thickness) and a hash of the source netlist.
+
+**Core netlist.** `PART.cir` is the as-built netlist without the board feeds, so it can be dropped into another simulation. For the 10 dB coupler at 5 GHz: bare section −10.07 dB, core −10.11 dB, as built with 5 mm feeds −10.20 dB.
+
+The **Schiffman** reference line in the part is the designed length plus the C-section's in-part escape lengths, and its two board feeds are as long as the C-section's feeds. The phase difference is therefore set by the part alone.
+
+From the command line:
+
+```sh
+node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mask covered] [--keepout 2] [--name PART] [--check]
+```
+
+`--check` also writes a small check board (the part, a test pad and track at each feed, a B.Cu ground pour) and a `.kicad_pro` with the substrate's fab rules. CI runs KiCad 9's `kicad-cli` on it (parse, zone fill, DRC, Gerber export) for every demo.
 
 ---
 
@@ -640,6 +676,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
 | `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
+| `node tools/kicad.mjs FILE.cir --out DIR [--zip] [--check] [--mask covered] [--keepout MM] [--name PART]` | Writes the `.layout` core as a self-contained KiCad 9 library (footprint, symbol, library tables, core netlist); `--check` adds a check board for kicad-cli (§8.2). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
 

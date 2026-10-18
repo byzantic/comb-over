@@ -18,6 +18,7 @@ for d in "$out"/*/; do
   board=$(ls "$d"/check/*.kicad_pcb | head -1)
   run kicad-cli fp export svg --output "$d/svg" "$pretty" || { note error "$name footprint" "$LAST"; status=1; }
   run kicad-cli sym export svg --output "$d/svg" "$sym" || { note error "$name symbol" "$LAST"; status=1; }
+  run python3 tools/kicad_check.py "$d" && note notice "$name KiCad view" "$LAST" || { note error "$name KiCad view" "$LAST"; status=1; }
   # fill zones with KiCad's own filler (kicad-cli 9.0 drc has no --refill-zones)
   run python3 -c "import pcbnew,sys; b=pcbnew.LoadBoard(sys.argv[1]); pcbnew.ZONE_FILLER(b).Fill(b.Zones()); b.Save(sys.argv[1])" "$board" || { note error "$name zone fill" "$LAST"; status=1; }
   kicad-cli pcb drc --severity-all --format json --units mm --output "$d/drc-all.json" "$board" || true
