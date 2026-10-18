@@ -52,6 +52,26 @@ export function pathPolygon(pts, width) {
 
 export const pathLength = (pts) => pts.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]), 0);
 
+// Split a polyline at a fraction of its length: returns [first part, second part], sharing the cut point.
+export function cutPath(pts, frac = 0.5) {
+  const target = pathLength(pts) * frac;
+  let acc = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i], [bx, by] = pts[i + 1], l = Math.hypot(bx - ax, by - ay);
+    if (acc + l >= target - 1e-12) {
+      const t = (target - acc) / l, c = [ax + (bx - ax) * t, ay + (by - ay) * t];
+      const first = [...pts.slice(0, i + 1), c], second = [c, ...pts.slice(i + 1)];
+      // drop zero-length segments next to the cut
+      const clean = (p) => p.filter((q, k) => k === 0 || Math.hypot(q[0] - p[k - 1][0], q[1] - p[k - 1][1]) > 1e-9);
+      return [clean(first), clean(second)];
+    }
+    acc += l;
+  }
+  return [pts.slice(), [pts[pts.length - 1]]];
+}
+const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); return l > 0 ? [dx / l, dy / l] : null; };
+export { unit };
+
 export function polygonArea(pts) {
   let a = 0;
   for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p[0] * q[1] - q[0] * p[1]; }
