@@ -136,6 +136,8 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 
 ## Tools
 
+- `node tools/mscalc.mjs --sub ID --z0 50 [--f F]`: microstrip calculator. It gives the width for a target Z0, W and S for even/odd impedances (`--ze`/`--zo`), or analyses a geometry (`--w`, `--s`), including losses.
+
 - `node tools/opt.mjs file.cir [iters] [rounds]`: run the optimiser headless and write the tuned values back to the file.
 - `node tools/summary.mjs file.cir 11 21`: print a text table of the response.
 

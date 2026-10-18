@@ -262,6 +262,65 @@ In a homogeneous medium all modes have the same velocity, so any basis is valid.
 
 `Q` on a section gives every mode an attenuation αᵢ = βᵢ/(2Q). The characteristic admittances are left real. This is a low-loss, frequency-independent-Q approximation: it gives the right insertion loss and dissipation of a high-Q resonator, but not the √f behaviour of conductor loss.
 
+### 4.6 Microstrip models
+
+`js/microstrip.js` gives physical models for single microstrip lines and coupled pairs (issue #3). They are not in the netlist language yet: geometry-based `T` and `cline` elements come in issue #4. For now you can use them through the command-line calculator or from JavaScript:
+
+```sh
+node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --z0 50 --f 2G          # width for 50 Ω
+node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --ze 69.4 --zo 36 --f 5G  # W and S for a 10 dB coupler
+node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analyse a geometry
+```
+
+| | model | notes |
+|---|---|---|
+| single line | Hammerstad & Jensen (1980), with their strip-thickness correction | quasi-static Z0, εeff |
+| single-line dispersion | Kirschning & Jansen (1982) for εeff; Jansen & Kirschning (1983) for Z0 | uses the thickness-corrected width, as scikit-rf does |
+| coupled pair | Kirschning & Jansen (1984) | quasi-static even/odd Z and εeff; dispersion of even/odd εeff |
+| coupled strip thickness | Jansen's even/odd effective widths with the Hammerstad–Bekkadal ΔW | published for S ≫ 2t |
+| conductor loss | Wheeler's incremental-inductance rule applied to the same models, with the Hammerstad roughness factor | default; `model: 'hammerstad'` gives Rs/(Z0·W)·Ki·Kr instead |
+| dielectric loss | αd = π f/c · εr(εeff − 1)/(√εeff (εr − 1)) · tan δ | |
+
+**Validity ranges.** The functions return warnings when an input is outside the published range:
+
+| model | range |
+|---|---|
+| single line | 0.01 ≤ W/h ≤ 100 |
+| single-line dispersion | f·h ≤ 60 GHz·mm, εr ≤ 20 |
+| coupled pair | 0.1 ≤ W/h ≤ 10, 0.1 ≤ S/h ≤ 10, εr ≤ 18 |
+| coupled dispersion | f·h ≤ 25 GHz·mm |
+
+They also warn about gaps below 20 t and about copper thinner than 3 skin depths.
+
+**Synthesis.**
+
+- `synthMsline` (Z0 → W) bisects in log W, optionally at a frequency.
+- `synthMscoupled` ((Ze, Zo) → (W, S)) is a damped Newton iteration in (ln W, ln S) from several starting gaps. It reports non-convergence rather than returning a poor answer.
+- `fabCheck` compares the result with the substrate's fabrication limits.
+
+Some results on JLC's 0.508 mm RO4350B:
+
+- **50 Ω line:** 1.07 mm wide.
+- **10 dB coupler** (Ze 69.4 / Zo 36.0 Ω): W 0.88 mm, S 0.10 mm, right at the 0.1 mm minimum space.
+- **3 dB edge-coupled pair:** needs a 7 µm gap. The calculator flags it as below the minimum space and outside the model's range.
+
+**Validation** (`tests/microstrip.mjs`):
+
+- **Single lines vs scikit-rf.** Static and dispersive Z0 and εeff agree with scikit-rf's independent implementation of the same models to 1e−8 (Z0 1e−5 with dispersion), over 30 geometries on five substrates.
+- **Coupled pairs vs Qucsator.** Quasi-static even/odd Z and εeff agree with Qucsator's independent implementation to 1e−9, over 82 cases with εr 2.2–16 and W/h, S/h 0.1–10 (zero thickness).
+- **Published example.** An alumina example (Steer, *Microwave and RF Design II*, Example 5.6.1) agrees within the 2 % precision of its graph readings.
+- **Limits and consistency:**
+  - a widely spaced pair converges to the single line, statically and in dispersion;
+  - finite thickness lowers both mode impedances;
+  - the odd mode is lossier than the even mode;
+  - synthesis round-trips to 1e−6.
+
+**Known limitations.**
+
+- **Coupled impedance dispersion.** Even/odd *impedance* dispersion is not included: Z_e and Z_o are quasi-static at every frequency, and only εeff disperses. The published Kirschning–Jansen impedance-dispersion equations could not be confirmed from two independent sources, and the one available implementation shows inconsistencies. At typical PCB frequencies (f·h of a few GHz·mm) the effect is around 1 %.
+- **Conductor-loss models disagree for narrow lines.** The two models differ by up to about 3× near W/h = 0.1, and Hammerstad's is the higher. The Wheeler result agrees within 3 % with the Pucel–Massé–Hartwig narrow-strip formula (four substrates at W/h = 0.1), so it is the default. A field-solver check (issue #11) or a measurement should settle which is right.
+- **Thickness correction for tight gaps.** For gaps below about 20 t, the coupled-line thickness correction is approximate. A field-solver check can settle this too.
+
 ---
 
 ## 5. Plots and trace expressions
@@ -501,6 +560,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/summary.mjs FILE.cir 11 21 …` | Text table of dB/angle for the given S-parameters, plus section lengths and ε<sub>eff</sub>. |
 | `node tools/opt.mjs FILE.cir [iters] [rounds]` | Runs the optimiser headless and writes tuned values back into the file. |
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
+| `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
 
