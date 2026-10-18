@@ -107,11 +107,35 @@ function renderTune(d) {
 }
 
 // ---------- section info ----------
+const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function substrateHTML(sub) {
+  const d = sub.dielectric, c = sub.copper, f = sub.fab;
+  const um = (x) => x == null ? '—' : `${+(x * 1e6).toPrecision(4)} µm`;
+  const mmv = (x) => x == null ? '—' : `${+(x * 1e3).toPrecision(4)} mm`;
+  const rows = [
+    ['dielectric', `${esc(d.material)}, h = ${mmv(d.h)}`],
+    ['ε<sub>r</sub> / tan δ', `${d.er} / ${d.tand} at ${+(d.fTand / 1e9).toPrecision(3)} GHz`],
+    ['copper', `${um(c.t)}, σ = ${(c.sigma / 1e7).toPrecision(3)}×10⁷ S/m${c.roughness != null ? `, roughness ${um(c.roughness)}` : ''}`],
+    ['min trace / space / drill', `${mmv(f.minTrace)} / ${mmv(f.minSpace)} / ${mmv(f.minDrill)}`],
+  ];
+  let h = `<h3>Substrate</h3><table class="modes sub"><caption>${esc(sub.name)}</caption>${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
+  const li = (a) => a.map(x => `<li>${esc(x)}</li>`).join('');
+  if (sub.assumptions.length || sub.notes.length || sub.sources.length) {
+    h += `<details class="sub-notes"><summary>${sub.assumptions.length ? `${sub.assumptions.length} assumption${sub.assumptions.length > 1 ? 's' : ''}, ` : ''}notes and sources</summary>`;
+    if (sub.assumptions.length) h += `<p class="label">Assumed (not from the sources):</p><ul>${li(sub.assumptions)}</ul>`;
+    if (sub.notes.length) h += `<p class="label">Notes:</p><ul>${li(sub.notes)}</ul>`;
+    if (sub.sources.length) h += `<p class="label">Sources:</p><ul>${sub.sources.map(x => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(new URL(x.url).hostname + new URL(x.url).pathname)}</a> — ${esc(x.what)} (accessed ${esc(x.accessed)})</li>`).join('')}</ul>`;
+    h += '</details>';
+  }
+  return h;
+}
+
 function renderInfo(d) {
   const box = $('info');
   const secs = d.sections.filter(s => s.N > 1 || d.sections.length <= 4);
-  if (!secs.length) { box.innerHTML = ''; return; }
-  let h = '<h3>Line sections</h3>';
+  if (!secs.length && !d.substrate) { box.innerHTML = ''; return; }
+  let h = d.substrate ? substrateHTML(d.substrate) : '';
+  if (secs.length) h += '<h3>Line sections</h3>';
   for (const s of secs) {
     const modes = s.modalInfo();
     h += `<table class="modes"><caption>${s.name} · ${s.N} line${s.N > 1 ? 's' : ''} · ℓ = ${(s.len * 1e3).toPrecision(5)} mm${isFinite(s.Q) ? ` · Q = ${s.Q}` : ''}</caption>

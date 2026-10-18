@@ -122,6 +122,7 @@ Values anywhere in the netlist are expressions:
 | `.smith TRACE …` | Smith chart of complex traces. |
 | `.goal TRACE OP VALUE [F1 F2] [w=W]` | Optimisation goal. OP is `<`, `>` or `=` (§6). |
 | `.opt maxiter=N` | Optimiser iteration limit (default 400). |
+| `.substrate ID [key=value …]` | PCB technology (§3.6). At most one per netlist. |
 
 Unknown directives are ignored with a warning.
 
@@ -144,6 +145,42 @@ Unknown directives are ignored with a warning.
 Element names follow SPICE: the first letter selects the type (`C1`, `Cload`, `Lchoke`, `T5`).
 
 ---
+
+### 3.6 Substrates
+
+`.substrate` names the PCB technology the design is meant for. Pick a preset, optionally overriding values, or describe a board of your own:
+
+```
+.substrate jlc-ro4350b-0.508                 # preset
+.substrate jlc-fr4-1.6 er=4.3 tand=0.018      # preset with overrides
+.substrate custom h=0.8mm er=3.0 tand=0.002 t=18u
+```
+
+The presets cover the JLCPCB 2-layer boards, each with its source and access date:
+
+- **FR-4** at 0.4–2.0 mm board thickness.
+- **Rogers RO4350B** at 0.508, 0.762 and 1.524 mm. These use the Rogers *design* Dk of 3.66, not the process Dk of 3.48 that JLCPCB quotes.
+- **Four PTFE laminates** at 0.762 and 1.524 mm.
+
+The full list, with every assumption flagged, is on the generated [substrate presets](substrates.md) page.
+
+| key | meaning | default (custom) |
+|---|---|---|
+| `h` | dielectric thickness | required |
+| `er` | relative permittivity | required |
+| `tand` | loss tangent, quoted at `ftand` | 0 |
+| `ftand` | frequency at which `tand` applies | 1 GHz |
+| `t` | copper thickness | 1 oz (34.8 µm) |
+| `sigma` | copper conductivity | 5.8×10⁷ S/m |
+| `rough` | RMS copper roughness | none |
+| `mintrace`, `minspace`, `mindrill` | fabrication limits | none |
+
+Behaviour:
+
+- **Order.** `.substrate` is processed in file order together with `.param`. Overrides may therefore use earlier parameters, including tuned ones, so slider and optimiser values flow into the substrate.
+- **Expression names.** Statements after it can use `sub_h`, `sub_er`, `sub_tand`, `sub_t` and `sub_sigma` in expressions, e.g. `er sub_er` in a `cline` block.
+- **Display.** The substrate's values, assumptions and sources are shown at the top of the info panel.
+- **Effect on the simulation.** In this version the substrate is descriptive: it does not change the simulation unless you use the `sub_*` names. Physical line models, layout and KiCad export will use it (issues #3–#10).
 
 ## 4. Coupled-line sections
 
