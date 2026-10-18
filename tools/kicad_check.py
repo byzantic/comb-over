@@ -11,7 +11,7 @@ pretty = glob.glob(os.path.join(d, '*.pretty'))[0]
 name = os.path.splitext(os.path.basename(glob.glob(os.path.join(pretty, '*.kicad_mod'))[0]))[0]
 ours = open(os.path.join(pretty, name + '.kicad_mod')).read()
 fp = pcbnew.FootprintLoad(pretty, name)
-print(f'{name}: {len(fp.Pads())} pads, net-tie groups {list(fp.GetNetTiePadGroups())}, {len(fp.Zones())} zone(s)')
+print(f'{name}: {len(fp.Pads())} pads, {len(fp.Zones())} zone(s)')
 tmp = tempfile.mkdtemp() + '/re.pretty'
 os.makedirs(tmp)
 pcbnew.FootprintSave(tmp, fp)

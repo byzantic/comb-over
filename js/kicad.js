@@ -158,7 +158,7 @@ export function symbol(layout, opts = {}) {
   for (const g of gnd) side.bottom.push({ num: g, name: 'GND', key: Infinity });
   for (const s of Object.values(side)) s.sort((a, b) => a.key - b.key);
   const nv = Math.max(side.left.length, side.right.length, 1), nh = Math.max(side.top.length, side.bottom.length, 1);
-  const hh = Math.ceil((nv + 1) / 2) * G, hw = Math.max(Math.ceil((nh + 1) / 2) * G, 2 * G);   // half sizes on the 2.54 grid
+  const hh = Math.max(nv * G, G), hw = Math.max(nh * G, 2 * G);   // half sizes: pins 5.08 apart, ≥ 2.54 clear of the corners
   const pins = [];
   const place = (list, f) => list.forEach((p, i) => { const off = (i - (list.length - 1) / 2) * G * 2; pins.push({ ...p, ...f(Math.round(off / G) * G) }); });
   place(side.left, (o) => ({ x: -hw - G, y: -o, a: 0 }));           // symbol y is up: first (top-most on the board) pin at the top
@@ -281,13 +281,6 @@ export function checkBoard(layout, opts = {}) {
     }
   }
   const o = layout.outline;
-  // GND vias near the board corners so the B.Cu pour is not an isolated island
-  if (!core.vias.length) {
-    const xs = o.map(p => p[0]), ys = o.map(p => p[1]), m = 1;
-    for (const [x, y] of [[Math.min(...xs) + m, Math.min(...ys) + m], [Math.max(...xs) - m, Math.min(...ys) + m], [Math.max(...xs) - m, Math.max(...ys) - m], [Math.min(...xs) + m, Math.max(...ys) - m]]) {
-      L.push(`\t(via\n\t\t(at ${num(x)} ${num(y)})\n\t\t(size 0.6)\n\t\t(drill ${num(Math.max(0.3, (fab.minDrill ?? 0.3) * 1e3))})\n\t\t(layers "F.Cu" "B.Cu")\n\t\t(net ${nets.GND[0]})\n\t\t(uuid ${q(uuid())})\n\t)`);
-    }
-  }
   for (let i = 0; i < o.length; i++) {
     const a = o[i], b = o[(i + 1) % o.length];
     L.push(`\t(gr_line\n\t\t(start ${num(a[0])} ${num(a[1])})\n\t\t(end ${num(b[0])} ${num(b[1])})\n\t\t(stroke (width 0.05) (type default))\n\t\t(layer "Edge.Cuts")\n\t\t(uuid ${q(uuid())})\n\t)`);
