@@ -122,6 +122,7 @@ Values anywhere in the netlist are expressions:
 | `.smith TRACE …` | Smith chart of complex traces. |
 | `.goal TRACE OP VALUE [F1 F2] [w=W]` | Optimisation goal. OP is `<`, `>` or `=` (§6). |
 | `.opt maxiter=N` | Optimiser iteration limit (default 400). |
+| `.layout TEMPLATE SECTION… [key=value …]` | Board layout preview from a template (§8.1). At most one per netlist. |
 | `.substrate ID [key=value …]` | PCB technology (§3.6). At most one per netlist. Required by lines given by dimensions. |
 
 Unknown directives are ignored with a warning.
@@ -512,6 +513,61 @@ When a netlist arrives from a link of either kind and you already had a differen
 
 **Save .cir / Open….** Plain text netlists.
 
+### 8.1 Layout
+
+A `.layout` statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it above the plots.
+
+![Layout preview](img/ui-layout.png)
+
+```
+.layout coupler K                         # 4-port coupled-line coupler
+.layout schiffman CS TREF                 # C-section (far ends joined) + reference line
+.layout marchand S1 S2                    # two coupled sections, grounded secondaries
+```
+
+| option | default | meaning |
+|---|---|---|
+| `pitch` | 10 mm | spacing between neighbouring ports on the same edge (room for the edge-launch SMA bodies) |
+| `feed` | 5 mm | length of the straight port-impedance feed at each port |
+| `margin` | 4 mm | board margin beyond the copper, at the board edges without ports |
+| `gap` (marchand) | 0.5 mm or the fab minimum | separation between the two sections' secondary lines, where the outputs come out |
+| `drill` (marchand) | 0.3 mm or the fab minimum | grounding-via drill; the pad is 0.3 mm larger |
+| `vias` (marchand) | 2 | grounding vias at each grounded end |
+
+**What the templates do:**
+
+- **Coordinates.** Everything is in millimetres, with the y axis pointing down as in KiCad.
+- **Port feeds.** Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.
+- **Leaving a coupled line.** A feed first runs diagonally (45°) at the coupled-line width, and widens to the feed width as soon as it is clear of its neighbour by the coupling gap.
+- **Ground.** The back of the board is a full ground pour.
+- **Schiffman reference line.** It is lengthened by the length of the C-section's feeds, so the designed phase difference between the two networks is kept.
+- **Marchand.** The secondary lines get via pads at their grounded ends. The two sections are separated by `gap` so that both outputs can leave from between them, which adds a short uncoupled piece of main line.
+
+**Checks.** The layout is checked against the substrate's fabrication limits:
+
+- copper-to-copper spacing between different nets (and shorts);
+- trace width and via drill;
+- copper too close to the board edge or outside it.
+
+Results appear under the preview.
+
+**As-built netlist.** The **As-built netlist** button opens the netlist of what is laid out: the original sections plus every feed line. Simulate it to see what the feeds do to the response; your previous netlist is kept for **Restore it**.
+
+For the 10 dB coupler at 5 GHz the as-built coupling is −10.20 dB, against −10.07 dB for the bare section, and the match stays below −33 dB. The as-built netlist does not model:
+
+- bends and width steps;
+- coupling between the diverging feed sections;
+- the Schiffman bridge;
+- grounding-via inductance (issue #5).
+
+**SVG** downloads the preview. From the command line:
+
+```sh
+node tools/layout.mjs examples/coupler-10dB-ro4350b.cir --svg coupler.svg --netlist asbuilt.cir
+```
+
+KiCad export comes with issues #7 and #8.
+
 ---
 
 ## 9. The model, its assumptions and limits
@@ -583,6 +639,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/opt.mjs FILE.cir [iters] [rounds]` | Runs the optimiser headless and writes tuned values back into the file. |
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
 | `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
+| `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
 

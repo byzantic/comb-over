@@ -7,6 +7,8 @@ import { optimise, writeBack, fmtSI, goalCost } from './optimize.js';
 import { HELP_HTML } from './help.js';
 import { design, returnLossDb } from './synth.js';
 import { evalRealStr } from './expr.js';
+import { buildLayout } from './layout-templates.js';
+import { toSVG } from './layout.js';
 
 const $ = (id) => document.getElementById(id);
 const editor = $('editor'), gutter = $('gutter'), status = $('status');
@@ -64,6 +66,28 @@ function run() {
   renderTune(d);
   renderInfo(d);
   renderPlots(d, res);
+  renderLayout(d);
+}
+
+// ---------- layout preview (.layout) ----------
+function renderLayout(d) {
+  const box = $('layout-card');
+  if (!d.layout) { box.innerHTML = ''; state.layout = null; return; }
+  let L;
+  try { L = buildLayout(d); } catch (e) {
+    box.innerHTML = `<div class="plot layout-card"><div class="ptitle"><span>Layout</span></div><ul class="drc bad"><li>${esc(e.message)}</li></ul></div>`;
+    state.layout = null; return;
+  }
+  state.layout = L;
+  const ok = !L.errors.length;
+  box.innerHTML = `<div class="plot layout-card">
+    <div class="ptitle"><span>Layout · ${esc(L.type)} · ${L.size[0].toFixed(1)} × ${L.size[1].toFixed(1)} mm · ${esc(L.substrate.name)}</span>
+      <span><button id="btn-asbuilt" title="Open the netlist of the layout, including its feed lines">As-built netlist</button> <button id="btn-svg">SVG</button></span></div>
+    <div class="svgbox">${toSVG(L, { errors: L.errors })}</div>
+    <ul class="drc ${ok ? 'ok' : 'bad'}">${ok ? '<li>✓ design rules met</li>' : L.errors.map(e => `<li>${esc(e.msg)}</li>`).join('')}</ul>
+    ${L.notes.length ? `<ul class="lnotes">${L.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div>`;
+  $('btn-svg').onclick = () => download(`${baseName()}-layout.svg`, toSVG(L), 'image/svg+xml');
+  $('btn-asbuilt').onclick = () => { const prev = editor.value; editor.value = L.netlist; state.overrides = {}; state.paramSig = ''; run(); offerRestore(prev, 'the as-built netlist'); };
 }
 
 // ---------- tuning sliders ----------

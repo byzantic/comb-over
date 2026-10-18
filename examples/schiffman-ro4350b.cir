@@ -1,0 +1,22 @@
+.title Schiffman 90 deg phase shifter on JLC RO4350B 1.524 mm, 2 GHz (layout demo)
+# rho = Z0e/Z0o = 2 (70.7 / 35.4 ohm), which edge-coupled microstrip can realise at JLC's 0.1 mm
+# minimum gap on this substrate. The tighter rho = 2.79 of the electrical example would need a
+# 0.06 mm gap. Ports 1-2: C-section; ports 3-4: 270 deg reference line.
+.freq 0.5G 3.5G 601
+.ref 2G
+.substrate jlc-ro4350b-1.524
+.param w = 2.6665mm tune 1.5mm 3.5mm
+.param s = 0.2306mm tune 0.1mm 0.5mm
+port a     # 1
+port b     # 2
+port r1    # 3
+port r2    # 4
+cline CS geom=msl W=w S=s
+  len 90deg
+  A a b
+  B j j
+end
+Tref r1 r2 W=3.2891mm len=270deg
+.layout schiffman CS Tref
+.plot title=Phase_difference_(deg) ang(S21/S43)
+.plot ylim=-60,0 db(S11) db(S21)

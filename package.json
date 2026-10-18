@@ -2,7 +2,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node tests/run.mjs && node tests/synth.mjs && node tests/substrates.mjs && node tests/microstrip.mjs && node tests/geometry.mjs && node tools/build-docs.mjs --check",
+    "test": "node tests/run.mjs && node tests/synth.mjs && node tests/substrates.mjs && node tests/microstrip.mjs && node tests/geometry.mjs && node tests/layout.mjs && node tools/build-docs.mjs --check",
     "docs": "node tools/build-docs.mjs"
   },
   "devDependencies": {
