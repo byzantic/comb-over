@@ -1,6 +1,6 @@
 export const HELP_HTML = `
 <h2>Netlist syntax</h2>
-<p>Quick reference. The full manual and worked examples are in <a href="docs/manual.md" target="_blank">docs/manual.md</a> and <a href="docs/examples/README.md" target="_blank">docs/examples</a> in the repository.</p>
+<p>Quick reference. See the <a href="docs/manual.html" target="_blank" rel="noopener">manual</a> (<a href="docs/manual.html#3-netlist-language" target="_blank" rel="noopener">netlist language</a>, <a href="docs/manual.html#5-plots-and-trace-expressions" target="_blank" rel="noopener">traces</a>, <a href="docs/manual.html#7-filter-synthesis" target="_blank" rel="noopener">synthesis</a>) and the <a href="docs/examples/index.html" target="_blank" rel="noopener">worked examples</a>.</p>
 <p>One statement per line. Comments start with <code>#</code> or <code>//</code> (or <code>*</code> at line start).
 Numbers take SI prefixes: <code>f p n u m k M G T</code> (<code>m</code> = milli, <code>M</code>/<code>meg</code> = mega); trailing units are ignored
 (<code>2.2pF</code>, <code>1.5GHz</code>, <code>25mm</code> = 0.025). Special units: <code>mil</code>, <code>in</code>, <code>deg</code>.
@@ -63,7 +63,7 @@ so the optimiser can polish the remaining ripple error. The trace functions <cod
 <h4>Model</h4>
 <p>Each section is solved by modal decomposition of LC (M = C<sup>½</sup>LC<sup>½</sup> = PΛPᵀ, W = C<sup>½</sup>P):
 Y<sub>11</sub> = W diag(v<sub>i</sub> coth γ<sub>i</sub>ℓ) Wᵀ, Y<sub>12</sub> = −W diag(v<sub>i</sub> csch γ<sub>i</sub>ℓ) Wᵀ.
-All sections and elements are stamped into a nodal admittance matrix, internal nodes are eliminated (Kron reduction), and S is formed
-against each port's real reference impedance. Lossless unless Q is given (low-loss approximation; characteristic admittances kept real).
+All sections and elements are stamped into a nodal admittance matrix; each port node is terminated in its reference conductance and S is solved directly
+(real reference impedances). Lossless unless Q is given (low-loss approximation; characteristic admittances kept real).
 Pure TEM/quasi-TEM: no dispersion, no end-effect or junction parasitics — add them explicitly as lumped elements.</p>
 `;

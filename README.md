@@ -6,6 +6,8 @@ No build step and no dependencies: plain ES modules plus canvas.
 
 ## Documentation
 
+The documentation is published as web pages next to the designer: `docs/manual.html` and `docs/examples/index.html`, linked from its toolbar. The Markdown sources below are what you edit; run `npm run docs` to regenerate the HTML.
+
 - **[Manual](docs/manual.md):** the interface, the full netlist language, plots, tuning and optimisation, synthesis, and the model and its limits.
 - **[Worked examples](docs/examples/README.md):**
   1. transformers;
@@ -104,7 +106,7 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
   - Y₁₁ = Y₂₂ = W diag(vᵢ coth γᵢℓ) Wᵀ
   - Y₁₂ = Y₂₁ = −W diag(vᵢ csch γᵢℓ) Wᵀ
 - **Homogeneous case:** this reduces to Y₁₁ = vC coth γℓ.
-- **Assembly:** sections and lumped elements are stamped into a nodal admittance matrix. Internal nodes are removed by Kron reduction, and S = (I + y)⁻¹(I − y) with y = √R Y √R.
+- **Assembly:** sections and lumped elements are stamped into a nodal admittance matrix. Each port node is terminated in its reference conductance G, and S = 2√G·X<sub>pp</sub>·√G − I, where (Y + G)X = E<sub>ports</sub>.
 - **Loss (optional):** a constant unloaded Q per section, with αᵢ = βᵢ/2Q. Characteristic admittances stay real, so this is a low-loss approximation.
 - **Singular points:** exact half-wave frequencies of lossless lines are evaluated 1 ppb away, which gives the limiting value.
 

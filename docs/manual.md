@@ -56,7 +56,8 @@ npm test                           # engine + synthesis tests
 | **Open… / Save .cir** | Load or save the netlist text. |
 | **RI / MA / DB + Export .sNp** | Touchstone export of the full S-matrix (§8). |
 | **Link** | Copies a URL with the netlist embedded. |
-| **Syntax** | Quick reference. |
+| **Syntax** | Quick reference, with links into this manual. |
+| **Manual / Examples guide** | Open these documentation pages in a new tab. |
 
 The editor content is also kept in the browser's localStorage, so a reload restores it.
 
@@ -387,6 +388,10 @@ These figures are from `npm test` and Example 3:
 
 **Link.** Encodes the netlist in the URL fragment (`#n=…`). Nothing is uploaded.
 
+**Example links.** `index.html?example=NAME.cir` opens a file from `examples/`; the worked-example pages use this for their "open in designer" links.
+
+When a netlist arrives from a link of either kind and you already had a different one in the editor, your previous netlist is kept and a **Restore it** button appears above the status line. The query string is removed after loading, so reloading the page keeps your edits.
+
 **Save .cir / Open….** Plain text netlists.
 
 ---
@@ -459,6 +464,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/summary.mjs FILE.cir 11 21 …` | Text table of dB/angle for the given S-parameters, plus section lengths and ε<sub>eff</sub>. |
 | `node tools/opt.mjs FILE.cir [iters] [rounds]` | Runs the optimiser headless and writes tuned values back into the file. |
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
+| `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
 
 The engine modules have no DOM dependencies and can be imported directly:

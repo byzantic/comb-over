@@ -286,13 +286,33 @@ async function loadPresets() {
   return list;
 }
 
+// A netlist loaded from a link (?example= or #n=) replaces the editor; keep what was there so it
+// can be restored with one click.
+function offerRestore(prev, what) {
+  const box = $('notice');
+  if (!prev || prev === editor.value) { box.hidden = true; return; }
+  try { localStorage.setItem(STORE + ':previous', prev); } catch {}
+  box.innerHTML = `<span>Loaded ${what}. Your previous netlist was kept.</span> <button id="btn-restore">Restore it</button> <button id="btn-dismiss" title="Dismiss">×</button>`;
+  box.hidden = false;
+  $('btn-restore').onclick = () => { editor.value = prev; state.overrides = {}; state.paramSig = ''; box.hidden = true; run(); };
+  $('btn-dismiss').onclick = () => { box.hidden = true; };
+}
+
 (async function init() {
   const list = await loadPresets();
-  let text = null;
+  let saved = null;
+  try { saved = localStorage.getItem(STORE); } catch {}
+  let text = null, source = null;
+  const ex = new URLSearchParams(location.search).get('example');
+  if (ex && /^[\w.-]+\.cir$/.test(ex)) {
+    try { const r = await fetch('examples/' + ex); if (r.ok) { text = await r.text(); source = `example ${ex}`; } } catch {}
+    history.replaceState(null, '', location.pathname + location.hash);   // a reload keeps the user's edits
+  }
   const m = /#n=(.*)$/.exec(location.hash);
-  if (m) { try { text = new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(m[1])), c => c.charCodeAt(0))); } catch {} }
-  if (!text) { try { text = localStorage.getItem(STORE); } catch {} }
+  if (!text && m) { try { text = new TextDecoder().decode(Uint8Array.from(atob(decodeURIComponent(m[1])), c => c.charCodeAt(0))); source = 'the netlist from the link'; } catch {} }
+  if (!text) text = saved;
   if (!text && list.length) text = await (await fetch('examples/' + list[0].file)).text();
   editor.value = text || '.freq 1G 3G 201\nport a\nport b\nT1 a b Z0=50 len=90deg\n';
   run();
+  if (source) offerRestore(saved, source);
 })();

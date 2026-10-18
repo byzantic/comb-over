@@ -6,6 +6,7 @@
 <title>comb-over · coupled-line network analysis</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -23,6 +24,8 @@
     <button id="btn-ts">Export .sNp</button>
     <button id="btn-share" title="Copy a link containing this netlist">Link</button>
     <button id="btn-help">Syntax</button>
+    <a class="btn" href="docs/manual.html" target="_blank" rel="noopener">Manual</a>
+    <a class="btn" href="docs/examples/index.html" target="_blank" rel="noopener">Examples guide</a>
     <input type="file" id="file-in" accept=".cir,.txt,.net" hidden>
   </div>
 </header>
@@ -32,6 +35,7 @@
       <pre class="gutter" id="gutter" aria-hidden="true"></pre>
       <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
     </div>
+    <div id="notice" class="notice" hidden></div>
     <div id="status" class="status"></div>
     <div id="tune" class="panel"></div>
     <div id="info" class="panel"></div>

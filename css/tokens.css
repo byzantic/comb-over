@@ -1,0 +1,27 @@
+/* Shared design tokens for the designer and the documentation pages. */
+:root {
+  --bg: #f4f3ef; --panel: #ffffff; --ink: #1b1d21; --muted: #6b6f78; --line: #dcdad3;
+  --grid: #e7e5df; --axis: #9a9ea6; --accent: #b4441f; --accent-ink: #fff; --err: #b3261e; --ok: #2d7a46;
+  --code-bg: #fbfaf7; --sel: #f1e3d6;
+  --trace-1: #1f6fb4; --trace-2: #c2410c; --trace-3: #2f8f4e; --trace-4: #8a3ab9;
+  --trace-5: #b08900; --trace-6: #0f8b8d; --trace-7: #d6336c; --trace-8: #5c6370;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171b; --panel: #1d2026; --ink: #e6e6e3; --muted: #9096a0; --line: #2e323a;
+    --grid: #282c33; --axis: #5d636d; --accent: #e0703f; --code-bg: #191b20; --sel: #3a2a20;
+    --trace-1: #5aa9f0; --trace-2: #f08a4b; --trace-3: #5cc47a; --trace-4: #b98ae6;
+    --trace-5: #e3c04a; --trace-6: #3fc2c4; --trace-7: #f06d9b; --trace-8: #9aa1ad;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --panel: #1d2026; --ink: #e6e6e3; --muted: #9096a0; --line: #2e323a;
+  --grid: #282c33; --axis: #5d636d; --accent: #e0703f; --code-bg: #191b20; --sel: #3a2a20;
+  --trace-1: #5aa9f0; --trace-2: #f08a4b; --trace-3: #5cc47a; --trace-4: #b98ae6;
+  --trace-5: #e3c04a; --trace-6: #3fc2c4; --trace-7: #f06d9b; --trace-8: #9aa1ad;
+  color-scheme: dark;
+}

@@ -1,1 +1,11 @@
-{"type":"module","private":true,"scripts":{"test":"node tests/run.mjs && node tests/synth.mjs"}}
+{
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run.mjs && node tests/synth.mjs && node tools/build-docs.mjs --check",
+    "docs": "node tools/build-docs.mjs"
+  },
+  "devDependencies": {
+    "marked": "^18.1.1"
+  }
+}

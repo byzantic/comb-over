@@ -61,6 +61,7 @@ async def main():
             print(name, '|', st.splitlines()[0])
         # UI overview and synthesis dialog
         await pg.goto(URL + '#n=' + base64.b64encode(text('combline-synth-5pole.cir').encode()).decode())
+        await pg.evaluate('localStorage.clear()')
         await pg.reload(); await pg.wait_for_timeout(900)
         await pg.screenshot(path=str(OUT / 'ui-overview.png'))
         await pg.click('#btn-synth'); await pg.wait_for_timeout(300)
