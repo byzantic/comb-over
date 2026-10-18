@@ -33,6 +33,7 @@ FIGS = [
     ('transformers', text('transformers.cir'), [0, 1]),
     ('coupler3db', text('coupler-3dB-stripline.cir'), [0, 1]),
     ('coupler10db', text('coupler-10dB-microstrip.cir'), [0, 1]),
+    ('coupler-ro4350b', text('coupler-10dB-ro4350b.cir'), [0]),
     ('comb-polished', text('combline-synth-5pole.cir'), [0, 1]),
     ('comb-lossy', lossy_comb(), [0]),
     ('comb-wide', wide_comb(), [0]),

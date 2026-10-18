@@ -165,6 +165,69 @@ Cc2 thru iso cc
 </tr>
 </tbody></table></div>
 <p>Directivity now exceeds 20 dB from 1.0 to 6.86 GHz. This illustrates the general pattern for using the tool: lines from the field solution, lumped elements for discontinuities and fixes, and the optimiser to size them.</p>
+<h2 id="the-same-coupler-from-copper-dimensions"><a class="anchor" href="#the-same-coupler-from-copper-dimensions" aria-hidden="true">#</a>The same coupler from copper dimensions</h2>
+<p><a href="../../index.html?example=coupler-10dB-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler-10dB-ro4350b.cir</code></a> describes the 10 dB coupler on JLC&#39;s 0.508 mm RO4350B by strip width and gap rather than impedances:</p>
+<pre><code>.substrate jlc-ro4350b-0.508
+.param w = 0.8831mm tune 0.5mm 1.3mm
+.param s = 0.1025mm tune 0.1mm 0.4mm
+cline K geom=msl W=w S=s
+  len 90deg
+  A in   cpl
+  B thru iso
+end
+</code></pre>
+<p>The dimensions came from <code>node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --ze 69.4 --zo 36</code>. The microstrip models turn them into:</p>
+<ul>
+<li>even and odd impedances of 69.40 Ω and 36.00 Ω at 5 GHz;</li>
+<li>εeff of 3.025 (even mode) and 2.490 (odd mode);</li>
+<li>a length of 9.04 mm;</li>
+<li>a Q of 187 for the even mode and 111 for the odd mode.</li>
+</ul>
+<p><figure><img src="../img/coupler-ro4350b-1.png" alt="Physical coupler" loading="lazy"><figcaption>Physical coupler</figcaption></figure></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>f (GHz)</th>
+<th>S11 (dB)</th>
+<th>S21 (dB)</th>
+<th>S31 (dB)</th>
+<th>S41 (dB)</th>
+<th>directivity</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>2</td>
+<td>−40.35</td>
+<td>−0.19</td>
+<td>−14.33</td>
+<td>−30.36</td>
+<td>16.0</td>
+</tr>
+<tr>
+<td>5</td>
+<td>−32.91</td>
+<td>−0.53</td>
+<td>−10.07</td>
+<td>−23.31</td>
+<td>13.2</td>
+</tr>
+<tr>
+<td>8</td>
+<td>−28.33</td>
+<td>−0.31</td>
+<td>−14.52</td>
+<td>−18.39</td>
+<td>3.9</td>
+</tr>
+</tbody></table></div>
+<p>The results are close to the electrical microstrip version above:</p>
+<ul>
+<li><strong>Directivity.</strong> Its limit has the same cause as before: unequal mode velocities.</li>
+<li><strong>Loss.</strong> About 1 % of the power is dissipated at 5 GHz, mostly in the odd mode.</li>
+<li><strong>Gap.</strong> The gap is right at JLC&#39;s 0.1 mm minimum space.</li>
+<li><strong>Thickness warning.</strong> The status line notes that the strip-thickness correction is approximate for a gap this small compared with the copper thickness.</li>
+</ul>
+<p>With <code>w</code> and <code>s</code> as <code>tune</code> parameters, the end-capacitor trick and the optimiser from the previous section can work on the real dimensions.</p>
 <h2 id="try"><a class="anchor" href="#try" aria-hidden="true">#</a>Try</h2>
 <ul>
 <li>Set the even/odd ε<sub>eff</sub> equal in the microstrip file. The directivity becomes infinite, as in the stripline case.</li>

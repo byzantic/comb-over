@@ -8,7 +8,7 @@
 //   Y11 = Y22 =  W diag(v_i coth γ_i ℓ) W^T,   Y12 = Y21 = −W diag(v_i csch γ_i ℓ) W^T
 //
 // which reduces to Y11 = v C coth(γℓ) in a homogeneous medium. Loss is modelled per mode with a
-// frequency-independent unloaded Q: γ_i = β_i (1/(2Q) + j). Characteristic admittances are kept
+// frequency-independent unloaded Q (one value, or one per mode): γ_i = β_i (1/(2Q_i) + j). Characteristic admittances are kept
 // real (low-loss approximation).
 
 import { rMul, rSymFunc, jacobiEig } from './linalg.js';
@@ -48,6 +48,8 @@ export class Section {
     this.Tv = rMul(rSymFunc(C, x => 1 / Math.sqrt(x)), P).map(r => order.map(i => r[i]));
     this.len = typeof len === 'function' ? len(this) : len;
     if (!(this.len > 0)) throw new Error(`${name}: length must be > 0`);
+    // Q may be a number (all modes) or a function of a mode's unit voltage vector (per-mode loss)
+    this.Qm = this.modalInfo().map(m => (typeof Q === 'function' ? Q(m.vector) : Q));
   }
 
   get epsEff() { return this.v.map(v => (C0 / v) ** 2); }
@@ -79,7 +81,7 @@ export class Section {
     const cr = new Float64Array(N), ci = new Float64Array(N), sr = new Float64Array(N), si = new Float64Array(N);
     for (let k = 0; k < N; k++) {
       const beta = w / this.v[k];
-      const x = (isFinite(this.Q) ? beta / (2 * this.Q) : 0) * this.len, y = beta * this.len;
+      const x = (isFinite(this.Qm[k]) ? beta / (2 * this.Qm[k]) : 0) * this.len, y = beta * this.len;
       // coth(x+jy) = [sinh 2x − j sin 2y] / [cosh 2x − cos 2y]
       const den = Math.cosh(2 * x) - Math.cos(2 * y);
       cr[k] = this.v[k] * Math.sinh(2 * x) / den;

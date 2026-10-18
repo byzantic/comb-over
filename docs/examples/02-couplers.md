@@ -100,6 +100,45 @@ and press **Optimise**. It converges to **cc ≈ 70.8 fF**, with these results:
 
 Directivity now exceeds 20 dB from 1.0 to 6.86 GHz. This illustrates the general pattern for using the tool: lines from the field solution, lumped elements for discontinuities and fixes, and the optimiser to size them.
 
+## The same coupler from copper dimensions
+
+[`examples/coupler-10dB-ro4350b.cir`](../../examples/coupler-10dB-ro4350b.cir) describes the 10 dB coupler on JLC's 0.508 mm RO4350B by strip width and gap rather than impedances:
+
+```
+.substrate jlc-ro4350b-0.508
+.param w = 0.8831mm tune 0.5mm 1.3mm
+.param s = 0.1025mm tune 0.1mm 0.4mm
+cline K geom=msl W=w S=s
+  len 90deg
+  A in   cpl
+  B thru iso
+end
+```
+
+The dimensions came from `node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --ze 69.4 --zo 36`. The microstrip models turn them into:
+
+- even and odd impedances of 69.40 Ω and 36.00 Ω at 5 GHz;
+- εeff of 3.025 (even mode) and 2.490 (odd mode);
+- a length of 9.04 mm;
+- a Q of 187 for the even mode and 111 for the odd mode.
+
+![Physical coupler](../img/coupler-ro4350b-1.png)
+
+| f (GHz) | S11 (dB) | S21 (dB) | S31 (dB) | S41 (dB) | directivity |
+|---|---|---|---|---|---|
+| 2 | −40.35 | −0.19 | −14.33 | −30.36 | 16.0 |
+| 5 | −32.91 | −0.53 | −10.07 | −23.31 | 13.2 |
+| 8 | −28.33 | −0.31 | −14.52 | −18.39 | 3.9 |
+
+The results are close to the electrical microstrip version above:
+
+- **Directivity.** Its limit has the same cause as before: unequal mode velocities.
+- **Loss.** About 1 % of the power is dissipated at 5 GHz, mostly in the odd mode.
+- **Gap.** The gap is right at JLC's 0.1 mm minimum space.
+- **Thickness warning.** The status line notes that the strip-thickness correction is approximate for a gap this small compared with the copper thickness.
+
+With `w` and `s` as `tune` parameters, the end-capacitor trick and the optimiser from the previous section can work on the real dimensions.
+
 ## Try
 
 - Set the even/odd ε<sub>eff</sub> equal in the microstrip file. The directivity becomes infinite, as in the stripline case.
