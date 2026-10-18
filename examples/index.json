@@ -1,0 +1,9 @@
+[
+  {"file": "combline-4pole.cir", "name": "Comb-line bandpass, 4 resonators"},
+  {"file": "interdigital-4pole.cir", "name": "Interdigital bandpass, 4 resonators"},
+  {"file": "coupler-3dB-stripline.cir", "name": "3 dB coupled-line coupler (stripline)"},
+  {"file": "coupler-10dB-microstrip.cir", "name": "10 dB coupler, microstrip (inhomogeneous)"},
+  {"file": "lange-4finger.cir", "name": "Lange coupler, 4 fingers"},
+  {"file": "marchand-balun.cir", "name": "Marchand balun"},
+  {"file": "schiffman-90.cir", "name": "Schiffman 90° phase shifter"}
+]

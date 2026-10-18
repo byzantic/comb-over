@@ -1,0 +1,38 @@
+.title Comb-line bandpass: 4 resonators, f0 = 1 GHz, ~10 % BW, air dielectric, lines 45° at f0
+# Matthaei-style: lines 0 and 5 are the input/output lines (shorted at A, port at B);
+# lines 1..4 are resonators, shorted at A and capacitively loaded at B.
+# Line constants are normalised capacitances C/eps (ground Cg, adjacent mutual Cm).
+.freq 0.5G 1.6G 551
+.ref 1G
+.param cg0 = 2.475 tune 0.5 10
+.param cg1 = 3.0176 tune 1 12
+.param cg2 = 4.4216 tune 1 12
+.param cm01 = 2.8475 tune 0.2 8
+.param cm12 = 600.31m tune 0.02 3
+.param cm23 = 456.73m tune 0.02 3
+.param cl1 = 2.4958p tune 0.5p 8p
+.param cl2 = 2.2955p tune 0.5p 8p
+
+port in 50
+port out 50
+
+cline CB
+  er 1
+  len 45deg
+  Cg cg0 cg1 cg2 cg2 cg1 cg0
+  Cm cm01 cm12 cm23 cm12 cm01
+  A  0  0  0  0  0  0
+  B  in r1 r2 r3 r4 out
+end
+C1 r1 0 cl1
+C2 r2 0 cl2
+C3 r3 0 cl2
+C4 r4 0 cl1
+
+.goal db(S11) < -20 0.955G 1.045G
+.goal db(S21) < -30 0.5G 0.85G
+.goal db(S21) < -25 1.16G 1.4G
+
+.plot ylim=-70,0 db(S11) db(S21)
+.plot gd(S21)
+.smith S11

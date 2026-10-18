@@ -1,0 +1,20 @@
+.title Schiffman 90 deg phase shifter: C-section vs. 270 deg reference line, f0 = 2 GHz
+# Ports 1-2: C-section (coupled pair, far ends joined). Ports 3-4: uniform reference line.
+# rho = Z0e/Z0o sets bandwidth/ripple; Z0 = sqrt(Z0e Z0o) = 50 keeps it matched.
+.freq 0.5G 3.5G 601
+.ref 2G
+.param rho = 2.7866 tune 1.5 10
+port a     # 1
+port b     # 2
+port r1    # 3
+port r2    # 4
+cline CS
+  Zeo 50*sqrt(rho) 50/sqrt(rho)
+  len 90deg
+  A a b
+  B j j
+end
+Tref r1 r2 Z0=50 len=270deg
+.goal ang(S21/S43) = 90 1.3G 2.7G
+.plot title=Phase_difference_(deg) ang(S21/S43)
+.plot ylim=-60,0 db(S11) db(S21)

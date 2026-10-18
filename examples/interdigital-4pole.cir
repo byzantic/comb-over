@@ -1,0 +1,25 @@
+.title Interdigital bandpass: 4 resonators, f0 = 2 GHz, ~15 % BW (homogeneous, eps_r 1)
+# All lines are 90 deg at f0, short-circuited at alternate ends. Lines 0 and 5 are the
+# input/output lines; lines 1..4 are the resonators (one end shorted, the other open).
+.freq 1G 5G 801
+.ref 2G
+.param cg0 = 4.2644 tune 0.5 12
+.param cg1 = 5.1869 tune 0.5 12
+.param cg2 = 5.4174 tune 0.5 12
+.param cm01 = 2.7844 tune 0.2 10
+.param cm12 = 775.56m tune 0.05 5
+.param cm23 = 554.34m tune 0.05 5
+port in
+port out
+cline ID
+  len 90deg
+  Cg cg0 cg1 cg2 cg2 cg1 cg0
+  Cm cm01 cm12 cm23 cm12 cm01
+  A  in 0 -  0 -  0
+  B  0  - 0  - 0  out
+end
+.goal db(S11) < -20 1.86G 2.14G
+.goal db(S21) < -30 1G 1.6G
+.goal db(S21) < -30 2.4G 3G
+.plot ylim=-80,0 db(S11) db(S21)
+.plot gd(S21)

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>comb-over · coupled-line network analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">⫼</span> comb-over <span class="sub">N-line coupled TEM network analysis</span></div>
+  <div class="toolbar">
+    <select id="preset" title="Load an example"></select>
+    <button id="btn-run" title="Ctrl+Enter">Run</button>
+    <button id="btn-opt" title="Optimise .param … tune values against .goal statements">Optimise</button>
+    <span class="sep"></span>
+    <button id="btn-open">Open…</button>
+    <button id="btn-save">Save .cir</button>
+    <select id="ts-fmt" title="Touchstone number format"><option>RI</option><option>MA</option><option>DB</option></select>
+    <button id="btn-ts">Export .sNp</button>
+    <button id="btn-share" title="Copy a link containing this netlist">Link</button>
+    <button id="btn-help">Syntax</button>
+    <input type="file" id="file-in" accept=".cir,.txt,.net" hidden>
+  </div>
+</header>
+<main>
+  <section class="left">
+    <div class="editor-wrap">
+      <pre class="gutter" id="gutter" aria-hidden="true"></pre>
+      <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="tune" class="panel"></div>
+    <div id="info" class="panel"></div>
+  </section>
+  <section class="right" id="plots"></section>
+</main>
+<dialog id="help">
+  <form method="dialog"><button class="close">×</button></form>
+  <div id="help-body"></div>
+</dialog>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

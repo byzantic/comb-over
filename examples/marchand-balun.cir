@@ -1,0 +1,27 @@
+.title Marchand balun: 50 ohm unbalanced to 2 x 50 ohm (100 ohm differential), f0 = 1 GHz
+# Two quarter-wave coupled sections. The main line runs through both sections and is open at
+# the far end; the secondary lines are grounded at the outer ends, outputs at the centre.
+.freq 0.3G 1.7G 561
+.ref 1G
+.param ze = 204.19 tune 60 400
+.param zo = 30.613 tune 10 80
+port in    # 1
+port outp  # 2
+port outn  # 3
+cline S1
+  Zeo ze zo
+  len 90deg
+  A in m
+  B mid outp
+end
+cline S2
+  Zeo ze zo
+  len 90deg
+  A mid outn
+  B -   0
+end
+wire m 0
+.goal db(S11) < -20 0.75G 1.25G
+.plot ylim=-40,0 db(S11) db(S21) db(S31)
+.plot title=Phase_balance_(deg) ang(S21/S31)
+.plot title=Amplitude_balance_(dB) db(S21/S31)

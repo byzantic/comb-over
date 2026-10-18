@@ -1,0 +1,17 @@
+.title 10 dB coupled-line coupler in microstrip (inhomogeneous: unequal even/odd velocities)
+# Even/odd values are illustrative (roughly alumina, eps_r 9.8). Unequal phase velocities
+# destroy the ideal isolation of the TEM case: compare S41 with the stripline example.
+.freq 1G 9G 801
+.ref 5G
+port in   # 1
+port thru # 2
+port cpl  # 3
+port iso  # 4
+cline K
+  Zeo 69.4 36.0 6.9 5.6     # Z0e Z0o eps_eff_e eps_eff_o
+  len 90deg                 # referenced to the mean of sqrt(eps_eff) of the modes
+  A in   cpl
+  B thru iso
+end
+.plot ylim=-50,0 db(S11) db(S21) db(S31) db(S41)
+.plot title=Directivity_(dB) db(S31/S41)

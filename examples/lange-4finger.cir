@@ -1,0 +1,34 @@
+.title Unfolded 4-finger Lange coupler, 3 dB at 2 GHz (homogeneous, eps_r 2.2)
+# Alternate fingers are wired together at both ends, so the four lines act as two very
+# tightly coupled conductors. Full 4x4 capacitance matrix including next-neighbour coupling.
+.freq 0.5G 3.5G 601
+.ref 2G
+.param cga = 1.2884 tune 0.1 6      # outer fingers to ground
+.param cgb = 1.026 tune 0.05 6     # inner fingers to ground
+.param cma = 1.4702 tune 0.2 10     # outer-pair adjacent coupling
+.param cmb = 2.7668 tune 0.2 10     # middle adjacent coupling
+.param cmx = 0.15                # non-adjacent (1-3, 2-4)
+port in    # 1
+port thru  # 2
+port cpl   # 3
+port iso   # 4
+cline LG
+  er 2.2
+  len 90deg
+  Cg cga cgb cgb cga
+  Cm cma cmb cma
+  Cm(1,3) cmx
+  Cm(2,4) cmx
+  A in   cpl  a3 a4
+  B thru iso  b3 b4
+end
+wire in a3
+wire thru b3
+wire cpl a4
+wire iso b4
+.goal db(S11) < -24 1.4G 2.6G
+.goal db(S41) < -24 1.4G 2.6G
+.goal db(S31) = -3.01 1.9G 2.1G
+.goal db(S31) > -3.6 1.4G 2.6G
+.plot ylim=-40,0 db(S11) db(S21) db(S31) db(S41)
+.plot ang(S31/S21)

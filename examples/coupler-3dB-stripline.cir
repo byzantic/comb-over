@@ -1,0 +1,20 @@
+.title 3 dB quarter-wave coupled-line coupler (homogeneous stripline, eps_r 2.2)
+# Backward-wave coupler: coupled port is at the SAME end as the input.
+# k = (Z0e - Z0o)/(Z0e + Z0o), Z0 = sqrt(Z0e Z0o).
+.freq 0.5G 3.5G 601
+.ref 2G
+.param k = 1/sqrt(2)
+.param Z0 = 50
+port in Z0      # 1
+port thru Z0    # 2
+port cpl Z0     # 3
+port iso Z0     # 4
+cline K
+  Zeo Z0*sqrt((1+k)/(1-k)) Z0*sqrt((1-k)/(1+k))
+  er 2.2
+  len 90deg
+  A in   cpl
+  B thru iso
+end
+.plot ylim=-50,0 db(S11) db(S21) db(S31) db(S41)
+.plot ang(S31/S21)
