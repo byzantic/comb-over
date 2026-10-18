@@ -14,8 +14,17 @@ fp = pcbnew.FootprintLoad(pretty, name)
 print(f'{name}: {len(fp.Pads())} pads, {len(fp.Zones())} zone(s)')
 tmp = tempfile.mkdtemp() + '/re.pretty'
 os.makedirs(tmp)
-pcbnew.FootprintSave(tmp, fp)
-theirs = open(os.path.join(tmp, name + '.kicad_mod')).read()
+saved = False
+for make in (lambda: pcbnew.PCB_IO_KICAD_SEXPR(), lambda: pcbnew.PCB_IO_MGR.PluginFind(pcbnew.PCB_IO_MGR.KICAD_SEXPR)):
+    try:
+        io = make()
+        if io is not None:
+            io.FootprintSave(tmp, fp); saved = True; break
+    except Exception as e:
+        print('save attempt failed:', e)
+if not saved:
+    print('could not re-save with KiCad; skipping the diff'); theirs = None
+theirs = open(os.path.join(tmp, name + '.kicad_mod')).read() if saved else ours
 norm = lambda t: [l.strip() for l in re.sub(r'\(uuid "[^"]*"\)', '', t).replace('(', '\n(').splitlines() if l.strip()]
 diff = [l for l in difflib.unified_diff(norm(ours), norm(theirs), 'ours', 'kicad', n=0, lineterm='') if not l.startswith('@@')]
 print(f'resave diff ({len(diff)} lines, uuids ignored):')
