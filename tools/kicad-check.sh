@@ -18,10 +18,12 @@ for d in "$out"/*/; do
   board=$(ls "$d"/check/*.kicad_pcb | head -1)
   run kicad-cli fp export svg --output "$d/svg" "$pretty" || { note error "$name footprint" "$LAST"; status=1; }
   run kicad-cli sym export svg --output "$d/svg" "$sym" || { note error "$name symbol" "$LAST"; status=1; }
-  kicad-cli pcb drc --refill-zones --severity-all --format json --units mm --output "$d/drc-all.json" "$board" || true
-  kicad-cli pcb drc --refill-zones --severity-all --units mm --output "$d/drc-all.rpt" "$board" || true
+  # fill zones with KiCad's own filler (kicad-cli 9.0 drc has no --refill-zones)
+  run python3 -c "import pcbnew,sys; b=pcbnew.LoadBoard(sys.argv[1]); pcbnew.ZONE_FILLER(b).Fill(b.Zones()); b.Save(sys.argv[1])" "$board" || { note error "$name zone fill" "$LAST"; status=1; }
+  kicad-cli pcb drc --severity-all --format json --units mm --output "$d/drc-all.json" "$board" || true
+  kicad-cli pcb drc --severity-all --units mm --output "$d/drc-all.rpt" "$board" || true
   cat "$d/drc-all.rpt"
-  if ! run kicad-cli pcb drc --refill-zones --severity-error --exit-code-violations --units mm --output "$d/drc-err.rpt" "$board"; then
+  if ! run kicad-cli pcb drc --severity-error --exit-code-violations --units mm --output "$d/drc-err.rpt" "$board"; then
     note error "$name DRC" "$LAST
 $(cat "$d/drc-all.rpt" 2>/dev/null)"; status=1
   else
