@@ -943,7 +943,54 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <p><strong>SVG</strong> downloads the preview. From the command line:</p>
 <pre><code class="language-sh">node tools/layout.mjs examples/coupler-10dB-ro4350b.cir --svg coupler.svg --netlist asbuilt.cir
 </code></pre>
-<p>KiCad export comes with issues #7 and #8.</p>
+<h3 id="82-kicad-component-library"><a class="anchor" href="#82-kicad-component-library" aria-hidden="true">#</a>8.2 KiCad component library</h3>
+<p><strong>KiCad library</strong> (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it (feeds, SMA connectors, ground pour) is a separate step (issues #7, #8).</p>
+<p>The zip holds one folder:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>file</th>
+<th>contents</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>LIB.pretty/PART.kicad_mod</code></td>
+<td>footprint (board file version 20241229, as written by KiCad 9.0)</td>
+</tr>
+<tr>
+<td><code>LIB.kicad_sym</code></td>
+<td>symbol, one pin per port (plus GND for the Marchand); its Footprint field is <code>LIB:PART</code></td>
+</tr>
+<tr>
+<td><code>fp-lib-table</code>, <code>sym-lib-table</code></td>
+<td>project library tables using <code>${KIPRJMOD}</code>: put them next to your <code>.kicad_pro</code>, or add the library under Preferences → Manage Libraries</td>
+</tr>
+<tr>
+<td><code>PART.cir</code></td>
+<td>the <strong>core netlist</strong>: the part alone, with its ports at the reference planes</td>
+</tr>
+<tr>
+<td><code>README.txt</code></td>
+<td>the pin list, substrate and notes</td>
+</tr>
+</tbody></table></div>
+<p>The part name carries the template, f0 and substrate, e.g. <code>COUPLER_5G00_jlc-ro4350b-0.508</code>, because the copper is only right on that stack-up. The library name is the same as the part name.</p>
+<p><strong>What is in the footprint:</strong></p>
+<ul>
+<li><strong>Reference planes.</strong> The part ends where the feeds change to the port-impedance width: the split points of §8.1 on coupled lines, and the ends of the reference line&#39;s matched feeds (Schiffman). They are drawn dashed on F.Fab. Attach each feed at its pad end.</li>
+<li><strong>Pads.</strong> Every conductor is a custom-shape SMD pad on F.Cu, so the copper has a net and DRC treats it as such. A conductor that carries two ports, like a coupler&#39;s through line, is cut at mid-length into two abutting pads.</li>
+<li><strong>Net ties.</strong> Those pad pairs are declared in <code>net_tie_pad_groups</code>, so KiCad accepts the DC path between two different nets. On the Marchand the two outputs and GND form one group, since both secondaries are grounded.</li>
+<li><strong>Grounding vias</strong> (Marchand) are thru-hole pads on the GND pad number, with solid zone connection.</li>
+<li><strong>Keepout.</strong> A rule area named &quot;RF keepout&quot; forbids copper pour on F.Cu within max(3h, 1 mm) of the copper. Tracks, vias and pads are still allowed in it, so feeds can enter.</li>
+<li><strong>Solder mask</strong> is opened over the conductors, which matches the model (no mask dielectric). The paste layer is not used.</li>
+<li><strong>Properties:</strong> the substrate (h, εr, tanδ, copper thickness) and a hash of the source netlist.</li>
+</ul>
+<p><strong>Core netlist.</strong> <code>PART.cir</code> is the as-built netlist without the board feeds, so it can be dropped into another simulation. For the 10 dB coupler at 5 GHz: bare section −10.07 dB, core −10.11 dB, as built with 5 mm feeds −10.20 dB.</p>
+<p>The <strong>Schiffman</strong> reference line in the part is the designed length plus the C-section&#39;s in-part escape lengths, and its two board feeds are as long as the C-section&#39;s feeds. The phase difference is therefore set by the part alone.</p>
+<p>From the command line:</p>
+<pre><code class="language-sh">node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mask covered] [--keepout 2] [--name PART] [--check]
+</code></pre>
+<p><code>--check</code> also writes a small check board (the part, a test pad and track at each feed, a B.Cu ground pour) and a <code>.kicad_pro</code> with the substrate&#39;s fab rules. CI runs KiCad 9&#39;s <code>kicad-cli</code> on it (parse, zone fill, DRC, Gerber export) for every demo.</p>
 <hr>
 <h2 id="9-the-model-its-assumptions-and-limits"><a class="anchor" href="#9-the-model-its-assumptions-and-limits" aria-hidden="true">#</a>9. The model, its assumptions and limits</h2>
 <h3 id="91-section-admittance-matrix"><a class="anchor" href="#91-section-admittance-matrix" aria-hidden="true">#</a>9.1 Section admittance matrix</h3>
@@ -1039,6 +1086,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]</code></td>
 <td>Builds the <code>.layout</code> of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule.</td>
+</tr>
+<tr>
+<td><code>node tools/kicad.mjs FILE.cir --out DIR [--zip] [--check] [--mask covered] [--keepout MM] [--name PART]</code></td>
+<td>Writes the <code>.layout</code> core as a self-contained KiCad 9 library (footprint, symbol, library tables, core netlist); <code>--check</code> adds a check board for kicad-cli (§8.2).</td>
 </tr>
 <tr>
 <td><code>npm run docs</code></td>

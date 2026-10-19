@@ -9,6 +9,7 @@ import { design, returnLossDb } from './synth.js';
 import { evalRealStr } from './expr.js';
 import { buildLayout } from './layout-templates.js';
 import { toSVG } from './layout.js';
+import { componentLibrary, zip } from './kicad.js';
 
 const $ = (id) => document.getElementById(id);
 const editor = $('editor'), gutter = $('gutter'), status = $('status');
@@ -82,11 +83,12 @@ function renderLayout(d) {
   const ok = !L.errors.length;
   box.innerHTML = `<div class="plot layout-card">
     <div class="ptitle"><span>Layout · ${esc(L.type)} · ${L.size[0].toFixed(1)} × ${L.size[1].toFixed(1)} mm · ${esc(L.substrate.name)}</span>
-      <span><button id="btn-asbuilt" title="Open the netlist of the layout, including its feed lines">As-built netlist</button> <button id="btn-svg">SVG</button></span></div>
+      <span><button id="btn-asbuilt" title="Open the netlist of the layout, including its feed lines">As-built netlist</button> <button id="btn-svg">SVG</button> <button id="btn-kicadlib" title="Footprint + symbol + core netlist as a self-contained KiCad 9 library"${ok ? '' : ' disabled'}>KiCad library</button></span></div>
     <div class="svgbox">${toSVG(L, { errors: L.errors })}</div>
     <ul class="drc ${ok ? 'ok' : 'bad'}">${ok ? '<li>✓ design rules met</li>' : L.errors.map(e => `<li>${esc(e.msg)}</li>`).join('')}</ul>
     ${L.notes.length ? `<ul class="lnotes">${L.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div>`;
   $('btn-svg').onclick = () => download(`${baseName()}-layout.svg`, toSVG(L), 'image/svg+xml');
+  $('btn-kicadlib').onclick = () => { const lib = componentLibrary(L, { source: editor.value }); download(`${lib.lib}.zip`, zip(lib.files, lib.lib), 'application/zip'); };
   $('btn-asbuilt').onclick = () => { const prev = editor.value; editor.value = L.netlist; state.overrides = {}; state.paramSig = ''; run(); offerRestore(prev, 'the as-built netlist'); };
 }
 

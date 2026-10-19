@@ -9,7 +9,7 @@
 // Feed lines are 50 Ω (the port impedance) microstrip on the substrate; where a feed leaves a coupled
 // line it first runs diagonally (45°) at the coupled-line width until it is clear of its neighbour.
 
-import { rect, pathPolygon, pathLength, bbox, drc } from './layout.js';
+import { rect, pathPolygon, pathLength, bbox, drc, cutPath, unit } from './layout.js';
 import { synthMsline, fromSubstrate } from './microstrip.js';
 import { toDirective } from './substrates.js';
 import { GROUND, OPEN } from './netlist.js';
@@ -60,6 +60,21 @@ function header(d, what) {
   ];
 }
 
+function coreNetlist(d, what, body) {
+  const fr = d.freq;
+  return [
+    `.title ${d.title ? d.title + ' — ' : ''}core (${what}), between the footprint reference planes`,
+    '# Generated with the KiCad part: ports are at the pad edges where the board feeds attach.',
+    '# Bends, steps and the coupling of the diverging lines near the coupled section are not modelled.',
+    `.freq ${fr.start} ${fr.stop} ${fr.n}${fr.log ? ' log' : ''}`,
+    `.ref ${d.fref}`,
+    toDirective(d.substrate),
+    ...d.ports.map(p => `port ${p.node} ${p.z}`),
+    ...body,
+    ...analysisLines(d),
+  ].join('\n') + '\n';
+}
+
 // A line with diagonal escape: [edge] —straight(Wf)— [escape point] —diag(W)— [line end]
 function escapeFeed(end, yTarget, xDir, Wline, Wf, feedLen) {
   const dy = yTarget - end[1], dx = Math.abs(dy) * xDir;
@@ -77,6 +92,25 @@ function splitPoint(end, esc, sep0, Wf, gap) {
   return [end[0] + dx * t, end[1] + dy * t];
 }
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const portNum = (d, node) => String(d.ports.findIndex(p => p.node === node) + 1);
+
+// Core description (issue #22): the part between the reference planes, as KiCad pads.
+//   pads:  [{ num, node, polys, at }]  one or more polygons per pad (custom pad primitives)
+//   vias:  [{ num, node, x, y, drill, pad }]  thru-hole pads (grounding)
+//   ties:  [[num, …]]  net-tie groups: pads joined by copper (DC path between different nets)
+//   refs:  [{ num, node, at, dir, wCore, wFeed, z0 }]  reference planes, dir pointing out of the core
+//   netlist: core-only netlist, ports at the reference planes
+// A conductor carrying two ports is cut at its mid-length into two abutting pads in one tie group.
+function splitConductor(d, path, W, nodeA, nodeB) {
+  const [pa, pb] = cutPath(dedupe(path), 0.5);
+  const inset = (pts) => { const u = unit(pts[0], pts[1]); const a = Math.min(W / 4, 0.05); return [pts[0][0] + u[0] * a, pts[0][1] + u[1] * a]; };
+  return [
+    { num: portNum(d, nodeA), node: nodeA, polys: [pathPolygon(pa, W)], at: inset(pa) },
+    { num: portNum(d, nodeB), node: nodeB, polys: [pathPolygon(pb, W)], at: inset([...pb].reverse()) },
+  ];
+}
+const refOf = (d, node, at, dir, wCore, wFeed) => ({ num: portNum(d, node), node, at, dir, wCore, wFeed, z0: portOf(d, node).z });
+const dedupe = (pts) => pts.filter((q, k) => k === 0 || dist(q, pts[k - 1]) > 1e-9);
 
 // ---------------------------------------------------------------- coupler
 function coupler(d, [name], o) {
@@ -88,6 +122,7 @@ function coupler(d, [name], o) {
   const yc = (W + S) / 2;
   if (pitch / 2 <= yc + W) throw new Error(`.layout coupler: pitch ${pitch} mm is too small for the line spacing`);
   const items = [], dims = [], nl = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
   const lines = [[-yc, a1, b1, P[0], P[1]], [yc, a2, b2, P[2], P[3]]];
   lines.forEach(([y, nA, nB, pA, pB], i) => {
     const yp = Math.sign(y) * pitch / 2;
@@ -95,9 +130,14 @@ function coupler(d, [name], o) {
     const wfA = feedWidth(d, pA.z, f0), wfB = feedWidth(d, pB.z, f0);
     const gapMin = Math.max(S, (d.substrate.fab.minSpace ?? 0) * 1e3);
     const sA = splitPoint([0, y], fa.esc, 2 * yc, wfA, gapMin), sB = splitPoint([L, y], fb.esc, 2 * yc, wfB, gapMin);
-    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon([sA, [0, y], [L, y], sB], W), width: W, label: `line ${i + 1}` });
-    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon([fa.edge, fa.esc, sA], wfA), width: wfA, label: `feed ${nA}` });
-    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon([sB, fb.esc, fb.edge], wfB), width: wfB, label: `feed ${nB}` });
+    const linePath = [sA, [0, y], [L, y], sB];
+    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon(linePath, W), width: W, label: `line ${i + 1}`, role: 'core' });
+    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon([fa.edge, fa.esc, sA], wfA), width: wfA, label: `feed ${nA}`, role: 'feed', node: nA, path: dedupe([fa.edge, fa.esc, sA]) });
+    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon([sB, fb.esc, fb.edge], wfB), width: wfB, label: `feed ${nB}`, role: 'feed', node: nB, path: dedupe([fb.edge, fb.esc, sB]) });
+    core.pads.push(...splitConductor(d, linePath, W, nA, nB));
+    core.ties.push([portNum(d, nA), portNum(d, nB)]);
+    core.refs.push(refOf(d, nA, sA, unit([0, y], fa.esc), W, wfA), refOf(d, nB, sB, unit([L, y], fb.esc), W, wfB));
+    core.nl.push(`T${nA}_d ${nA} ${nA}_k W=${r4(W)}mm len=${r4(dist(sA, [0, y]))}mm`, `T${nB}_d ${nB}_k ${nB} W=${r4(W)}mm len=${r4(dist(sB, [L, y]))}mm`);
     items.push({ type: 'port', name: nA, net: nA, x: fa.edge[0], y: yp, dir: [-1, 0], width: wfA, z0: pA.z });
     items.push({ type: 'port', name: nB, net: nA, x: fb.edge[0], y: yp, dir: [1, 0], width: wfB, z0: pB.z });
     nl.push(`T${nA}_f ${nA} ${nA}_e W=${r4(wfA)}mm len=${r4(feedLen + dist(fa.esc, sA))}mm`, `T${nA}_d ${nA}_e ${nA}_k W=${r4(W)}mm len=${r4(dist(sA, [0, y]))}mm`);
@@ -108,9 +148,10 @@ function coupler(d, [name], o) {
   items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
   dims.push({ a: [0, -yc - W / 2 - 1.2], b: [L, -yc - W / 2 - 1.2], text: `L ${r4(L)} mm` });
   dims.push({ a: [L / 2, yc + W / 2 + 1.2], b: [L / 2, yc + W / 2 + 1.2], text: `W ${r4(W)} · S ${r4(S)} mm`, dy: 0.6 });
-  const netlist = [...header(d, 'coupler'), ...d.ports.map(p => `port ${p.node} ${p.z}`),
-    `cline ${name} geom=msl W=${r4(W)}mm S=${r4(S)}mm`, `  len ${r4(L)}mm`, `  A ${a1}_k ${a2}_k`, `  B ${b1}_k ${b2}_k`, 'end', ...nl, ...analysisLines(d)].join('\n') + '\n';
-  return { outline, items, dims, netlist, notes: [`ports on ${pitch} mm pitch; feeds ${feedLen} mm long at the port impedance`] };
+  const coupled = [`cline ${name} geom=msl W=${r4(W)}mm S=${r4(S)}mm`, `  len ${r4(L)}mm`, `  A ${a1}_k ${a2}_k`, `  B ${b1}_k ${b2}_k`, 'end'];
+  const netlist = [...header(d, 'coupler'), ...d.ports.map(p => `port ${p.node} ${p.z}`), ...coupled, ...nl, ...analysisLines(d)].join('\n') + '\n';
+  core.netlist = coreNetlist(d, 'coupler', [...coupled, ...core.nl]);
+  return { outline, items, dims, netlist, core, notes: [`ports on ${pitch} mm pitch; feeds ${feedLen} mm long at the port impedance`] };
 }
 
 // ---------------------------------------------------------------- Schiffman C-section + reference line
@@ -126,35 +167,54 @@ function schiffman(d, [cName, rName], o) {
   const pitch = o.pitch ?? 10, feedLen = o.feed ?? 5, margin = o.margin ?? 4;
   const yc = (W + S) / 2;
   const items = [], dims = [], nl = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
   const feeds = [];
   [[-yc, a1, pa], [yc, a2, pb]].forEach(([y, n, p], i) => {
     const yp = Math.sign(y) * pitch / 2;
     const fa = escapeFeed([0, y], yp, -1, W, 0, feedLen), wf = feedWidth(d, p.z, f0);
     const sp = splitPoint([0, y], fa.esc, 2 * yc, wf, Math.max(S, (d.substrate.fab.minSpace ?? 0) * 1e3));
-    items.push({ type: 'poly', layer: 'F.Cu', net: a1, pts: pathPolygon([sp, [0, y], [L, y]], W), width: W, label: `C-section line ${i + 1}` });
-    items.push({ type: 'poly', layer: 'F.Cu', net: a1, pts: pathPolygon([fa.edge, fa.esc, sp], wf), width: wf, label: `feed ${n}` });
+    const linePath = dedupe([sp, [0, y], [L, y]]);
+    items.push({ type: 'poly', layer: 'F.Cu', net: a1, pts: pathPolygon(linePath, W), width: W, label: `C-section line ${i + 1}`, role: 'core' });
+    items.push({ type: 'poly', layer: 'F.Cu', net: a1, pts: pathPolygon([fa.edge, fa.esc, sp], wf), width: wf, label: `feed ${n}`, role: 'feed', node: n, path: dedupe([fa.edge, fa.esc, sp]) });
     items.push({ type: 'port', name: n, net: a1, x: fa.edge[0], y: yp, dir: [-1, 0], width: wf, z0: p.z });
-    feeds.push({ n, wf, diag: fa.diagLen });
+    feeds.push({ n, wf, diag: fa.diagLen, lf: feedLen + dist(fa.esc, sp) });
+    const u = unit(linePath[0], linePath[1]);
+    core.pads.push({ num: portNum(d, n), node: n, polys: [pathPolygon(linePath, W)], at: [sp[0] + u[0] * Math.min(W / 4, 0.05), sp[1] + u[1] * Math.min(W / 4, 0.05)] });
+    core.refs.push(refOf(d, n, sp, unit([0, y], fa.esc), W, wf));
     nl.push(`T${n}_f ${n} ${n}_e W=${r4(wf)}mm len=${r4(feedLen + dist(fa.esc, sp))}mm`, `T${n}_d ${n}_e ${n}_k W=${r4(W)}mm len=${r4(dist(sp, [0, y]))}mm`);
+    core.nl.push(`T${n}_d ${n} ${n}_k W=${r4(W)}mm len=${r4(dist(sp, [0, y]))}mm`);
   });
-  items.push({ type: 'poly', layer: 'F.Cu', net: a1, pts: rect(L, -yc - W / 2, L + W, yc + W / 2), width: W, label: 'C-section bridge' });
+  const bridge = rect(L, -yc - W / 2, L + W, yc + W / 2);
+  items.push({ type: 'poly', layer: 'F.Cu', net: a1, pts: bridge, width: W, label: 'C-section bridge', role: 'core' });
+  core.pads[0].polys.push(bridge);
+  core.ties.push([portNum(d, a1), portNum(d, a2)]);
   // reference line, lengthened by the C-section's feed lengths so the designed phase difference is kept
   const x0 = -(pitch / 2 - yc) - feedLen;
   const extra = feeds.reduce((a, f) => a + feedLen + f.diag, 0);
   const Ltot = Lr + extra, yr = pitch / 2 + pitch;
   const x1 = x0 + Ltot;
   if (x1 < L + W + 2) throw new Error('.layout schiffman: the reference line is shorter than the C-section; check the reference length');
-  items.push({ type: 'poly', layer: 'F.Cu', net: r1.node, pts: rect(x0, yr - Wr / 2, x1, yr + Wr / 2), width: Wr, label: 'reference line' });
+  items.push({ type: 'poly', layer: 'F.Cu', net: r1.node, pts: rect(x0, yr - Wr / 2, x1, yr + Wr / 2), width: Wr, label: 'reference line', role: 'core' });
+  // core part of the reference line: the board feeds on it match the C-section feeds in length, so
+  // the phase difference between the paths is set by the core alone
+  const lf = feeds[0].lf, xr0 = x0 + lf, xr1 = x1 - lf;
+  if (xr1 - xr0 < 2 * Wr) throw new Error('.layout schiffman: the reference line is too short to carry feeds matching the C-section feeds');
+  items.at(-1).feeds = [{ node: r1.node, path: [[x0, yr], [xr0, yr]], width: Wr }, { node: r2.node, path: [[x1, yr], [xr1, yr]], width: Wr }];
+  core.pads.push(...splitConductor(d, [[xr0, yr], [xr1, yr]], Wr, r1.node, r2.node));
+  core.ties.push([portNum(d, r1.node), portNum(d, r2.node)]);
+  core.refs.push(refOf(d, r1.node, [xr0, yr], [-1, 0], Wr, Wr), refOf(d, r2.node, [xr1, yr], [1, 0], Wr, Wr));
+  core.nl.push(`T${rName} ${r1.node} ${r2.node} W=${r4(Wr)}mm len=${r4(xr1 - xr0)}mm`);
   items.push({ type: 'port', name: r1.node, net: r1.node, x: x0, y: yr, dir: [-1, 0], width: Wr, z0: r1.z });
   items.push({ type: 'port', name: r2.node, net: r1.node, x: x1, y: yr, dir: [1, 0], width: Wr, z0: r2.z });
   const outline = rect(x0, -pitch / 2 - margin, x1, yr + margin);
   items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
   dims.push({ a: [0, -yc - W / 2 - 1.2], b: [L, -yc - W / 2 - 1.2], text: `L ${r4(L)} mm` });
   dims.push({ a: [x0, yr + Wr / 2 + 1.2], b: [x1, yr + Wr / 2 + 1.2], text: `reference ${r4(Ltot)} mm (${r4(Lr)} + feeds ${r4(extra)})` });
-  const netlist = [...header(d, 'Schiffman'), ...d.ports.map(p => `port ${p.node} ${p.z}`),
-    `cline ${cName} geom=msl W=${r4(W)}mm S=${r4(S)}mm`, `  len ${r4(L)}mm`, `  A ${a1}_k ${a2}_k`, `  B ${b1} ${b2}`, 'end', ...nl,
+  const coupled = [`cline ${cName} geom=msl W=${r4(W)}mm S=${r4(S)}mm`, `  len ${r4(L)}mm`, `  A ${a1}_k ${a2}_k`, `  B ${b1} ${b2}`, 'end'];
+  const netlist = [...header(d, 'Schiffman'), ...d.ports.map(p => `port ${p.node} ${p.z}`), ...coupled, ...nl,
     `T${rName} ${r1.node} ${r2.node} W=${r4(Wr)}mm len=${r4(Ltot)}mm`, ...analysisLines(d)].join('\n') + '\n';
-  return { outline, items, dims, netlist, notes: [`reference line lengthened by the C-section feeds (${r4(extra)} mm) to keep the designed phase difference`, 'the bridge joining the C-section far ends is not modelled'] };
+  core.netlist = coreNetlist(d, 'Schiffman', [...coupled, ...core.nl]);
+  return { outline, items, dims, netlist, core, notes: [`reference line lengthened by the C-section feeds (${r4(extra)} mm) to keep the designed phase difference`, 'the bridge joining the C-section far ends is not modelled'] };
 }
 
 // ---------------------------------------------------------------- Marchand balun
@@ -179,32 +239,46 @@ function marchand(d, [n1, n2], o) {
   const ys = W + Sg;                       // secondary centre line (main line at y = 0)
   const xs2 = L1 + gap, xend = xs2 + L2;
   const items = [], dims = [], nl = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
+  const G = String(d.ports.length + 1);         // pad number of the grounding pads
   // main line with escaping input feed (upwards, away from the secondary)
   const wfi = feedWidth(d, pin.z, f0), yIn = -Math.max(2 * wfi, 2);
   const fi = escapeFeed([0, 0], yIn, -1, W, 0, feedLen);
   // only the main line moves away here, so the separation grows half as fast: split twice as far out
   const sp0 = splitPoint([0, 0], fi.esc, W + Sg, wfi, Math.max(Sg, (fab.minSpace ?? 0) * 1e3));
   const si = [2 * sp0[0], 2 * sp0[1]].map((v, i) => (Math.abs(v) > Math.abs(fi.esc[i]) ? fi.esc[i] : v));
-  items.push({ type: 'poly', layer: 'F.Cu', net: inNode, pts: pathPolygon([si, [0, 0], [xend, 0]], W), width: W, label: 'main line' });
-  items.push({ type: 'poly', layer: 'F.Cu', net: inNode, pts: pathPolygon([fi.edge, fi.esc, si], wfi), width: wfi, label: `feed ${inNode}` });
+  const mainPath = dedupe([si, [0, 0], [xend, 0]]);
+  items.push({ type: 'poly', layer: 'F.Cu', net: inNode, pts: pathPolygon(mainPath, W), width: W, label: 'main line', role: 'core' });
+  items.push({ type: 'poly', layer: 'F.Cu', net: inNode, pts: pathPolygon([fi.edge, fi.esc, si], wfi), width: wfi, label: `feed ${inNode}`, role: 'feed', node: inNode, path: dedupe([fi.edge, fi.esc, si]) });
+  { const u = unit(mainPath[0], mainPath[1]), a = Math.min(W / 4, 0.05);
+    core.pads.push({ num: portNum(d, inNode), node: inNode, polys: [pathPolygon(mainPath, W)], at: [si[0] + u[0] * a, si[1] + u[1] * a] });
+    core.refs.push(refOf(d, inNode, si, unit([0, 0], fi.esc), W, wfi)); }
   items.push({ type: 'port', name: inNode, net: inNode, x: fi.edge[0], y: yIn, dir: [-1, 0], width: wfi, z0: pin.z });
   // secondary lines with grounded end pads
   const padLen = viaPad * 1.6;
-  items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(-padLen, ys - W / 2, L1, ys + W / 2), width: W, label: `${n1} secondary` });
-  items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(xs2, ys - W / 2, xend + padLen, ys + W / 2), width: W, label: `${n2} secondary` });
+  items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(-padLen, ys - W / 2, L1, ys + W / 2), width: W, label: `${n1} secondary`, role: 'core' });
+  items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(xs2, ys - W / 2, xend + padLen, ys + W / 2), width: W, label: `${n2} secondary`, role: 'core' });
+  // each secondary: grounded half (pad G, with the vias) and output half (output port pad), tied
+  const xm1 = L1 / 2, xm2 = xs2 + L2 / 2;
+  core.pads.push({ num: G, node: 'GND', polys: [rect(-padLen, ys - W / 2, xm1, ys + W / 2)], at: [-padLen / 2, ys] });
+  core.pads.push({ num: G, node: 'GND', polys: [rect(xm2, ys - W / 2, xend + padLen, ys + W / 2)], at: [xend + padLen / 2, ys] });
   const viaYs = nv === 1 || W < 2 * viaPad ? [ys] : Array.from({ length: nv }, (_, i) => ys - W / 2 + viaPad / 2 + i * (W - viaPad) / (nv - 1));
   for (const vy of viaYs) {
-    items.push({ type: 'via', x: -padLen / 2, y: vy, drill, pad: viaPad, net: 'GND' });
-    items.push({ type: 'via', x: xend + padLen / 2, y: vy, drill, pad: viaPad, net: 'GND' });
+    items.push({ type: 'via', x: -padLen / 2, y: vy, drill, pad: viaPad, net: 'GND', role: 'core' });
+    items.push({ type: 'via', x: xend + padLen / 2, y: vy, drill, pad: viaPad, net: 'GND', role: 'core' });
+    core.vias.push({ num: G, node: 'GND', x: -padLen / 2, y: vy, drill, pad: viaPad }, { num: G, node: 'GND', x: xend + padLen / 2, y: vy, drill, pad: viaPad });
   }
   // output feeds: down from the secondary inner ends, then diverge to the bottom edge
   const xc = L1 + gap / 2, ybot0 = ys + W / 2 + Math.max(1, W);
   const outs = [];
-  [[L1 - W / 2, xc - pitch / 2, op], [xs2 + W / 2, xc + pitch / 2, on]].forEach(([x, xt, p]) => {
+  [[L1 - W / 2, xc - pitch / 2, op, [xm1, L1]], [xs2 + W / 2, xc + pitch / 2, on, [xs2, xm2]]].forEach(([x, xt, p, [xa, xb]]) => {
     const wf = feedWidth(d, p.z, f0);
     const dx = xt - x, yd = ybot0 + Math.abs(dx), yedge = yd + feedLen;
-    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: pathPolygon([[x, ys], [x, ybot0], [xt, yd], [xt, yedge]], W), width: W, label: `feed ${p.node}` });
-    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(xt - wf / 2, yd, xt + wf / 2, yedge), width: wf, label: `feed ${p.node}` });
+    const stub = dedupe([[x, ys], [x, ybot0], [xt, yd]]);
+    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: pathPolygon(stub, W), width: W, label: `output line ${p.node}`, role: 'core' });
+    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(xt - wf / 2, yd, xt + wf / 2, yedge), width: wf, label: `feed ${p.node}`, role: 'feed', node: p.node, path: [[xt, yedge], [xt, yd]] });
+    core.pads.push({ num: portNum(d, p.node), node: p.node, polys: [rect(xa, ys - W / 2, xb, ys + W / 2), pathPolygon(stub, W)], at: [xt, yd - Math.min(W / 4, 0.05)] });
+    core.refs.push(refOf(d, p.node, [xt, yd], [0, 1], W, wf));
     items.push({ type: 'port', name: p.node, net: 'GND', x: xt, y: yedge, dir: [0, 1], width: wf, z0: p.z });
     outs.push({ p, wf, stub: ybot0 - ys, diag: Math.hypot(dx, dx), yedge });
   });
@@ -219,15 +293,19 @@ function marchand(d, [n1, n2], o) {
   nl.push(`Tgap m1 m2 W=${r4(W)}mm len=${r4(gap)}mm      # main line between the sections (uncoupled)`);
   outs.forEach(({ p, wf, stub, diag }) => {
     nl.push(`T${p.node}_s ${p.node}_k ${p.node}_e W=${r4(W)}mm len=${r4(stub + diag)}mm`, `T${p.node}_f ${p.node}_e ${p.node} W=${r4(wf)}mm len=${r4(feedLen)}mm`);
+    core.nl.push(`T${p.node}_s ${p.node}_k ${p.node} W=${r4(W)}mm len=${r4(stub + diag)}mm`);
   });
+  core.nl.unshift(`T${inNode}_d ${inNode} ${inNode}_k W=${r4(W)}mm len=${r4(dist(si, [0, 0]))}mm`, `Tgap m1 m2 W=${r4(W)}mm len=${r4(gap)}mm`);
+  core.ties.push([portNum(d, op.node), portNum(d, on.node), G]);
   const A1 = [], B1 = [], A2 = [], B2 = [];
   A1[m] = `${inNode}_k`; A1[s] = '0'; B1[m] = 'm1'; B1[s] = `${op.node}_k`;
   A2[m] = 'm2'; A2[s] = `${on.node}_k`; B2[m] = '-'; B2[s] = '0';
-  const netlist = [...header(d, 'Marchand'), ...d.ports.map(p => `port ${p.node} ${p.z}`),
-    `cline ${n1} geom=msl W=${r4(W)}mm S=${r4(Sg)}mm`, `  len ${r4(L1)}mm`, `  A ${A1.join(' ')}`, `  B ${B1.join(' ')}`, 'end',
-    `cline ${n2} geom=msl W=${r4(W)}mm S=${r4(Sg)}mm`, `  len ${r4(L2)}mm`, `  A ${A2.join(' ')}`, `  B ${B2.join(' ')}`, 'end',
+  const coupled = [`cline ${n1} geom=msl W=${r4(W)}mm S=${r4(Sg)}mm`, `  len ${r4(L1)}mm`, `  A ${A1.join(' ')}`, `  B ${B1.join(' ')}`, 'end',
+    `cline ${n2} geom=msl W=${r4(W)}mm S=${r4(Sg)}mm`, `  len ${r4(L2)}mm`, `  A ${A2.join(' ')}`, `  B ${B2.join(' ')}`, 'end'];
+  const netlist = [...header(d, 'Marchand'), ...d.ports.map(p => `port ${p.node} ${p.z}`), ...coupled,
     ...nl, '# grounded ends: ideal shorts here; via inductance comes with issue #5', ...analysisLines(d)].join('\n') + '\n';
-  return { outline, items, dims, netlist, notes: [`sections separated by ${r4(gap)} mm (uncoupled main line) to bring the two outputs out`, `${nv} via(s) of ${drill} mm drill at each grounded end; via inductance not yet modelled (issue #5)`, 'outputs are DC-grounded through the secondary lines (net GND)'] };
+  core.netlist = coreNetlist(d, 'Marchand', [...coupled, ...core.nl, '# grounded ends: ideal shorts here; via inductance comes with issue #5']);
+  return { outline, items, dims, netlist, core, notes: [`sections separated by ${r4(gap)} mm (uncoupled main line) to bring the two outputs out`, `${nv} via(s) of ${drill} mm drill at each grounded end; via inductance not yet modelled (issue #5)`, 'outputs are DC-grounded through the secondary lines (net GND)'] };
 }
 
 const TEMPLATES = { coupler, schiffman, marchand };
@@ -244,6 +322,8 @@ export function buildLayout(d) {
   L.type = d.layout.type;
   L.substrate = d.substrate;
   L.errors = drc(L);
+  L.feeds = [...L.items.filter(i => i.role === 'feed').map(i => ({ node: i.node, path: i.path, width: i.width })), ...L.items.flatMap(i => i.feeds || [])];
+  L.core.f0 = d.fref;
   const bb = bbox([L.outline]);
   L.size = [bb.x1 - bb.x0, bb.y1 - bb.y0];
   return L;

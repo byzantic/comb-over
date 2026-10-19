@@ -138,6 +138,8 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 
 - `node tools/layout.mjs FILE.cir --svg out.svg`: build the `.layout` of a netlist (coupler, Schiffman or Marchand template), check it against the fab rules, and write the SVG preview or the as-built netlist.
 
+- `node tools/kicad.mjs FILE.cir --out DIR`: export the layout's core as a self-contained KiCad 9 library (footprint with net-tied custom pads, symbol, library tables, core netlist).
+
 - `node tools/mscalc.mjs --sub ID --z0 50 [--f F]`: microstrip calculator. It gives the width for a target Z0, W and S for even/odd impedances (`--ze`/`--zo`), or analyses a geometry (`--w`, `--s`), including losses.
 
 - `node tools/opt.mjs file.cir [iters] [rounds]`: run the optimiser headless and write the tuned values back to the file.
