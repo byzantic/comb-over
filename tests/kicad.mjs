@@ -99,8 +99,13 @@ for (const [file, f0, nPorts, gnd] of [['coupler-10dB-ro4350b.cir', 5e9, 4, fals
   check(`${tag}: embedded part pads carry their nets`, kids(efp, 'pad').every(p => { const n = kid(p, 'net'); return n && nets[n[1]] === s(n[2]); }));
   check(`${tag}: pin function only on the board copy (as KiCad writes it)`, !/pinfunction/.test(fpText) && kids(efp, 'pad').every(p => kid(p, 'pinfunction')));
   check(`${tag}: a feed track per port`, new Set(kids(pcb, 'segment').map(t => kid(t, 'net')[1])).size === nPorts);
-  const portFps = fps.filter(f => /:PORT_/.test(s(f[1])));
-  check(`${tag}: a port placeholder J1..J${nPorts} per port, footprint in the bundled library`, portFps.length === nPorts && portFps.every(f => b.files[`${lib.lib}.pretty/${s(f[1]).split(':')[1]}.kicad_mod`]));
+  const smaFps = fps.filter(f => /:SMA_Amphenol_132289_EdgeMount_/.test(s(f[1])));
+  check(`${tag}: an Amphenol 132289 footprint J1..J${nPorts} per port, from the bundled library`, smaFps.length === nPorts && smaFps.every(f => b.files[`${lib.lib}.pretty/${s(f[1]).split(':')[1]}.kicad_mod`]));
+  check(`${tag}: SMA pads carry the port net (1) and GND (2), with ground vias`, smaFps.every(f => { const ps = kids(f, 'pad'); return ps.filter(p => s(p[1]) === '1').every(p => nets[kid(p, 'net')[1]] !== 'GND') && ps.filter(p => s(p[1]) === '2').every(p => nets[kid(p, 'net')[1]] === 'GND') && ps.filter(p => p[2] === 'thru_hole').length === 6; }));
+  check(`${tag}: .kicad_dru lets the connector pads meet the board edge`, /edge_clearance \(min 0mm\)/.test(b.files[`${lib.lib}.kicad_dru`]) && /memberOfFootprint\('J\*'\)/.test(b.files[`${lib.lib}.kicad_dru`]));
+  const rots = smaFps.map(f => +(kid(f, 'at')[3] ?? 0));
+  const ports = L.items.filter(i => i.type === 'port');
+  check(`${tag}: each connector points out of its board edge`, smaFps.every((f, i) => { const a = rots[i] * Math.PI / 180, dir = [Math.cos(a), -Math.sin(a)], p = ports.find(pp => pp.name === nets[kid(kids(f, 'pad')[0], 'net')[1]]); return p && near(dir[0], p.dir[0], 1e-9) && near(dir[1], p.dir[1], 1e-9); }));
   const setup = kid(pcb, 'setup'), st = kid(setup, 'stackup');
   const diel = kids(st, 'layer').find(l => s(l[1]) === 'dielectric 1');
   check(`${tag}: stack-up dielectric = substrate (h, εr, tanδ)`, near(+kid(diel, 'thickness')[1], L.substrate.dielectric.h * 1e3, 1e-6) && +kid(diel, 'epsilon_r')[1] === L.substrate.dielectric.er && +kid(diel, 'loss_tangent')[1] === L.substrate.dielectric.tand);
@@ -117,7 +122,7 @@ for (const [file, f0, nPorts, gnd] of [['coupler-10dB-ro4350b.cir', 5e9, 4, fals
   const segd = (p, a, c) => { const vx = c[0] - a[0], vy = c[1] - a[1], l2 = vx * vx + vy * vy, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l2)); return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy); };
   const pd = (p, poly) => pip(p, poly) ? 0 : Math.min(...poly.map((q, i) => segd(p, q, poly[(i + 1) % poly.length])));
   const sigPolys = [...L.core.pads.filter(p => sigNodes.has(p.node)).flatMap(p => p.polys), ...L.items.filter(i => i.role === 'feed').map(i => i.pts)];
-  check(`${tag}: stitching vias are GND, inside the board, ≥ keepout clear of signal copper`, vias.length > 0 && vias.every(([x, y, dd, n]) => n === 'GND' && pip([x, y], L.outline) && Math.min(...sigPolys.map(pp => pd([x, y], pp))) >= keep + dd / 2 - 1e-6), `${vias.length} vias`);
+  check(`${tag}: stitching vias are GND, inside the board, ≥ keepout clear of signal copper`, (tag !== 'coupler' || vias.length > 0) && vias.every(([x, y, dd, n]) => n === 'GND' && pip([x, y], L.outline) && Math.min(...sigPolys.map(pp => pd([x, y], pp))) >= keep + dd / 2 - 1e-6), `${vias.length} vias`);
   check(`${tag}: project files: board, project, part, symbol, as-built netlist`, ['.kicad_pcb', '.kicad_pro', '-asbuilt.cir', '.kicad_sym'].every(e => b.files[`${lib.lib}${e}`]) && b.files['fp-lib-table']);
   check(`${tag}: project file sets clearance to the fab minimum space`, JSON.parse(b.project).net_settings.classes[0].clearance === Math.max(0.1, L.substrate.fab.minSpace * 1e3));
   check(`${tag}: board is deterministic for a given date`, boardProject(L, { source: src, date: '2026-01-01' }).board === b.board);

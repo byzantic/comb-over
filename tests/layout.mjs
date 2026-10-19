@@ -12,6 +12,7 @@ const check = (name, cond, info = '') => { if (cond) { pass++; console.log(`  ok
 const throws = (fn, re) => { try { fn(); return false; } catch (e) { return re ? re.test(e.message) : true; } };
 const near = (a, b, tol) => Math.abs(a - b) <= tol;
 const ex = (f) => readFileSync(new URL(`../examples/${f}`, import.meta.url), 'utf8');
+const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const db = (r, i, j, k) => { const s = r.S(i, j); return 20 * Math.log10(Math.hypot(s.re[k], s.im[k])); };
 
 // ---- geometry helpers ----
@@ -58,13 +59,15 @@ const db = (r, i, j, k) => { const s = r.S(i, j); return 20 * Math.log10(Math.hy
   check('four ports, each on the board edge', ports.length === 4 && ports.every(p => [L.outline[0][0], L.outline[1][0]].some(x => near(p.x, x, 1e-9))));
   const wf = synthMsline({ Z0: 50, ...fromSubstrate(d.substrate), f: 5e9 }).W * 1e3;
   check('feeds are 50 Ω wide at the ports', ports.every(p => near(p.width, wf, 1e-9)), wf);
-  check('ports on a 10 mm pitch', near(Math.abs(ports[0].y - ports[2].y), 10, 1e-9));
+  check('ports on the connector pitch (12 mm for the Amphenol 132289)', near(Math.abs(ports[0].y - ports[2].y), 12, 1e-9) && L.opts.pitch === 12);
   const ab = parseNetlist(L.netlist), r0 = solve(d), r1 = solve(ab);
   const k = r0.freq.findIndex(f => f >= 5e9);
   check('as-built netlist parses and keeps the coupled section', ab.sections.some(s => s.name === 'K' && near(s.len * 1e3, len, 1e-3)));
   check('as-built coupling at 5 GHz within 0.3 dB of the bare section', Math.abs(db(r1, 3, 1, k) - db(r0, 3, 1, k)) < 0.3, `${db(r1, 3, 1, k)} vs ${db(r0, 3, 1, k)}`);
   const svg = toSVG(L);
-  check('SVG has the board, 6 copper shapes and 4 ports', /<polygon class="board"/.test(svg) && (svg.match(/class="cu"/g) || []).length === 6 && (svg.match(/class="port"/g) || []).length === 4);
+  const nCu = L.items.filter(i => i.type === 'poly').length;
+  check('SVG has the board, every copper shape and 4 ports', /<polygon class="board"/.test(svg) && (svg.match(/class="cu"/g) || []).length === nCu && (svg.match(/class="port"/g) || []).length === 4);
+  check('coupler: 2 lines + 4 tapers + 4 feeds + 4 × (signal pad + 2 ground pads)', nCu === 2 + 4 + 4 + 12, nCu);
 }
 
 // ---- Schiffman and Marchand templates ----
@@ -92,9 +95,36 @@ const db = (r, i, j, k) => { const s = r.S(i, j); return 20 * Math.log10(Math.hy
   const sec = L.items.filter(i => /secondary/.test(i.label));
   const inside = (v, p) => { const xs = p.pts.map(q => q[0]), ys = p.pts.map(q => q[1]); return v.x - v.pad / 2 >= Math.min(...xs) && v.x + v.pad / 2 <= Math.max(...xs) && v.y - v.pad / 2 >= Math.min(...ys) - 1e-9 && v.y + v.pad / 2 <= Math.max(...ys) + 1e-9; };
   check('grounding vias sit on the secondary-line pads (2 per end)', vias.length === 4 && vias.every(v => sec.some(p => inside(v, p))));
-  check('outputs leave from the bottom edge on a 10 mm pitch', (() => { const ps = L.items.filter(i => i.type === 'port' && i.dir[1] === 1); return ps.length === 2 && near(Math.abs(ps[0].x - ps[1].x), 10, 1e-9); })());
+  check('outputs leave from the bottom edge on the connector pitch', (() => { const ps = L.items.filter(i => i.type === 'port' && i.dir[1] === 1); return ps.length === 2 && near(Math.abs(ps[0].x - ps[1].x), 12, 1e-9); })());
   const ab = parseNetlist(L.netlist), r = solve(ab), r0 = solve(d), k = r.freq.findIndex(f => f >= 1e9);
   check('as-built Marchand outputs within 0.5 dB of the bare sections at f0', Math.abs(db(r, 2, 1, k) - db(r0, 2, 1, k)) < 0.5 && Math.abs(db(r, 3, 1, k) - db(r0, 3, 1, k)) < 0.5, `${db(r, 2, 1, k)} ${db(r, 3, 1, k)} vs ${db(r0, 2, 1, k)} ${db(r0, 3, 1, k)}`);
+}
+
+// ---- tapers and connectors (#8) ----
+{
+  const d = parseNetlist(ex('coupler-10dB-ro4350b.cir'));
+  const L = buildLayout(d);
+  const W = 0.8831, wf = L.items.find(i => i.type === 'port').width;
+  check('reference planes are at the full feed width (taper inside the part)', L.core.refs.every(r => near(r.wCore, wf, 1e-9) && near(r.wFeed, wf, 1e-9)));
+  const tapers = L.items.filter(i => /^taper/.test(i.label || ''));
+  check('a W → feed-width taper at each coupler end', tapers.length === 4 && tapers.every(t => near(dist2(t.pts[0], t.pts[3]), W, 1e-9) && near(dist2(t.pts[1], t.pts[2]), wf, 1e-9)));
+  const feeds = L.items.filter(i => i.role === 'feed');
+  check('each feed meets its taper end exactly', feeds.every(f => L.core.refs.some(r => dist2(r.at, f.path.at(-1)) < 1e-9)));
+  const sig = L.items.filter(i => i.role === 'connector' && i.net !== 'GND');
+  check('launch=matched: SMA signal pads are the feed width', sig.length === 4 && sig.every(p => near(p.width, wf, 1e-9)));
+  check('connector ground pads reach the board edge and pass DRC', L.errors.length === 0 && L.items.filter(i => i.role === 'connector' && i.net === 'GND').length === 8);
+  check('board thickness warning for the 0.062" connector on 0.508 mm RO4350B', L.warnings.length === 1 && /1\.57 mm/.test(L.warnings[0]));
+  const ab = parseNetlist(L.netlist);
+  check('as-built netlist has the SMA pad section at each port', ['in', 'thru', 'cpl', 'iso'].every(n => ab.sections.some(sc => sc.name === `T${n}_pad`)));
+  const lib = buildLayout(parseNetlist(ex('coupler-10dB-ro4350b.cir').replace('.layout coupler K', '.layout coupler K launch=library')));
+  const lsig = lib.items.filter(i => i.role === 'connector' && i.net !== 'GND' && i.pts.length === 4);
+  check('launch=library: 1.5 mm pad plus a taper to the feed width', lsig.some(p => near(p.width, 1.5, 1e-9)) && /taper to the feed width/.test(lib.notes.join(' ')));
+  const r0 = solve(d), rm = solve(ab), rl = solve(parseNetlist(lib.netlist)), k = r0.freq.findIndex(f => f >= 5e9);
+  check('matched launch keeps the coupling within 0.3 dB; the library pad on 0.508 mm does not', Math.abs(db(rm, 3, 1, k) - db(r0, 3, 1, k)) < 0.3 && Math.abs(db(rl, 3, 1, k) - db(r0, 3, 1, k)) > 0.5, `${db(rm, 3, 1, k)} ${db(rl, 3, 1, k)} vs ${db(r0, 3, 1, k)}`);
+  const none = buildLayout(parseNetlist(ex('coupler-10dB-ro4350b.cir').replace('.layout coupler K', '.layout coupler K connector=none')));
+  check('connector=none: no connector copper, old 10 mm pitch', !none.items.some(i => i.role === 'connector') && near(Math.abs(none.items.filter(i => i.type === 'port')[0].y - none.items.filter(i => i.type === 'port')[2].y), 10, 1e-9));
+  const sch = buildLayout(parseNetlist(ex('schiffman-ro4350b.cir')));
+  check('no thickness warning on 1.524 mm RO4350B (1.594 mm with copper)', sch.warnings.length === 0);
 }
 
 // ---- errors ----

@@ -86,6 +86,7 @@ function renderLayout(d) {
       <span><button id="btn-asbuilt" title="Open the netlist of the layout, including its feed lines">As-built netlist</button> <button id="btn-svg">SVG</button> <button id="btn-kicadlib" title="Footprint + symbol + core netlist as a self-contained KiCad 9 library"${ok ? '' : ' disabled'}>KiCad library</button> <button id="btn-kicadpcb" title="Whole KiCad 9 project: board with feeds, ground pours, stitching vias and stack-up, plus the library"${ok ? '' : ' disabled'}>KiCad project</button></span></div>
     <div class="svgbox">${toSVG(L, { errors: L.errors })}</div>
     <ul class="drc ${ok ? 'ok' : 'bad'}">${ok ? '<li>✓ design rules met</li>' : L.errors.map(e => `<li>${esc(e.msg)}</li>`).join('')}</ul>
+    ${L.warnings?.length ? `<ul class="drc warn">${L.warnings.map(w => `<li>⚠ ${esc(w)}</li>`).join('')}</ul>` : ''}
     ${L.notes.length ? `<ul class="lnotes">${L.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div>`;
   $('btn-svg').onclick = () => download(`${baseName()}-layout.svg`, toSVG(L), 'image/svg+xml');
   $('btn-kicadpcb').onclick = () => { const b = boardProject(L, { source: editor.value }); download(`${b.lib}-kicad.zip`, zip(b.files, b.lib), 'application/zip'); };
