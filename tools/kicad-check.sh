@@ -20,9 +20,14 @@ status=0
 for d in "$out"/*/; do
   d=${d%/}; name=$(basename "$d")
   echo "=== $name (KiCad $ver)"
-  pretty=$(ls -d "$d"/*.pretty | head -1); sym=$(ls "$d"/*.kicad_sym | head -1)
-  board=$(ls "$d"/*.kicad_pcb | head -1)
+  pretty=$(ls -d "$d"/*.pretty | head -1); sym=$(ls "$d"/*.kicad_sym 2>/dev/null | head -1)
+  board=$(ls "$d"/*.kicad_pcb 2>/dev/null | head -1)
   run kicad-cli fp export svg --output "$d/svg" "$pretty" || { note error "$name footprint" "$LAST"; status=1; }
+  if [ -z "$board" ]; then
+    # footprint library only (e.g. the loading capacitors): parse + strict re-save
+    if run python3 "$here/kicad_check.py" "$d"; then note notice "$name" "$LAST"; else note error "$name KiCad view" "$LAST"; status=1; fi
+    continue
+  fi
   run kicad-cli sym export svg --output "$d/svg" "$sym" || { note error "$name symbol" "$LAST"; status=1; }
   if run python3 "$here/kicad_check.py" "$d"; then view="$LAST"; else note error "$name KiCad view" "$LAST"; status=1; view=""; fi
   # fill zones with KiCad's own filler (kicad-cli 9.0 drc has no --refill-zones)

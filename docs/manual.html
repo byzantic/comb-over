@@ -286,6 +286,10 @@
 <td>Joins nodes (a zero-ohm short). Use this instead of a 0 Ω resistor.</td>
 </tr>
 <tr>
+<td><code>cap &lt;name&gt; N1 [N2] C=.. [type=ideal|smd|printed|trimmer] [pkg=0402|0603|0805] [Q=..] [esl=..] [d=..] [n=..] [a=..] [series=E12|E24] [mpn=..]</code></td>
+<td>A loading capacitor with its parasitic model (§7.5): to ground unless N2 is given.</td>
+</tr>
+<tr>
 <td><code>via &lt;name&gt; N1 [N2] d=.. [n=..] [h=..] [Q=..]</code></td>
 <td><code>n</code> plated vias of drill <code>d</code> from N1 to ground (or to N2), as the Goldfarb–Pucel inductance (§4.7). <code>h</code> defaults to the <code>.substrate</code> height.</td>
 </tr>
@@ -905,6 +909,107 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </li>
 </ul>
 <hr>
+<h3 id="75-loading-capacitors"><a class="anchor" href="#75-loading-capacitors" aria-hidden="true">#</a>7.5 Loading capacitors</h3>
+<p>A comb-line&#39;s resonators are loaded by capacitors at their open ends. <strong>Loading capacitors</strong> in the synthesis dialog chooses how they are built. The comb sections stay as synthesised, with their εr; the <strong>capacitor substrate</strong> sets only the pads and ground vias.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>option</th>
+<th>model (<code>cap … type=</code>)</th>
+<th>the synthesiser</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ideal</td>
+<td><code>C</code></td>
+<td>as before: <code>cl1</code>, <code>cl</code> tunable</td>
+</tr>
+<tr>
+<td>SMD 0402 / 0603 / 0805</td>
+<td>hot pad shunt C → ESL → C (Q) → cold pad → ground vias</td>
+<td>Finds the nominal value whose <strong>effective</strong> capacitance at f0 equals the ideal one, snaps it to E24 or E12, re-tunes the common line length (and tap) to absorb the snapping, and reports each resonator&#39;s residual detuning. <code>th0</code> becomes tunable for polishing.</td>
+</tr>
+<tr>
+<td>trimmer (Murata TZC3)</td>
+<td>pad C → ESL → C (Q) → ground vias</td>
+<td>Picks the narrowest TZC3 that covers each value with ±10 % adjustment. The <code>cl1</code>/<code>cl</code> sliders span the trimmer&#39;s range, so they are the trimmer screws.</td>
+</tr>
+<tr>
+<td>printed pad</td>
+<td>square pad to the bottom ground: an open microstrip stub, side a + open-end Δl</td>
+<td>Sizes each pad for its value at f0 and warns when the substrate cannot reach it</td>
+</tr>
+</tbody></table></div>
+<p><strong>The models</strong> (<code>js/capacitors.js</code>):</p>
+<ul>
+<li><strong>Pad capacitance.</strong> A short microstrip section with Kirschning–Jansen–Koster end fringing (§4.6, §4.7).</li>
+<li><strong>Vias.</strong> Goldfarb–Pucel (§4.7).</li>
+<li><strong>SMD effective capacitance.</strong> C<sub>eff</sub> = C<sub>pad</sub> + C/(1 − ω²(ESL + L<sub>via</sub>)C), which also gives the self-resonance.</li>
+<li><strong>Printed pad.</strong> Its input capacitance tan(β(a + Δl))/(ωZ0), valid while a ≤ λg/8 and W/h ≤ 100. Pads are also capped at a practical 25 mm side.</li>
+</ul>
+<p><strong>Sources and assumptions:</strong></p>
+<ul>
+<li><strong>SMD land patterns:</strong> KiCad&#39;s <code>C_0402_1005Metric</code>, <code>C_0603_1608Metric</code> and <code>C_0805_2012Metric</code>.</li>
+<li><strong>SMD ESL</strong> (0.4 / 0.6 / 0.8 nH) and <strong>Q</strong> (300) are typical values, not from a particular part. Set <code>esl=</code> and <code>Q=</code> from your capacitor&#39;s datasheet.</li>
+<li><strong>Trimmer ranges:</strong> from Murata&#39;s TZC3 datasheet, 1.4–3, 2–6, 3–10, 5–20 and 6.5–30 pF. Murata specifies Q only at 1 MHz and draws frequency curves to 2 GHz (Z types) or 1 GHz (R/P types). The trimmer&#39;s RF Q (100) and ESL (1 nH) are assumptions.</li>
+<li><strong>Gap and interdigital printed capacitors</strong> are not included yet.</li>
+</ul>
+<p><strong>Measured on a 5-pole, 6 % comb-line at 1 GHz</strong> (θ0 40°, Zr 70 Ω, lossless lines), against the ideal design, which is centred at 1.0006 GHz with a 7.08 % −3 dB bandwidth:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>option</th>
+<th>capacitors</th>
+<th>centre</th>
+<th>−3 dB BW (below the peak)</th>
+<th>peak S21</th>
+<th>note</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SMD 0603, E24, 0.508 mm RO4350B</td>
+<td>2.4 pF × 5</td>
+<td>−0.21 %</td>
+<td>6.43 %</td>
+<td>−1.37 dB</td>
+<td>length 39.92° → 40.18°; residual detuning ±0.3 % per resonator</td>
+</tr>
+<tr>
+<td>SMD 0402, E12</td>
+<td>2.7 pF × 5</td>
+<td>−0.18 %</td>
+<td>6.73 %</td>
+<td>−1.38 dB</td>
+<td>length 39.92° → 38.00°</td>
+</tr>
+<tr>
+<td>printed, 0.508 mm RO4350B</td>
+<td>5.9 mm square pads</td>
+<td>−0.03 %</td>
+<td>6.66 %</td>
+<td>−1.54 dB</td>
+<td>pad conductor and dielectric loss</td>
+</tr>
+<tr>
+<td>trimmer, 1.524 mm RO4350B</td>
+<td>TZC3Z030 (1.4–3 pF)</td>
+<td>−0.06 % (0.00 % lossless)</td>
+<td>5.64 %</td>
+<td>−4.21 dB</td>
+<td>with the assumed Q 100</td>
+</tr>
+</tbody></table></div>
+<p>The SMD loss is set by the assumed Q of 300. The narrower bandwidth comes from the ESL, which makes the effective capacitance rise with frequency and steepens each resonator&#39;s slope. <strong>Polish</strong> recovers the bandwidth by retuning <code>cg</code>/<code>cm</code>/<code>tt</code> and the now-tunable <code>th0</code>.</p>
+<p>The designer warns, in the netlist comments and the status line, when an option cannot reach the value:</p>
+<ul>
+<li>a printed pad that would need to be too large;</li>
+<li>no trimmer that covers the value;</li>
+<li>an SMD pad that alone is more than the value;</li>
+<li>E-series detuning above FBW/10;</li>
+<li>self-resonance below 3 f0;</li>
+<li>more than 1 dB of loss from capacitor Q.</li>
+</ul>
+<p><strong>Footprints.</strong> <code>capFootprint()</code> in <code>js/kicad.js</code> gives each option&#39;s KiCad footprint: pad 1 on the resonator end, pad 2 and its via land to ground. The comb-line layouts of issue #15 place them. <code>node tools/kicad.mjs --caps SUBSTRATE --out DIR</code> writes them as a library, and CI checks that library in KiCad.</p>
 <h2 id="8-export-and-sharing"><a class="anchor" href="#8-export-and-sharing" aria-hidden="true">#</a>8. Export and sharing</h2>
 <p><strong>Touchstone.</strong> Exports the full S-matrix at all sweep points, with frequency in Hz, as RI (real/imaginary), MA (magnitude/angle°) or DB (dB/angle°).</p>
 <div class="table-wrap"><table>

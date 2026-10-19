@@ -142,6 +142,7 @@ Unknown directives are ignored with a warning.
 | `T<name> N1 N2 Z0=.. len=.. [er=..] [Q=..] [f0=..]` | Single uncoupled line, both ends referenced to ground. |
 | `T<name> N1 N2 W=.. len=.. [Q=..] [f0=..]` | Single microstrip line of width W on the `.substrate` (§4.6). |
 | `wire N1 N2 [N3 …]` | Joins nodes (a zero-ohm short). Use this instead of a 0 Ω resistor. |
+| `cap <name> N1 [N2] C=.. [type=ideal\|smd\|printed\|trimmer] [pkg=0402\|0603\|0805] [Q=..] [esl=..] [d=..] [n=..] [a=..] [series=E12\|E24] [mpn=..]` | A loading capacitor with its parasitic model (§7.5): to ground unless N2 is given. |
 | `via <name> N1 [N2] d=.. [n=..] [h=..] [Q=..]` | `n` plated vias of drill `d` from N1 to ground (or to N2), as the Goldfarb–Pucel inductance (§4.7). `h` defaults to the `.substrate` height. |
 | `cline NAME … end` | Coupled multiconductor section (§4). |
 
@@ -520,6 +521,53 @@ These figures are from `npm test` and Example 3:
   - "ground capacitance ≤ 0" means the couplings are too strong for this bandwidth (and θ0 for comb-line). Yₘ/Yₐ does not depend on Z<sub>r</sub>.
 
 ---
+
+### 7.5 Loading capacitors
+
+A comb-line's resonators are loaded by capacitors at their open ends. **Loading capacitors** in the synthesis dialog chooses how they are built. The comb sections stay as synthesised, with their εr; the **capacitor substrate** sets only the pads and ground vias.
+
+| option | model (`cap … type=`) | the synthesiser |
+|---|---|---|
+| ideal | `C` | as before: `cl1`, `cl` tunable |
+| SMD 0402 / 0603 / 0805 | hot pad shunt C → ESL → C (Q) → cold pad → ground vias | Finds the nominal value whose **effective** capacitance at f0 equals the ideal one, snaps it to E24 or E12, re-tunes the common line length (and tap) to absorb the snapping, and reports each resonator's residual detuning. `th0` becomes tunable for polishing. |
+| trimmer (Murata TZC3) | pad C → ESL → C (Q) → ground vias | Picks the narrowest TZC3 that covers each value with ±10 % adjustment. The `cl1`/`cl` sliders span the trimmer's range, so they are the trimmer screws. |
+| printed pad | square pad to the bottom ground: an open microstrip stub, side a + open-end Δl | Sizes each pad for its value at f0 and warns when the substrate cannot reach it |
+
+**The models** (`js/capacitors.js`):
+
+- **Pad capacitance.** A short microstrip section with Kirschning–Jansen–Koster end fringing (§4.6, §4.7).
+- **Vias.** Goldfarb–Pucel (§4.7).
+- **SMD effective capacitance.** C<sub>eff</sub> = C<sub>pad</sub> + C/(1 − ω²(ESL + L<sub>via</sub>)C), which also gives the self-resonance.
+- **Printed pad.** Its input capacitance tan(β(a + Δl))/(ωZ0), valid while a ≤ λg/8 and W/h ≤ 100. Pads are also capped at a practical 25 mm side.
+
+**Sources and assumptions:**
+
+- **SMD land patterns:** KiCad's `C_0402_1005Metric`, `C_0603_1608Metric` and `C_0805_2012Metric`.
+- **SMD ESL** (0.4 / 0.6 / 0.8 nH) and **Q** (300) are typical values, not from a particular part. Set `esl=` and `Q=` from your capacitor's datasheet.
+- **Trimmer ranges:** from Murata's TZC3 datasheet, 1.4–3, 2–6, 3–10, 5–20 and 6.5–30 pF. Murata specifies Q only at 1 MHz and draws frequency curves to 2 GHz (Z types) or 1 GHz (R/P types). The trimmer's RF Q (100) and ESL (1 nH) are assumptions.
+- **Gap and interdigital printed capacitors** are not included yet.
+
+**Measured on a 5-pole, 6 % comb-line at 1 GHz** (θ0 40°, Zr 70 Ω, lossless lines), against the ideal design, which is centred at 1.0006 GHz with a 7.08 % −3 dB bandwidth:
+
+| option | capacitors | centre | −3 dB BW (below the peak) | peak S21 | note |
+|---|---|---|---|---|---|
+| SMD 0603, E24, 0.508 mm RO4350B | 2.4 pF × 5 | −0.21 % | 6.43 % | −1.37 dB | length 39.92° → 40.18°; residual detuning ±0.3 % per resonator |
+| SMD 0402, E12 | 2.7 pF × 5 | −0.18 % | 6.73 % | −1.38 dB | length 39.92° → 38.00° |
+| printed, 0.508 mm RO4350B | 5.9 mm square pads | −0.03 % | 6.66 % | −1.54 dB | pad conductor and dielectric loss |
+| trimmer, 1.524 mm RO4350B | TZC3Z030 (1.4–3 pF) | −0.06 % (0.00 % lossless) | 5.64 % | −4.21 dB | with the assumed Q 100 |
+
+The SMD loss is set by the assumed Q of 300. The narrower bandwidth comes from the ESL, which makes the effective capacitance rise with frequency and steepens each resonator's slope. **Polish** recovers the bandwidth by retuning `cg`/`cm`/`tt` and the now-tunable `th0`.
+
+The designer warns, in the netlist comments and the status line, when an option cannot reach the value:
+
+- a printed pad that would need to be too large;
+- no trimmer that covers the value;
+- an SMD pad that alone is more than the value;
+- E-series detuning above FBW/10;
+- self-resonance below 3 f0;
+- more than 1 dB of loss from capacitor Q.
+
+**Footprints.** `capFootprint()` in `js/kicad.js` gives each option's KiCad footprint: pad 1 on the resonator end, pad 2 and its via land to ground. The comb-line layouts of issue #15 place them. `node tools/kicad.mjs --caps SUBSTRATE --out DIR` writes them as a library, and CI checks that library in KiCad.
 
 ## 8. Export and sharing
 

@@ -19,7 +19,8 @@ Inside matrices and on statement lines, an expression must not contain spaces (e
 R|C|L&lt;name&gt; N1 N2 VALUE [Q=..]   # e.g.  C1 r1 0 2.2p Q=400
 T&lt;name&gt; N1 N2 Z0=.. len=.. [er=..] [Q=..] [f0=..]   # single uncoupled line, both ends vs ground
 wire N1 N2 [N3 …]         # join nodes (zero-ohm)
-via &lt;name&gt; N1 [N2] d=.. [n=..] [h=..]   # n plated vias to ground (Goldfarb–Pucel L; h from .substrate)</pre>
+via &lt;name&gt; N1 [N2] d=.. [n=..] [h=..]   # n plated vias to ground (Goldfarb–Pucel L; h from .substrate)
+cap &lt;name&gt; N1 [N2] C=.. type=ideal|smd|printed|trimmer [pkg=0603] [series=E24] [esl=..] [Q=..]   # loading capacitor with parasitics</pre>
 <p>Ground: <code>0 gnd</code>. Open (unconnected) terminal: <code>- open nc</code>.</p>
 
 <h4>Coupled-line section</h4>

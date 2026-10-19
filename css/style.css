@@ -67,6 +67,7 @@ dialog .close { position: sticky; top: 0; float: right; font-size: 18px; padding
 #synth .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 #synth .status { border: 0; padding: 6px 0 0; }
 #synth.hide-comb .comb-only { display: none; }
+#synth.hide-capopt .cap-opt { display: none; }
 
 a.btn { text-decoration: none; display: inline-block; }
 .notice { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; font-size: 13px; background: var(--sel); border-bottom: 1px solid var(--line); }

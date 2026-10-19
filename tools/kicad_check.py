@@ -55,9 +55,11 @@ for modfile in sorted(glob.glob(os.path.join(pretty, '*.kicad_mod'))):
     for x in only_kicad[:12]: print('  kicad:', x[:400])
     strict_fail = strict_fail or bool(only_ours or only_kicad)
 
-b = pcbnew.LoadBoard(glob.glob(os.path.join(d, '*.kicad_pcb'))[0])
-bfp = [f for f in b.GetFootprints() if f.GetFPID().GetLibItemName() == name][0]
-print('board copy at', pcbnew.ToMM(bfp.GetPosition().x), pcbnew.ToMM(bfp.GetPosition().y), 'pads with nets:', [(p.GetNumber(), p.GetNetname()) for p in bfp.Pads()])
+boards = glob.glob(os.path.join(d, '*.kicad_pcb'))
+if boards:
+    b = pcbnew.LoadBoard(boards[0])
+    bfp = [f for f in b.GetFootprints() if f.GetFPID().GetLibItemName() == name][0]
+    print('board copy at', pcbnew.ToMM(bfp.GetPosition().x), pcbnew.ToMM(bfp.GetPosition().y), 'pads with nets:', [(p.GetNumber(), p.GetNetname()) for p in bfp.Pads()])
 # The writer targets KiCad 9's file format, so the re-save must match exactly only under KiCad 9;
 # a later KiCad converts on save (the board must still load, and DRC is judged separately).
 try: kver = pcbnew.Version()
