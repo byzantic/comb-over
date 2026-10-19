@@ -314,7 +314,7 @@ function smaFootprint(c, wf, { lib, embed, nets, ref = 'J1', uuid = uuidFactory(
   for (const [x0, y0, x1, y1] of c.fab) L.push(...box(x0, y0, x1, y1, 'F.Fab', 0.1));
   L.push(line(0, -cy.y, 0, cy.y, 'Dwgs.User', 0.1));      // board edge reference
   const pad = (num_, x, y, w, l, layers, k) => `\t(pad ${q(num_)} smd rect\n\t\t(at ${num(x)} ${num(y)}${rot})\n\t\t(size ${num(l)} ${num(w)})\n\t\t(layers ${layers})${net(k)}\n\t\t(uuid ${q(uuid())})\n\t)`;
-  L.push(pad('1', -s.l / 2, 0, pw, s.l, '"F.Cu" "F.Paste" "F.Mask"', 'sig'));
+  L.push(pad('1', -s.l / 2, 0, pw, s.l, '"F.Cu" "F.Mask" "F.Paste"', 'sig'));
   if (Lt > 0) {
     const ax = -s.l - Lt / 2;                               // anchor in the middle of the taper
     const pts = [[-s.l, -pw / 2], [-s.l, pw / 2], [-s.l - Lt, wf / 2], [-s.l - Lt, -wf / 2]].map(([x, y]) => [x - ax, y]);
@@ -322,8 +322,8 @@ function smaFootprint(c, wf, { lib, embed, nets, ref = 'J1', uuid = uuidFactory(
     L.push(`\t(pad "1" smd custom\n\t\t(at ${num(ax)} 0${rot})\n\t\t(size ${num(a)} ${num(a)})\n\t\t(layers "F.Cu" "F.Mask")${net('sig')}\n\t\t(zone_connect 2)\n\t\t(options\n\t\t\t(clearance outline)\n\t\t\t(anchor rect)\n\t\t)\n\t\t(primitives\n\t\t\t(gr_poly\n\t\t\t\t(pts\n\t\t\t\t\t${xy(pts)}\n\t\t\t\t)\n\t\t\t\t(width 0)\n\t\t\t\t(fill yes)\n\t\t\t)\n\t\t)\n\t\t(uuid ${q(uuid())})\n\t)`);
   }
   for (const sg of [-1, 1]) {
-    L.push(pad('2', -g.l / 2, sg * g.y, g.w, g.l, '"F.Cu" "F.Paste" "F.Mask"', 'gnd'));
-    L.push(pad('2', -g.l / 2, sg * g.y, g.w, g.l, '"B.Cu" "B.Paste" "B.Mask"', 'gnd'));
+    L.push(pad('2', -g.l / 2, sg * g.y, g.w, g.l, '"F.Cu" "F.Mask" "F.Paste"', 'gnd'));
+    L.push(pad('2', -g.l / 2, sg * g.y, g.w, g.l, '"B.Cu" "B.Mask" "B.Paste"', 'gnd'));
     for (const x of [-0.8, -g.l / 2, -g.l + 0.8]) {
       L.push(`\t(pad "2" thru_hole circle\n\t\t(at ${num(x)} ${num(sg * g.y)}${rot})\n\t\t(size ${num(drill + 0.3)} ${num(drill + 0.3)})\n\t\t(drill ${num(drill)})\n\t\t(layers "*.Cu")\n\t\t(remove_unused_layers no)${net('gnd')}\n\t\t(zone_connect 2)\n\t\t(uuid ${q(uuid())})\n\t)`);
     }
@@ -471,7 +471,7 @@ export function boardProject(layout, opts = {}) {
   files[`${name}.kicad_pcb`] = board;
   files[`${name}.kicad_pro`] = projectFile(name, { clearance, minTrack, minDrill: (fab.minDrill ?? 0.3) * 1e3, edgeClr });
   files[`${name}-asbuilt.cir`] = layout.netlist;
-  if (conn) files[`${name}.kicad_dru`] = `(version 1)\n(rule "Edge-launch connector pads meet the board edge"\n\t(constraint edge_clearance (min 0mm))\n\t(condition "A.memberOfFootprint('J*')"))\n`;
+  if (conn) files[`${name}.kicad_dru`] = `(version 1)\n(rule "Edge-launch connector pads meet the board edge"\n\t(constraint edge_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.memberOfFootprint('J*')"))\n`;
   files['README.txt'] += [
     '',
     'Board (KiCad project)',
