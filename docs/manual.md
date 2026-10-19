@@ -233,7 +233,7 @@ Use exactly one of these. Lines are numbered 1..N in the order used by `A`/`B`.
 | `Z0 [ … ]` | homogeneous | Characteristic impedance matrix (Ω), Z0 = Y0⁻¹. |
 | `Cn [ … ]` | homogeneous | Normalised Maxwell capacitance matrix C/ε (dimensionless, ε = ε0·εr). Matthaei/Getsinger convention. |
 | `Cg g1 … gN` + `Cm m12 m23 …` | homogeneous | Normalised ground capacitances and adjacent mutual capacitances (all positive). Add non-adjacent terms with `Cm(i,j) value`. |
-| `C [ … ]` and `L [ … ]` | general | Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives. |
+| `C [ … ]` and `L [ … ]` | general | Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives; `node solver/cli.mjs` computes them for N strips (§10). |
 | `geom msl` + `W …` + `S …` | `.substrate` | Coupled microstrip pair given by strip width and gap. Two lines only; N-line geometry needs the field solver (issue #12). Also accepted inline: `cline K geom=msl W=0.88mm S=0.1mm`. |
 
 Matrices are written `[a b c; d e f; g h i]`, with rows separated by `;` and entries by spaces or commas. They must be square and symmetric, and C must be positive definite.
@@ -869,6 +869,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/summary.mjs FILE.cir 11 21 …` | Text table of dB/angle for the given S-parameters, plus section lengths and ε<sub>eff</sub>. |
 | `node tools/opt.mjs FILE.cir [iters] [rounds]` | Runs the optimiser headless and writes tuned values back into the file. `.data` files are read relative to the netlist. |
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
+| `node solver/cli.mjs --W w1,w2,… --S s12,… (--h H \| --stripline B) --er ER [--cover HC] [--json]` | 2-D field solver: C, L and modal ε<sub>eff</sub> of N zero-thickness strips (mm) in microstrip, covered microstrip or stripline, and the `C [...] L [...]` lines for a `cline`. Method and validation: `solver/README.md`. |
 | `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
 | `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |

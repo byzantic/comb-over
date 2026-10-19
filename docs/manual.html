@@ -449,7 +449,7 @@ end
 <tr>
 <td><code>C [ … ]</code> and <code>L [ … ]</code></td>
 <td>general</td>
-<td>Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives.</td>
+<td>Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives; <code>node solver/cli.mjs</code> computes them for N strips (§10).</td>
 </tr>
 <tr>
 <td><code>geom msl</code> + <code>W …</code> + <code>S …</code></td>
@@ -1404,6 +1404,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>tools/measure.mjs</code></td>
 <td>Helper module (<code>load</code>, <code>at</code>, <code>band</code>, <code>extreme</code>) used to compute the numbers quoted in the worked examples.</td>
+</tr>
+<tr>
+<td><code>node solver/cli.mjs --W w1,w2,… --S s12,… (--h H | --stripline B) --er ER [--cover HC] [--json]</code></td>
+<td>2-D field solver: C, L and modal ε<sub>eff</sub> of N zero-thickness strips (mm) in microstrip, covered microstrip or stripline, and the <code>C [...] L [...]</code> lines for a <code>cline</code>. Method and validation: <code>solver/README.md</code>.</td>
 </tr>
 <tr>
 <td><code>node tools/mscalc.mjs --sub ID (--z0 Z | --ze Ze --zo Zo | --w W [--s S]) [--f F]</code></td>
