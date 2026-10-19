@@ -60,7 +60,8 @@ export function drawRect(canvas, traces, opts = {}) {
   ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, pw, ph); ctx.clip();
   const pal = palette();
   traces.forEach((t, i) => {
-    ctx.strokeStyle = pal[i % pal.length]; ctx.lineWidth = 1.6; ctx.beginPath();
+    // t.ci: colour index (a dashed "as built" trace shares its design trace's colour); t.dash: line dash
+    ctx.strokeStyle = pal[(t.ci ?? i) % pal.length]; ctx.lineWidth = t.dash ? 1.3 : 1.6; ctx.setLineDash(t.dash || []); ctx.beginPath();
     let pen = false;
     for (let k = 0; k < t.x.length; k++) {
       const v = t.y[k];
@@ -68,7 +69,7 @@ export function drawRect(canvas, traces, opts = {}) {
       const px = X(t.x[k]), py = Y(Math.max(ylo - (yhi - ylo), Math.min(yhi + (yhi - ylo), v)));
       if (pen) ctx.lineTo(px, py); else { ctx.moveTo(px, py); pen = true; }
     }
-    ctx.stroke();
+    ctx.stroke(); ctx.setLineDash([]);
   });
   ctx.restore();
   // hover marker
@@ -77,7 +78,7 @@ export function drawRect(canvas, traces, opts = {}) {
     ctx.strokeStyle = css('--axis'); ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(px, m.t); ctx.lineTo(px, m.t + ph); ctx.stroke(); ctx.setLineDash([]);
     traces.forEach((t, i) => {
       const v = t.y[opts.hoverK]; if (!isFinite(v) || v < ylo || v > yhi) return;
-      ctx.fillStyle = pal[i % pal.length]; ctx.beginPath(); ctx.arc(px, Y(v), 3, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillStyle = pal[(t.ci ?? i) % pal.length]; ctx.beginPath(); ctx.arc(px, Y(v), 3, 0, 2 * Math.PI); ctx.fill();
     });
   }
   return { plotLeft: m.l, plotWidth: pw };
@@ -118,15 +119,15 @@ export function drawSmith(canvas, traces, opts = {}) {
   ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
   const pal = palette();
   traces.forEach((t, i) => {
-    ctx.strokeStyle = pal[i % pal.length]; ctx.lineWidth = 1.6; ctx.beginPath();
+    ctx.strokeStyle = pal[(t.ci ?? i) % pal.length]; ctx.lineWidth = t.dash ? 1.3 : 1.6; ctx.setLineDash(t.dash || []); ctx.beginPath();
     let pen = false;
     for (let k = 0; k < t.re.length; k++) {
       if (!isFinite(t.re[k])) { pen = false; continue; }
       const [x, y] = P(t.re[k], t.im[k]);
       if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
     }
-    ctx.stroke();
-    const [sx, sy] = P(t.re[0], t.im[0]); ctx.fillStyle = pal[i % pal.length]; ctx.fillRect(sx - 2.5, sy - 2.5, 5, 5);
+    ctx.stroke(); ctx.setLineDash([]);
+    const [sx, sy] = P(t.re[0], t.im[0]); ctx.fillStyle = pal[(t.ci ?? i) % pal.length]; ctx.fillRect(sx - 2.5, sy - 2.5, 5, 5);
   });
   ctx.restore();
   ctx.strokeStyle = css('--axis'); ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.stroke();
@@ -135,7 +136,7 @@ export function drawSmith(canvas, traces, opts = {}) {
     traces.forEach((t, i) => {
       if (!isFinite(t.re[k])) return;
       const [x, y] = P(t.re[k], t.im[k]);
-      ctx.strokeStyle = pal[i % pal.length]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.stroke();
+      ctx.strokeStyle = pal[(t.ci ?? i) % pal.length]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.stroke();
     });
   }
 }

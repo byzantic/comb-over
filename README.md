@@ -16,7 +16,8 @@ The documentation is published as web pages next to the designer: `docs/manual.h
   4. interdigital by hand;
   5. Marchand balun;
   6. Schiffman;
-  7. a three-line section from field-solver C/L matrices.
+  7. a three-line section from field-solver C/L matrices;
+  8. from a coupler netlist to a KiCad board.
 
 ## Run it
 
@@ -42,6 +43,7 @@ npm test          # engine + synthesis tests
 - **Optimiser:** `.goal` statements drive a Nelder–Mead optimiser over the tuned parameters. When it finishes, the results are written back into the netlist.
 - **Section info:** the modal velocities (ε_eff), modal impedances and voltage eigenvectors are shown for each section.
 - **Touchstone export:** `.sNp` in RI, MA or dB format. Mixed port impedances are written as Touchstone 2.0 with `[Reference]`.
+- **Layout and KiCad:** the layout panel turns a coupler, Schiffman or Marchand netlist into a microstrip layout on a chosen substrate, with edge-launch SMAs. It checks the layout against the fab's rules, can overlay the as-built response on the plots, and exports a KiCad 9 component library or a complete KiCad project (manual §8, worked example 8).
 - **Sharing:** **Link** copies a URL with the netlist embedded in it. The editor content is also kept in localStorage.
 
 ### Example

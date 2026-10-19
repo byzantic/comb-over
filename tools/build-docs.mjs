@@ -25,6 +25,7 @@ const EXAMPLES = [
   ['05-marchand-balun', 'Marchand balun'],
   ['06-schiffman', 'Schiffman phase shifter'],
   ['07-three-line-CL', 'Three-line section from C, L'],
+  ['08-coupler-to-board', 'From a coupler netlist to a KiCad board'],
 ];
 const PAGES = [
   { src: 'docs/manual.md', out: 'docs/manual.html', title: 'Manual', kind: 'manual' },

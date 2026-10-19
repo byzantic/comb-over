@@ -28,6 +28,8 @@ jobs:
           for f in coupler-10dB-ro4350b schiffman-ro4350b marchand-ro4350b; do
             node tools/kicad.mjs examples/$f.cir --out kicad-out/$f --board --date 2026-01-01
           done
+          # worked example 8: impedance-defined coupler → microstrip → board, as the layout panel does it
+          node tools/kicad.mjs examples/coupler-10dB-microstrip.cir --make jlc-ro4350b-1.524 --out kicad-out/example8-1524 --board --date 2026-01-01
       - name: kicad-cli (KiCad 9)
         run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:9.0 bash tools/kicad-check.sh kicad-out
       - uses: actions/upload-artifact@v4

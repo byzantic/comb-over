@@ -10,6 +10,9 @@ import { evalRealStr } from './expr.js';
 import { buildLayout } from './layout-templates.js';
 import { toSVG } from './layout.js';
 import { componentLibrary, boardProject, zip } from './kicad.js';
+import { setSubstrate, setLayout, detectLayouts, toMicrostrip } from './netlist-edit.js';
+import { listPresets, makeSubstrate } from './substrates.js';
+import { CONNECTORS, LAUNCH_MODES } from './connectors.js';
 
 const $ = (id) => document.getElementById(id);
 const editor = $('editor'), gutter = $('gutter'), status = $('status');
@@ -66,32 +69,133 @@ function run() {
   setStatus(msg, 'ok');
   renderTune(d);
   renderInfo(d);
-  renderPlots(d, res);
   renderLayout(d);
+  renderPlots(d, res);
 }
 
-// ---------- layout preview (.layout) ----------
+// ---------- layout panel (.layout, issue #10) ----------
+// The netlist text is the source of truth: every control here rewrites the .substrate / .layout
+// lines (or converts sections to microstrip) and re-runs.
+const LAYOUT_DEFAULT_SUB = 'jlc-ro4350b-1.524';      // fits the default 0.062" edge-launch SMA
+const PHYS_KEY = 'comb-over:physical-view';
+state.physical = (() => { try { return localStorage.getItem(PHYS_KEY) === '1'; } catch { return false; } })();
+
+function applyText(text, what) {
+  // deferred: controls fire 'change' on blur, while the panel would be replaced underneath them
+  setTimeout(() => applyTextNow(text, what), 0);
+}
+function applyTextNow(text, what) {
+  const prev = editor.value;
+  if (text === prev) return;
+  editor.value = text; state.overrides = {}; state.paramSig = '';
+  updateGutter(); run();
+  if (what) offerRestore(prev, what);
+}
+const subOptions = (cur) => {
+  const presets = listPresets();
+  const extra = cur && (!presets.some(p => p.id === cur.id) || Object.keys(cur.overrides || {}).length) ? `<option value="" selected>${esc(cur.name)} (from the netlist)</option>` : '';
+  return extra + presets.map(p => `<option value="${p.id}"${!extra && cur?.id === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+};
+const selectHTML = (id, opts, cur, title = '') => `<select id="${id}" title="${esc(title)}">${opts.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+
+// Make the netlist physical (substrate + microstrip sections) and give it a .layout.
+function makeLayout(d, cand, subId) {
+  let text = editor.value;
+  if (subId || !d.substrate) text = setSubstrate(text, subId || LAYOUT_DEFAULT_SUB);
+  let d2 = parseNetlist(text, state.overrides);
+  const conv = toMicrostrip(text, d2, d2.substrate);
+  if (conv.skipped.length) { setStatus(`cannot lay out: ${conv.skipped.map(x => `${x.name}: ${x.why}`).join('; ')}`, 'err'); return; }
+  text = conv.text;
+  if (cand) text = setLayout(text, { type: cand.type, sections: cand.sections, opts: d.layout?.opts && cand.type === d.layout?.type ? rawLayoutOpts(d) : {} });
+  applyText(text, conv.changed.length ? `the netlist before conversion to microstrip (${conv.changed.map(c => `${c.name}: ${c.from} → ${c.to}`).join('; ')})` : 'the netlist before the layout change');
+}
+// .layout options as written (mm numbers back from the parser's mm values)
+function rawLayoutOpts(d) { const o = { ...(d.layout?.opts || {}) }; return o; }
+
+function layoutControls(d, L) {
+  const lo = d.layout, o = L?.opts || lo?.opts || {};
+  const cands = detectLayouts(d);
+  const cur = lo ? `${lo.type}:${lo.sections.join(',')}` : '';
+  const tOpts = [...(lo && !cands.some(c => `${c.type}:${c.sections.join(',')}` === cur) ? [[cur, `${lo.type} ${lo.sections.join(' ')}`]] : []), ...cands.map(c => [`${c.type}:${c.sections.join(',')}`, `${c.type} ${c.sections.join(' ')}`])];
+  const num = (k, label, title) => `<label title="${esc(title)}"><span>${label}</span><input id="lo-${k}" type="number" step="0.5" min="0" placeholder="${o[k] != null ? +o[k].toFixed(2) : 'auto'}" value="${lo?.opts?.[k] != null ? +lo.opts[k].toFixed(3) : ''}"></label>`;
+  return `<div class="layout-ctl">
+    <label><span>Substrate</span><select id="lo-sub" title="Changing the substrate keeps W and S; use Convert to re-synthesise them for the new substrate">${subOptions(d.substrate)}</select></label>
+    <label><span>Template</span>${selectHTML('lo-type', tOpts, cur, 'Layout template and the sections it uses')}</label>
+    <label><span>Connector</span>${selectHTML('lo-conn', [...Object.values(CONNECTORS).map(c => [c.id, c.mpn + ' SMA']), ['none', 'none']], o.connector ?? 'amphenol-132289', 'Edge-launch connector at every port')}</label>
+    <label><span>Launch</span>${selectHTML('lo-launch', LAUNCH_MODES.map(m => [m, m]), o.launch ?? 'matched', 'matched: signal pad = feed width; library: KiCad pad + taper')}</label>
+    ${num('pitch', 'Pitch mm', 'Port spacing on an edge (blank: from the connector)')}
+    ${num('feed', 'Feed mm', 'Straight feed length at each port (blank: connector pad + launch + 1 mm)')}
+    ${num('margin', 'Margin mm', 'Board margin (blank: from the connector)')}
+    <label class="check" title="Overlay the response of the layout as built (feeds, tapers, connector pads, vias, open ends) as dashed traces"><input id="lo-phys" type="checkbox"${state.physical ? ' checked' : ''}> Physical view</label>
+  </div>`;
+}
+
+function wireLayoutControls(d) {
+  const lo = d.layout;
+  const rewrite = () => {
+    const [type, secs] = $('lo-type').value.split(':');
+    const opts = { ...lo.opts };
+    for (const k of ['pitch', 'feed', 'margin']) { const v = $(`lo-${k}`).value; opts[k] = v === '' ? null : +v; }
+    opts.connector = $('lo-conn').value === 'amphenol-132289' ? null : $('lo-conn').value;   // default omitted
+    opts.launch = $('lo-launch').value === 'matched' ? null : $('lo-launch').value;
+    applyText(setLayout(editor.value, { type, sections: secs.split(','), opts }));
+  };
+  for (const id of ['lo-type', 'lo-conn', 'lo-launch', 'lo-pitch', 'lo-feed', 'lo-margin']) $(id)?.addEventListener('change', rewrite);
+  // new substrate: keep each section's impedances and re-synthesise its W/S for the new substrate
+  $('lo-sub').addEventListener('change', () => {
+    const v = $('lo-sub').value; if (!v) return;
+    const conv = toMicrostrip(setSubstrate(editor.value, v), d, makeSubstrate(v), { all: true });
+    if (conv.skipped.length) { setStatus(`substrate changed; not re-synthesised: ${conv.skipped.map(x => `${x.name}: ${x.why}`).join('; ')}`, 'err'); }
+    applyText(conv.text, `the netlist before the change to ${v} (${conv.changed.map(c => `${c.name}: ${c.to}`).join('; ')})`);
+  });
+  $('lo-phys').addEventListener('change', () => { state.physical = $('lo-phys').checked; try { localStorage.setItem(PHYS_KEY, state.physical ? '1' : '0'); } catch {} run(); });
+}
+
 function renderLayout(d) {
   const box = $('layout-card');
-  if (!d.layout) { box.innerHTML = ''; state.layout = null; return; }
-  let L;
-  try { L = buildLayout(d); } catch (e) {
-    box.innerHTML = `<div class="plot layout-card"><div class="ptitle"><span>Layout</span></div><ul class="drc bad"><li>${esc(e.message)}</li></ul></div>`;
+  state.asBuilt = null;
+  if (!d.layout) {
+    // offer a layout when the topology fits a template
+    const cands = detectLayouts(d);
+    state.layout = null;
+    if (!cands.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="plot layout-card"><div class="ptitle"><span>Layout · this netlist fits ${cands.map(c => `<b>${esc(c.type)}</b> (${esc(c.sections.join(' '))})`).join(', ')}</span></div>
+      <div class="layout-ctl">
+        <label><span>Template</span>${selectHTML('lo-new-type', cands.map((c, i) => [String(i), `${c.type} ${c.sections.join(' ')}`]), '0')}</label>
+        <label><span>Substrate</span><select id="lo-new-sub">${listPresets().map(p => `<option value="${p.id}"${(d.substrate?.id ?? LAYOUT_DEFAULT_SUB) === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+        <button id="lo-make" class="primary" title="Sets .substrate, converts impedance-defined sections to microstrip W/S and adds a .layout line">Make PCB layout</button>
+      </div>
+      <p class="lnotes">Sections given by impedance are converted to microstrip on the substrate (your netlist is kept for Restore).</p></div>`;
+    $('lo-make').onclick = () => makeLayout(d, cands[+$('lo-new-type').value], $('lo-new-sub').value);
+    return;
+  }
+  let L, err = null;
+  try { L = buildLayout(d); } catch (e) { err = e; }
+  if (err) {
+    const needsPhys = /physical dimensions/.test(err.message);
+    box.innerHTML = `<div class="plot layout-card"><div class="ptitle"><span>Layout · ${esc(d.layout.type)}</span>
+      ${needsPhys ? `<span><button id="lo-convert" class="primary" title="Convert the impedance-defined sections to microstrip W/S on the substrate">Convert to microstrip${d.substrate ? ` on ${esc(d.substrate.id)}` : ''}</button></span>` : ''}</div>
+      ${layoutControls(d, null)}<ul class="drc bad"><li>${esc(err.message)}</li></ul></div>`;
+    wireLayoutControls(d);
+    if (needsPhys) $('lo-convert').onclick = () => makeLayout(d, null, d.substrate ? null : LAYOUT_DEFAULT_SUB);
     state.layout = null; return;
   }
   state.layout = L;
+  if (state.physical) { try { state.asBuilt = solve(parseNetlist(L.netlist)); } catch (e) { L.warnings.push(`as-built netlist: ${e.message}`); } }
   const ok = !L.errors.length;
   box.innerHTML = `<div class="plot layout-card">
     <div class="ptitle"><span>Layout · ${esc(L.type)} · ${L.size[0].toFixed(1)} × ${L.size[1].toFixed(1)} mm · ${esc(L.substrate.name)}</span>
-      <span><button id="btn-asbuilt" title="Open the netlist of the layout, including its feed lines">As-built netlist</button> <button id="btn-svg">SVG</button> <button id="btn-kicadlib" title="Footprint + symbol + core netlist as a self-contained KiCad 9 library"${ok ? '' : ' disabled'}>KiCad library</button> <button id="btn-kicadpcb" title="Whole KiCad 9 project: board with feeds, ground pours, stitching vias and stack-up, plus the library"${ok ? '' : ' disabled'}>KiCad project</button></span></div>
+      <span><button id="btn-asbuilt" title="Open the netlist of the layout, including its feed lines">As-built netlist</button> <button id="btn-svg">SVG</button> <button id="btn-kicadlib" title="Footprint + symbol + core netlist as a self-contained KiCad 9 library"${ok ? '' : ' disabled'}>KiCad library</button> <button id="btn-kicadpcb" class="primary" title="Whole KiCad 9 project: board with feeds, connectors, ground pours, stitching vias and stack-up, plus the library"${ok ? '' : ' disabled'}>KiCad project</button></span></div>
+    ${layoutControls(d, L)}
     <div class="svgbox">${toSVG(L, { errors: L.errors })}</div>
     <ul class="drc ${ok ? 'ok' : 'bad'}">${ok ? '<li>✓ design rules met</li>' : L.errors.map(e => `<li>${esc(e.msg)}</li>`).join('')}</ul>
     ${L.warnings?.length ? `<ul class="drc warn">${L.warnings.map(w => `<li>⚠ ${esc(w)}</li>`).join('')}</ul>` : ''}
     ${L.notes.length ? `<ul class="lnotes">${L.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div>`;
+  wireLayoutControls(d);
   $('btn-svg').onclick = () => download(`${baseName()}-layout.svg`, toSVG(L), 'image/svg+xml');
   $('btn-kicadpcb').onclick = () => { const b = boardProject(L, { source: editor.value }); download(`${b.lib}-kicad.zip`, zip(b.files, b.lib), 'application/zip'); };
   $('btn-kicadlib').onclick = () => { const lib = componentLibrary(L, { source: editor.value }); download(`${lib.lib}.zip`, zip(lib.files, lib.lib), 'application/zip'); };
-  $('btn-asbuilt').onclick = () => { const prev = editor.value; editor.value = L.netlist; state.overrides = {}; state.paramSig = ''; run(); offerRestore(prev, 'the as-built netlist'); };
+  $('btn-asbuilt').onclick = () => applyText(L.netlist, 'the as-built netlist');
 }
 
 // ---------- tuning sliders ----------
@@ -213,10 +317,17 @@ function renderPlots(d, res) {
     });
   }
   // evaluate traces
-  state.plotData = specs.map(p => p.traces.map(t => {
-    try { const v = evalTrace(t.ast, ctx); return { label: t.src, x: res.freq, y: v.re, re: v.re, im: v.im, unit: v.unit }; }
-    catch (e) { return { label: t.src + ' — ' + e.message, x: res.freq, y: new Float64Array(res.freq.length).fill(NaN), re: [], im: [], err: true }; }
+  const evalAll = (c, extra = {}) => specs.map(p => p.traces.map((t, j) => {
+    try { const v = evalTrace(t.ast, c); return { label: t.src, x: c.freq, y: v.re, re: v.re, im: v.im, unit: v.unit, ...extra, ci: j }; }
+    catch (e) { return { label: t.src + ' — ' + e.message, x: c.freq, y: new Float64Array(c.freq.length).fill(NaN), re: [], im: [], err: true, ...extra, ci: j }; }
   }));
+  state.plotData = evalAll(ctx);
+  // physical view: the same traces from the as-built netlist, dashed in the same colours
+  const ab = state.physical && state.asBuilt;
+  if (ab) {
+    const ghost = evalAll({ n: ab.freq.length, freq: ab.freq, S: (i, j) => ab.S(i, j), scope: d.scope }, { dash: [6, 4], asBuilt: true });
+    state.plotData = state.plotData.map((ts, i) => [...ts, ...ghost[i].map(t => ({ ...t, label: t.label + ' as built' }))]);
+  }
   state.specs = specs;
   drawAll();
 }
@@ -235,7 +346,7 @@ function drawAll() {
       const v = t.y[k];
       return t.unit === 's' ? fmtSI(v, 4) + 's' : (+v.toPrecision(5)) + (t.unit || '');
     };
-    el.querySelector('.legend').innerHTML = data.map((t, j) => `<span><span class="sw" style="background:${pal[j % pal.length]}"></span>${t.label}<span class="v">${fmtV(t)}</span></span>`).join('');
+    el.querySelector('.legend').innerHTML = data.map((t, j) => `<span><span class="sw${t.dash ? ' dash' : ''}" style="${t.dash ? 'border-top-color' : 'background'}:${pal[(t.ci ?? j) % pal.length]}"></span>${t.label}<span class="v">${fmtV(t)}</span></span>`).join('');
     el.querySelector('.readout').textContent = k != null ? fmtSI(state.res.freq[k], 6) + 'Hz' : '';
   });
 }

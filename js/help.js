@@ -47,6 +47,11 @@ end</pre>
 <p>Traces are complex expressions of <code>S21</code>, <code>S_12_3</code>, <code>S(i,j)</code>, <code>f</code>, <code>j</code>, with
 <code>db mag ang angu(unwrapped) gd(group delay) re im vswr conj sqrt</code>. Example: <code>ang(S31/S21)</code>, <code>db(S31/S41)</code> (directivity).</p>
 
+<h4>Layout and KiCad</h4>
+<pre>.layout coupler K | schiffman CS TREF | marchand S1 S2  [pitch=..] [feed=..] [margin=..] [connector=..] [launch=matched|library]</pre>
+<p>Sections must be physical (<code>geom=msl W= S=</code>, <code>T… W=</code>). The layout panel above the plots offers a layout when the topology fits,
+converts impedance-defined sections to microstrip, edits these lines for you and exports KiCad 9 (manual §8).</p>
+
 <h4>Optimisation</h4>
 <pre>.goal TRACE &lt;|&gt;|= VALUE [F1 F2] [w=WEIGHT]
 .opt maxiter=400</pre>
