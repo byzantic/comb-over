@@ -151,7 +151,7 @@
 <p>The launch placeholders <code>sma_l</code> and <code>sma_c</code> are already tunable, for fitting to a measured board.</p>
 <h2 id="try"><a class="anchor" href="#try" aria-hidden="true">#</a>Try</h2>
 <ul>
-<li>Press <strong>KiCad project</strong>, open the <code>.kicad_pro</code> in KiCad 9 and press <strong>B</strong> to fill the zones. The DRC should be clean apart from the edge-launch exception, which comes with the project in its <code>.kicad_dru</code> file.</li>
+<li>Press <strong>KiCad project</strong>, open the <code>.kicad_pro</code> in KiCad 9 and press <strong>B</strong> to fill the zones. The DRC reports no errors (CI checks this board). The connector pads may meet the board edge because of a rule in the project&#39;s <code>.kicad_dru</code> file. On 1.524 mm there are two &quot;isolated copper&quot; warnings: the 3h keepout around the part leaves only small top-pour islands on this small board, each touching one connector ground pad, and there is no room for stitching vias (manual §8.3).</li>
 <li>Change <strong>Launch</strong> to <code>library</code> on 0.508 mm and watch S11 and S31 in the physical view: KiCad&#39;s 1.5 mm pad is a 41 Ω section at every port (manual §8.4).</li>
 <li>Set <strong>Pitch</strong> to 20 mm. The diagonal escapes get longer, and the physical view shows what that costs.</li>
 </ul>
