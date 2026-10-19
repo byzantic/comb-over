@@ -1,0 +1,10 @@
+{
+  "_comment": "DRC violation types (KiCad 'type' keys) each generated design may have; anything else, warnings included, fails CI. must_fail: designs that are broken on purpose and must be caught.",
+  "allow": {
+    "marchand-ro4350b": ["isolated_copper"],
+    "example8-1524": ["isolated_copper"]
+  },
+  "must_fail": {
+    "broken-gap": ["clearance"]
+  }
+}

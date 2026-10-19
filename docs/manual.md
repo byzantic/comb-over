@@ -679,9 +679,17 @@ node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mas
 
 The F.Cu pour can be switched off from the command line (`--no-top-pour`). On thick substrates the 3h clearance leaves little room for it anyway. The 1.524 mm Marchand and Schiffman demos get only a few vias, while the 0.508 mm coupler gets a full fence.
 
-**Validation.** CI generates the three demo projects and checks them with KiCad 9's own `kicad-cli` and `pcbnew`: parse, zone fill, DRC and Gerber export. There are no DRC errors.
+**Validation.** Every pull request generates KiCad projects and checks them with KiCad's own tools in the official `kicad/kicad` containers (`tools/kicad-check.sh`). The projects are the three demos, worked example 8 (converted to microstrip as the layout panel does it) and one deliberately broken board. The checks are:
 
-The coupler and Schiffman boards have no DRC violations at all.
+- the footprint and symbol libraries parse;
+- every footprint re-saves identically with KiCad's writer;
+- the board loads and its zones fill;
+- DRC;
+- Gerber and drill export.
+
+DRC is judged against `tools/kicad-expected.json`: any violation type not listed for a design fails the build, warnings included. Allowed today: "isolated copper" on the 1.524 mm Marchand and the example 8 board, where the 3h keepout leaves only small top-pour islands. The broken board, the coupler with a 0.06 mm gap below JLC's 0.1 mm, must be caught as a `clearance` error.
+
+**KiCad 9.0.8** is the target and gates merges. **KiCad 10.0.7** runs the same checks but only reports, so format changes show up early. Under KiCad 10 the footprint re-save comparison is informational, because KiCad 10 converts files to its own format on save.
 
 The Marchand board has two "isolated copper" warnings. On 1.524 mm material the 3h keepout around the part, a rectangle, leaves only small top-pour islands, each touching a single connector ground pad. A keepout that follows the conductors instead of their bounding box would fix this.
 
