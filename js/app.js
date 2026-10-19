@@ -107,7 +107,7 @@ function makeLayout(d, cand, subId) {
   if (conv.skipped.length) { setStatus(`cannot lay out: ${conv.skipped.map(x => `${x.name}: ${x.why}`).join('; ')}`, 'err'); return; }
   text = conv.text;
   if (cand) text = setLayout(text, { type: cand.type, sections: cand.sections, opts: d.layout?.opts && cand.type === d.layout?.type ? rawLayoutOpts(d) : {} });
-  applyText(text, conv.changed.length ? `the netlist before conversion to microstrip (${conv.changed.map(c => `${c.name}: ${c.from} → ${c.to}`).join('; ')})` : 'the netlist before the layout change');
+  applyText(text, conv.changed.length ? `a microstrip layout (${conv.changed.map(c => `${c.name}: ${c.from} → ${c.to}`).join('; ')})` : 'a layout');
 }
 // .layout options as written (mm numbers back from the parser's mm values)
 function rawLayoutOpts(d) { const o = { ...(d.layout?.opts || {}) }; return o; }
@@ -146,7 +146,7 @@ function wireLayoutControls(d) {
     const v = $('lo-sub').value; if (!v) return;
     const conv = toMicrostrip(setSubstrate(editor.value, v), d, makeSubstrate(v), { all: true });
     if (conv.skipped.length) { setStatus(`substrate changed; not re-synthesised: ${conv.skipped.map(x => `${x.name}: ${x.why}`).join('; ')}`, 'err'); }
-    applyText(conv.text, `the netlist before the change to ${v} (${conv.changed.map(c => `${c.name}: ${c.to}`).join('; ')})`);
+    applyText(conv.text, `${v}, with W/S re-synthesised for the same impedances (${conv.changed.map(c => `${c.name}: ${c.to}`).join('; ')})`);
   });
   $('lo-phys').addEventListener('change', () => { state.physical = $('lo-phys').checked; try { localStorage.setItem(PHYS_KEY, state.physical ? '1' : '0'); } catch {} run(); });
 }
