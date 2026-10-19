@@ -540,7 +540,25 @@ When a netlist arrives from a link of either kind and you already had a differen
 
 ### 8.1 Layout
 
-A `.layout` statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it above the plots.
+A `.layout` statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it in the **layout panel** above the plots. [Worked example 8](examples/08-coupler-to-board.md) goes from an impedance-defined coupler to a KiCad board using only the panel.
+
+**The layout panel.** The netlist text stays the source of truth: every control rewrites a line of it and re-runs.
+
+- **No `.layout` yet.** If the topology fits a template, the panel offers one, for example "this netlist fits **coupler** (K)". Choose a substrate and press **Make PCB layout**. That sets `.substrate`, converts the sections given by impedance to microstrip and adds the `.layout` line.
+  - **Coupled pairs:** for symmetric pairs in any input form (`Zeo`, `Y0`, `Cn`, `Cg/Cm`, `C/L`), Z0e and Z0o are taken from the Maxwell matrices and synthesised to W/S.
+  - **Single lines:** these get W for their Z0.
+  - **Not converted:** sections with three or more lines, which need the field solver (#11/#12).
+  - Your previous netlist is kept for **Restore it**.
+- **Substrate.** Rewrites `.substrate` and re-synthesises every section's W/S, so the impedances stay those the sections had on the previous substrate. Any overrides on the old `.substrate` line are dropped.
+- **Template, Connector, Launch, Pitch, Feed, Margin.** These rewrite the `.layout` line. A blank number uses the default, shown greyed; defaults are not written.
+- **Physical view.** Adds a dashed twin of every plotted trace, computed from the as-built netlist: feeds, tapers, connector pads, launch placeholders, vias and open ends. It is remembered in this browser.
+- **Buttons.**
+  - **As-built netlist:** opens the as-built netlist for editing or optimisation.
+  - **SVG:** the preview.
+  - **KiCad library:** the part alone (§8.2).
+  - **KiCad project:** the whole board (§8.3).
+
+Hovering a copper shape in the preview shows its net and width.
 
 ![Layout preview](img/ui-layout.png)
 

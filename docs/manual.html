@@ -24,7 +24,7 @@
 <ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
 <a class="" href="substrates.html">Substrate presets</a>
 <a class="" href="examples/index.html">Worked examples</a>
-<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li></ol></nav></aside>
+<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li></ol></nav></aside>
   <main class="doc">
     <h1>comb-over manual</h1>
 <p>comb-over analyses linear networks built from <strong>uniform coupled multiconductor TEM / quasi-TEM line sections</strong>, single lines and lumped R/L/C. It also synthesises tapped comb-line and interdigital band-pass filters. Everything runs in the browser, and the same engine runs under Node for scripting and tests.</p>
@@ -928,7 +928,28 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <p>When a netlist arrives from a link of either kind and you already had a different one in the editor, your previous netlist is kept and a <strong>Restore it</strong> button appears above the status line. The query string is removed after loading, so reloading the page keeps your edits.</p>
 <p><strong>Save .cir / Open….</strong> Plain text netlists.</p>
 <h3 id="81-layout"><a class="anchor" href="#81-layout" aria-hidden="true">#</a>8.1 Layout</h3>
-<p>A <code>.layout</code> statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it above the plots.</p>
+<p>A <code>.layout</code> statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it in the <strong>layout panel</strong> above the plots. <a href="examples/08-coupler-to-board.html">Worked example 8</a> goes from an impedance-defined coupler to a KiCad board using only the panel.</p>
+<p><strong>The layout panel.</strong> The netlist text stays the source of truth: every control rewrites a line of it and re-runs.</p>
+<ul>
+<li><strong>No <code>.layout</code> yet.</strong> If the topology fits a template, the panel offers one, for example &quot;this netlist fits <strong>coupler</strong> (K)&quot;. Choose a substrate and press <strong>Make PCB layout</strong>. That sets <code>.substrate</code>, converts the sections given by impedance to microstrip and adds the <code>.layout</code> line.<ul>
+<li><strong>Coupled pairs:</strong> for symmetric pairs in any input form (<code>Zeo</code>, <code>Y0</code>, <code>Cn</code>, <code>Cg/Cm</code>, <code>C/L</code>), Z0e and Z0o are taken from the Maxwell matrices and synthesised to W/S.</li>
+<li><strong>Single lines:</strong> these get W for their Z0.</li>
+<li><strong>Not converted:</strong> sections with three or more lines, which need the field solver (#11/#12).</li>
+<li>Your previous netlist is kept for <strong>Restore it</strong>.</li>
+</ul>
+</li>
+<li><strong>Substrate.</strong> Rewrites <code>.substrate</code> and re-synthesises every section&#39;s W/S, so the impedances stay those the sections had on the previous substrate. Any overrides on the old <code>.substrate</code> line are dropped.</li>
+<li><strong>Template, Connector, Launch, Pitch, Feed, Margin.</strong> These rewrite the <code>.layout</code> line. A blank number uses the default, shown greyed; defaults are not written.</li>
+<li><strong>Physical view.</strong> Adds a dashed twin of every plotted trace, computed from the as-built netlist: feeds, tapers, connector pads, launch placeholders, vias and open ends. It is remembered in this browser.</li>
+<li><strong>Buttons.</strong><ul>
+<li><strong>As-built netlist:</strong> opens the as-built netlist for editing or optimisation.</li>
+<li><strong>SVG:</strong> the preview.</li>
+<li><strong>KiCad library:</strong> the part alone (§8.2).</li>
+<li><strong>KiCad project:</strong> the whole board (§8.3).</li>
+</ul>
+</li>
+</ul>
+<p>Hovering a copper shape in the preview shows its net and width.</p>
 <p><figure><img src="img/ui-layout.png" alt="Layout preview" loading="lazy"><figcaption>Layout preview</figcaption></figure></p>
 <pre><code>.layout coupler K                         # 4-port coupled-line coupler
 .layout schiffman CS TREF                 # C-section (far ends joined) + reference line

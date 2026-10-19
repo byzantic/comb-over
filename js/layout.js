@@ -129,8 +129,13 @@ export function drc(layout, { edgeClearance = 0.3 } = {}) {
   const cu = layout.items.filter(i => i.type === 'poly' && i.layer === 'F.Cu');
   if (minSpace != null) {
     for (let i = 0; i < cu.length; i++) for (let j = i + 1; j < cu.length; j++) {
-      if (cu[i].net === cu[j].net) continue;
       const d = polyDistance(cu[i].pts, cu[j].pts);
+      // the fab's minimum space applies to any gap in the copper, also within one net (e.g. the two
+      // lines of a Schiffman C-section); copper of one net that touches is one piece
+      if (cu[i].net === cu[j].net) {
+        if (d > 1e-9 && d < minSpace - 1e-9) errors.push({ rule: 'space', value: d, limit: minSpace, msg: `gap ${d.toFixed(4)} mm between ${cu[i].label || cu[i].net} and ${cu[j].label || cu[j].net} is below the minimum space ${minSpace} mm` });
+        continue;
+      }
       if (d < minSpace - 1e-9) errors.push({ rule: d === 0 ? 'short' : 'space', value: d, limit: minSpace, msg: d === 0 ? `${cu[i].label || cu[i].net} touches ${cu[j].label || cu[j].net} (different nets)` : `gap ${d.toFixed(4)} mm between ${cu[i].label || cu[i].net} and ${cu[j].label || cu[j].net} is below the minimum space ${minSpace} mm` });
     }
   }
