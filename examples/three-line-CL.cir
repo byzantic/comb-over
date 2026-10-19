@@ -1,7 +1,7 @@
 .title Symmetric three-line coupler from per-unit-length C and L matrices (inhomogeneous)
 # Matrices from the 2-D field solver for three 0.8 mm microstrip lines with 0.15 mm gaps on
-# 0.508 mm RO4350B (er 3.66, zero-thickness strips):
-#   node solver/cli.mjs --W 0.8,0.8,0.8 --S 0.15 --h 0.508 --er 3.66
+# 0.508 mm RO4350B (er 3.66, 1 oz = 34.79 µm copper):
+#   node solver/cli.mjs --W 0.8,0.8,0.8 --S 0.15 --h 0.508 --er 3.66 --t 0.03479
 # Input on the centre line; the outer lines share the coupled power.
 .freq 0.5G 5.5G 1001
 .ref 3G
@@ -12,8 +12,8 @@ port l_iso    # 4  left line,  end B (isolated)
 port r_cpl    # 5  right line, end A (coupled)
 port r_iso    # 6  right line, end B (isolated)
 cline TL3
-  C [99.963515p -22.514675p -0.98824339p; -22.514675p 108.15812p -22.514675p; -0.98824339p -22.514675p 99.963515p]   # F/m (Maxwell matrix)
-  L [324.41278n 98.501397n 39.164757n; 98.501397n 313.76951n 98.501397n; 39.164757n 98.501397n 324.41278n]   # H/m
+  C [103.32058p -24.996611p -1.0254662p; -24.996611p 113.18589p -24.996611p; -1.0254662p -24.996611p 103.32058p]   # F/m (Maxwell matrix)
+  L [308.1564n 103.46107n 43.654707n; 103.46107n 294.99833n 103.46107n; 43.654707n 103.46107n 308.1564n]   # H/m
   len 90deg                                             # at .ref, mean modal velocity
   A l_cpl c_in  r_cpl
   B l_iso c_out r_iso

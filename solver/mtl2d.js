@@ -24,6 +24,9 @@
 // C = ε0 Bᵀ P⁻¹ B with B selecting the k = 0 (net charge) terms; C0 is the same with every ε set to
 // 1, and L = μ0 ε0 C0⁻¹. C per unit length is scale-free in 2-D, so lengths are normalised internally.
 
+import { besselJ, gaussLegendre, stackY, cholSolve } from './numeric.js';
+import { capMatrixThick } from './thick.js';
+
 export const EPS0 = 8.8541878128e-12;
 export const MU0 = 1.25663706212e-6;
 export const C_LIGHT = 299792458;
@@ -31,16 +34,17 @@ export const C_LIGHT = 299792458;
 // ---------------------------------------------------------------- geometry helpers
 
 /** Strips from widths W[0..N−1] and gaps S[0..N−2] (or one gap for all), left edge at x = 0 → [{x, w}] (x = centre). */
-export function stripsFromWS(W, S) {
+export function stripsFromWS(W, S, t = 0) {
   const Ws = Array.isArray(W) ? W : [W];
   const Ss = Array.isArray(S) ? S : Array(Math.max(0, Ws.length - 1)).fill(S);
   if (Ss.length !== Ws.length - 1) throw new Error(`need ${Ws.length - 1} gaps for ${Ws.length} strips, got ${Ss.length}`);
   const out = []; let x = 0;
   Ws.forEach((w, i) => { out.push({ x: x + w / 2, w }); x += w + (Ss[i] ?? 0); });
-  const mid = x / 2; return out.map(s => ({ x: s.x - mid, w: s.w }));
+  const mid = x / 2; return out.map(s => (t > 0 ? { x: s.x - mid, w: s.w, t } : { x: s.x - mid, w: s.w }));
 }
 
-/** Microstrip: strips on a substrate of height h over ground; air (or `top` εr) above. */
+/** Microstrip: strips on a substrate of height h over ground; air (or `top` εr) above.
+ *  Thick strips ({x, w, t}) stand on the strip plane and grow into the layer above it. */
 export const microstrip = ({ h, er, top = 1 }) => ({ below: [{ t: h, er }], above: [], top, cover: false });
 /** Centred or offset stripline: ground planes b apart, strips at height hb above the lower one (default b/2). */
 export const stripline = ({ b, er, hb = b / 2 }) => ({ below: [{ t: hb, er }], above: [{ t: b - hb, er }], cover: true });
@@ -50,6 +54,7 @@ export const coveredMicrostrip = ({ h, er, hc }) => ({ below: [{ t: h, er }], ab
 function checkInput(strips, stack) {
   if (!Array.isArray(strips) || !strips.length) throw new Error('no strips');
   for (const s of strips) if (!(s.w > 0) || !Number.isFinite(s.x)) throw new Error('each strip needs a centre x and a width w > 0');
+  for (const s of strips) if (s.t != null && !(s.t >= 0)) throw new Error('strip thickness t must be ≥ 0');
   const sorted = [...strips].sort((p, q) => p.x - q.x);
   for (let i = 1; i < sorted.length; i++) {
     const gap = (sorted[i].x - sorted[i].w / 2) - (sorted[i - 1].x + sorted[i - 1].w / 2);
@@ -62,52 +67,7 @@ function checkInput(strips, stack) {
 
 // ---------------------------------------------------------------- special functions
 
-// J_0..J_{n−1}(x), x ≥ 0, into out (Miller's downward recurrence, normalised by J0 + 2ΣJ_2k = 1).
-function besselJ(n, x, out) {
-  if (x < 1e-300) { out.fill(0, 0, n); out[0] = 1; return; }
-  const top = Math.max(n, x);
-  const m = 2 * Math.floor((top + 20 + Math.sqrt(40 * top)) / 2);
-  let bjp = 0, bj = 1, sum = 0, even = false;
-  const tox = 2 / x;
-  for (let j = m; j > 0; j--) {
-    const bjm = j * tox * bj - bjp; bjp = bj; bj = bjm;
-    if (Math.abs(bj) > 1e250) { bj *= 1e-250; bjp *= 1e-250; sum *= 1e-250; for (let i = j - 1; i < n; i++) out[i] *= 1e-250; }
-    if (even) sum += bj;
-    even = !even;
-    if (j - 1 < n) out[j - 1] = bj;
-  }
-  const norm = 2 * sum - bj;
-  for (let i = 0; i < n; i++) out[i] /= norm;
-}
-
-// Gauss–Legendre nodes/weights on [−1, 1] (Newton on P_n).
-function gaussLegendre(n) {
-  const x = new Float64Array(n), w = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    let z = Math.cos(Math.PI * (i + 0.75) / (n + 0.5)), pp = 0;
-    for (let it = 0; it < 100; it++) {
-      let p1 = 1, p2 = 0;
-      for (let j = 1; j <= n; j++) { const p3 = p2; p2 = p1; p1 = ((2 * j - 1) * z * p2 - (j - 1) * p3) / j; }
-      pp = n * (z * p1 - p2) / (z * z - 1);
-      const dz = p1 / pp; z -= dz; if (Math.abs(dz) < 1e-16) break;
-    }
-    x[i] = z; w[i] = 2 / ((1 - z * z) * pp * pp);
-  }
-  return { x, w };
-}
-
 // ---------------------------------------------------------------- spectral Green's function of the stack
-
-// admittance looking into a list of layers (first one adjacent), ending in ground (cover = true) or a
-// half-space of permittivity `end`
-function stackY(beta, layers, cover, end) {
-  let Y = cover ? Infinity : end * beta;
-  for (let i = layers.length - 1; i >= 0; i--) {
-    const { t, er } = layers[i], y0 = er * beta, th = Math.tanh(beta * t);
-    Y = Y === Infinity ? y0 / th : y0 * (Y + y0 * th) / (y0 + Y * th);
-  }
-  return Y;
-}
 
 function greensSplit(stack) {
   const above = stack.above ?? [], top = stack.top ?? 1;
@@ -160,25 +120,6 @@ function logBlock(cm, am, cn, an, Y, K, self, out, fine = 1) {
 }
 
 // ---------------------------------------------------------------- dense SPD solve
-
-function cholSolve(A, n, B, m) {
-  // A n×n SPD (row-major, overwritten), B n×m (overwritten with the solution)
-  for (let j = 0; j < n; j++) {
-    let s = A[j * n + j];
-    for (let k = 0; k < j; k++) s -= A[j * n + k] * A[j * n + k];
-    if (!(s > 0)) throw new Error('moment matrix is not positive definite (geometry too extreme, or too many basis functions)');
-    const d = Math.sqrt(s); A[j * n + j] = d;
-    for (let i = j + 1; i < n; i++) {
-      let t = A[i * n + j];
-      for (let k = 0; k < j; k++) t -= A[i * n + k] * A[j * n + k];
-      A[i * n + j] = t / d;
-    }
-  }
-  for (let c = 0; c < m; c++) {
-    for (let i = 0; i < n; i++) { let t = B[i * m + c]; for (let k = 0; k < i; k++) t -= A[i * n + k] * B[k * m + c]; B[i * m + c] = t / A[i * n + i]; }
-    for (let i = n - 1; i >= 0; i--) { let t = B[i * m + c]; for (let k = i + 1; k < n; k++) t -= A[k * n + i] * B[k * m + c]; B[i * m + c] = t / A[i * n + i]; }
-  }
-}
 
 // ---------------------------------------------------------------- the solver
 
@@ -301,13 +242,17 @@ function eigSym(A) {
 export function solve(strips, stack, opts = {}) {
   checkInput(strips, stack);
   const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
-  const K = opts.order ?? defaultOrder(strips, stack);
+  const thick = strips.some(x => x.t > 0);
+  const K = opts.order ?? (thick ? Math.max(16, defaultOrder(strips, stack) + 4) : defaultOrder(strips, stack));
+  const Kv = opts.orderWall ?? 6;
   const unit = Math.min(stack.below[0].t, ...(stack.above ?? []).map(l => l.t));
-  const r = capMatrix(strips, stack, K, unit, opts.fine);
+  const logCache = new Map();
+  const cap = (st) => (thick ? capMatrixThick(strips.map(x => ({ ...x, t: x.t ?? 0 })), st, K, Kv, opts.fine, logCache) : capMatrix(strips, st, K, unit, opts.fine));
+  const r = cap(stack);
   const homogeneous = [...stack.below, ...(stack.above ?? [])].every(l => l.er === stack.below[0].er) && (stack.cover || (stack.top ?? 1) === stack.below[0].er);
   let C0n;
   if (homogeneous) C0n = r.C.map(row => row.map(v => v / stack.below[0].er));
-  else C0n = capMatrix(strips, airStack(stack), K, unit, opts.fine).C;
+  else C0n = cap(airStack(stack)).C;
   const C = r.C.map(row => row.map(v => v * EPS0)), C0 = C0n.map(row => row.map(v => v * EPS0));
   const L = invSym(C0n).map(row => row.map(v => v * MU0));
   // modal εeff: eigenvalues of C0⁻¹C, via the symmetric C0^{-1/2} C C0^{-1/2}
@@ -316,7 +261,7 @@ export function solve(strips, stack, opts = {}) {
   const M = S.map(row => S[0].map((_, j) => row.reduce((s, x, k) => s + x * r.C[k].reduce((t, y, l) => t + y * S[l][j], 0), 0)));
   const epsEff = eigSym(M).values.sort((p, q) => p - q);
   const ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0;
-  return { C, C0, L, epsEff, order: K, nodes: r.nodes, ms };
+  return { C, C0, L, epsEff, order: K, orderWall: thick ? Kv : undefined, nodes: r.nodes, ms };
 }
 
 /** Even/odd impedances and εeff of a symmetric pair (from solve() of two equal strips). */

@@ -58,14 +58,16 @@ const net = (cl, n, sub = 'jlc-ro4350b-0.508 t=0') => `.freq 1G 3G 3\n.substrate
   check('the centre-against-outer mode (current crowding in both gaps) is lossier than the in-phase mode', (() => { const s = parseNetlist(net('W=[1mm 1mm 1mm] S=0.15mm', 3)).sections[0]; const m = s.modalInfo(); const even = m.findIndex(x => x.vector.every(v => v > 0)), odd = m.findIndex(x => x.vector[1] > 0 && x.vector[0] < 0 && x.vector[2] < 0); return odd >= 0 && s.Qm[odd] < s.Qm[even]; })());
 }
 
-// ---- thickness warning ----
+// ---- copper thickness from the substrate ----
 {
-  const w1 = parseNetlist(net('W=[0.8mm 0.8mm 0.8mm] S=0.12mm', 3, 'jlc-ro4350b-0.508')).warnings.join('\n');
-  check('t > 0 with a tight gap: the zero-thickness estimate is reported', /zero-thickness strips; .* about \d+\.\d % \(worst mode of the pair at the tightest gap, 0\.120 mm\)/.test(w1), w1);
-  check('t = 0: no thickness warning', !/zero-thickness/.test(parseNetlist(net('W=[0.8mm 0.8mm 0.8mm] S=0.12mm', 3)).warnings.join()));
-  const pct = (t) => +/about (\d+\.\d) %/.exec(t)[1];
-  const w2 = parseNetlist(net('W=[0.8mm 0.8mm 0.8mm] S=1.5mm', 3, 'jlc-ro4350b-0.508')).warnings.join();
-  check('the estimate is smaller for wide gaps (what remains is the width effect on each line)', pct(w2) < pct(w1), `${pct(w2)} vs ${pct(w1)}`);
+  const d = parseNetlist(net('W=[0.8mm 0.8mm 0.8mm] S=0.12mm', 3, 'jlc-ro4350b-0.508')), sec = d.sections[0];
+  const t = d.substrate.copper.t;
+  const ref = solve(stripsFromWS([0.8e-3, 0.8e-3, 0.8e-3], 0.12e-3, t), microstrip({ h: 0.508e-3, er: 3.66 }));
+  check('the substrate\'s copper thickness goes to the solver (C and L match a thick-strip solve)', t > 30e-6 && sec.C.every((r, i) => r.every((v, j) => rel(v, ref.C[i][j]) < 1e-12)) && sec.L.every((r, i) => r.every((v, j) => rel(v, ref.L[i][j]) < 1e-12)));
+  const thin = parseNetlist(net('W=[0.8mm 0.8mm 0.8mm] S=0.12mm', 3)).sections[0];
+  const Zo = (s) => s.modalInfo().reduce((m, x) => Math.min(m, x.Z), Infinity);
+  check('thickness lowers the lowest modal impedance (tight gaps: several %)', Zo(sec) < 0.96 * Zo(thin), `${Zo(sec)} vs ${Zo(thin)}`);
+  check('no zero-thickness warning any more', !d.warnings.some(w => /zero-thickness/.test(w)));
 }
 
 // ---- errors ----
@@ -90,9 +92,9 @@ const net = (cl, n, sub = 'jlc-ro4350b-0.508 t=0') => `.freq 1G 3G 3\n.substrate
 // ---- Example 7 is regenerated from a real geometry ----
 {
   const d = parseNetlist(ex('three-line-CL.cir')), s = d.sections[0];
-  const ref = solve(stripsFromWS([0.8e-3, 0.8e-3, 0.8e-3], 0.15e-3), microstrip({ h: 0.508e-3, er: 3.66 }));
-  check('Example 7\'s C and L are the solver\'s for 3 × 0.8 mm, 0.15 mm gaps on 0.508 mm RO4350B (8 digits)', s.C.every((r, i) => r.every((v, j) => rel(v, ref.C[i][j]) < 1e-7)) && s.L.every((r, i) => r.every((v, j) => rel(v, ref.L[i][j]) < 1e-7)));
-  const g = parseNetlist(ex('three-line-CL.cir').replace(/^\.ref 3G$/m, '.ref 3G\n.substrate jlc-ro4350b-0.508 t=0').replace(/^  C \[.*$/m, '  geom msl\n  W [0.8mm 0.8mm 0.8mm]\n  S 0.15mm').replace(/^  L \[.*\n/m, '')).sections[0];
+  const ref = solve(stripsFromWS([0.8e-3, 0.8e-3, 0.8e-3], 0.15e-3, 34.79e-6), microstrip({ h: 0.508e-3, er: 3.66 }));
+  check('Example 7\'s C and L are the solver\'s for 3 × 0.8 mm, 0.15 mm gaps, 1 oz copper on 0.508 mm RO4350B (8 digits)', s.C.every((r, i) => r.every((v, j) => rel(v, ref.C[i][j]) < 1e-7)) && s.L.every((r, i) => r.every((v, j) => rel(v, ref.L[i][j]) < 1e-7)));
+  const g = parseNetlist(ex('three-line-CL.cir').replace(/^\.ref 3G$/m, '.ref 3G\n.substrate jlc-ro4350b-0.508').replace(/^  C \[.*$/m, '  geom msl\n  W [0.8mm 0.8mm 0.8mm]\n  S 0.15mm').replace(/^  L \[.*\n/m, '')).sections[0];
   check('… and the geometry form gives the same modes', g.epsEff.every((e, i) => rel(e, s.epsEff[i]) < 1e-7));
 }
 

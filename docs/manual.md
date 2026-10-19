@@ -306,19 +306,30 @@ C and L come from the 2-D field solver (`solver/`, method and validation in `sol
 | | field solver | closed-form pair |
 |---|---|---|
 | lines | any N, unequal widths and gaps | 2, symmetric |
-| accuracy | about 1e-6 for the zero-thickness quasi-static problem | about 1 % (published) |
-| strip thickness | **not modelled** (t = 0) | Jansen's effective widths |
+| accuracy | about 1e-6 for zero-thickness strips, about 5e-5 with thickness (quasi-static) | about 1 % (published); the thickness correction is worse for tight gaps (below) |
+| strip thickness | rectangular strips with the substrate's copper t | Jansen's effective widths |
 | dispersion | none (quasi-static) | even/odd εeff |
 | loss | Wheeler's rule as a matrix (receded geometry solved again); dielectric filling factor per mode | Wheeler per mode; filling factor |
-| cost | one to three solves per new geometry, cached (a few ms to tens of ms each) | microseconds |
+| cost per new geometry | 3 solves (with dielectric, in air, receded): about 50 ms for a thick pair, 0.1 s for 5 lines, 0.6 s for 10 | microseconds |
 
-The two agree for a symmetric pair with t = 0 to within Kirschning–Jansen's accuracy: for W 1.1 mm and S 0.2 mm on 0.508 mm RO4350B, Ze differs by 0.3 %, εe by 0.2 %, Zo by 0.1 % and εo by less than 0.01 % (the closed form includes dispersion at 2 GHz).
+With zero-thickness copper (`.substrate … t=0`), the two agree for a symmetric pair to within Kirschning–Jansen's accuracy: for W 1.1 mm and S 0.2 mm on 0.508 mm RO4350B, Ze differs by 0.3 %, εe by 0.2 %, Zo by 0.1 % and εo by less than 0.01 % (the closed form includes dispersion at 2 GHz).
 
-**Strip thickness.** The solver's strips have zero thickness. On thin substrates real copper lowers the impedances noticeably. 35 µm copper lowers Ze by 2–4 % and Zo by 4–6 % for gaps of 0.1–0.2 mm on 0.25–0.5 mm boards (closed-form estimate); even well-separated lines drop by 1–3 % because thickness makes each strip effectively wider. The status line gives the closed-form estimate for the tightest pair whenever it is over 1 %. Finite thickness in the solver is a follow-up.
+**Strip thickness.** The solver models each strip as a rectangle of the substrate's copper thickness, so the side walls and the air between them are included. Thickness matters on thin substrates: on 0.508 mm RO4350B, 35 µm copper lowers Zo by 5–8 % for gaps of 0.1–0.2 mm.
+
+For single lines, the solver's thickness effect agrees with Hammerstad–Jensen's correction to 0.1 % of Z0. For tight coupled pairs, the closed-form correction (Jansen's effective widths, published for S ≫ 2t) captures only part of it, because the air-filled gap between the walls pulls the odd mode's εeff down:
+
+| 35 µm copper, RO4350B | field solver vs closed form, both with t |
+|---|---|
+| h 0.508, W 1.1, S 0.2 mm | Ze +0.7 %, Zo −1.6 %, εe −0.9 %, εo −4.9 % |
+| h 0.508, W 1.1, S 0.1 mm | Ze +0.4 %, Zo −3.1 %, εe −0.9 %, εo −7.2 % |
+| h 0.254, W 0.5, S 0.15 mm | Ze +1.5 %, Zo −1.7 %, εe −1.9 %, εo −7.2 % |
+| h 1.524, W 3, S 0.3 mm | Ze 0.0 %, Zo −1.3 %, εe −0.3 %, εo −3.0 % |
+
+So for tight gaps on thin boards use `model=field` for pairs too. The independent checks in `solver/README.md` back the solver's numbers. Not modelled: etch profile (trapezoidal strips), solder mask, plating.
 
 **Loss with the field solver.** Each mode's Q comes from two terms:
 
-- **Conductor loss.** The conductor-loss matrix is R = K<sub>r</sub>·ω·(L(receded) − L). The receded geometry has widths −δ, gaps +δ and h + δ, with δ the skin depth at f0. For a mode with voltage vector v, Q<sub>c</sub> = vᵀL⁻¹v / (K<sub>r</sub>·vᵀL⁻¹ΔL L⁻¹v).
+- **Conductor loss.** The conductor-loss matrix is R = K<sub>r</sub>·ω·(L(receded) − L). The receded geometry has widths −δ, gaps +δ, h + δ and thickness t − δ, with δ the skin depth at f0. For a mode with voltage vector v, Q<sub>c</sub> = vᵀL⁻¹v / (K<sub>r</sub>·vᵀL⁻¹ΔL L⁻¹v).
 - **Dielectric loss.** The single-line filling-factor formula, with the mode's own εeff.
 
 For a symmetric pair, the even and odd Q agree with the closed-form path to 0.1 %.
@@ -377,8 +388,8 @@ Some results on JLC's 0.508 mm RO4350B:
 **Known limitations.**
 
 - **Coupled impedance dispersion.** Even/odd *impedance* dispersion is not included: Z_e and Z_o are quasi-static at every frequency, and only εeff disperses. The published Kirschning–Jansen impedance-dispersion equations could not be confirmed from two independent sources, and the one available implementation shows inconsistencies. At typical PCB frequencies (f·h of a few GHz·mm) the effect is around 1 %.
-- **Conductor-loss models disagree for narrow lines.** The two models differ by up to about 3× near W/h = 0.1, and Hammerstad's is the higher. The Wheeler result agrees within 3 % with the Pucel–Massé–Hartwig narrow-strip formula (four substrates at W/h = 0.1), so it is the default. A measurement, or a field solver with finite thickness, should settle which is right.
-- **Thickness correction for tight gaps.** For gaps below about 20 t, the coupled-line thickness correction is approximate. A field-solver check can settle this too.
+- **Conductor-loss models disagree for narrow lines.** The two models differ by up to about 3× near W/h = 0.1, and Hammerstad's is the higher. The Wheeler result agrees within 3 % with the Pucel–Massé–Hartwig narrow-strip formula (four substrates at W/h = 0.1), so it is the default. A measurement should settle which is right.
+- **Thickness correction for tight gaps.** For gaps below about 20 t, the coupled-line thickness correction is approximate. The field solver shows how far off it is (Zo 1–3 %, εo 3–7 % for 0.1–0.3 mm gaps with 35 µm copper); use `model=field` there.
 
 ---
 
@@ -901,7 +912,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/summary.mjs FILE.cir 11 21 …` | Text table of dB/angle for the given S-parameters, plus section lengths and ε<sub>eff</sub>. |
 | `node tools/opt.mjs FILE.cir [iters] [rounds]` | Runs the optimiser headless and writes tuned values back into the file. `.data` files are read relative to the netlist. |
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
-| `node solver/cli.mjs --W w1,w2,… --S s12,… (--h H \| --stripline B) --er ER [--cover HC] [--json]` | 2-D field solver: C, L and modal ε<sub>eff</sub> of N zero-thickness strips (mm) in microstrip, covered microstrip or stripline, and the `C [...] L [...]` lines for a `cline`. Method and validation: `solver/README.md`. |
+| `node solver/cli.mjs --W w1,w2,… --S s12,… (--h H \| --stripline B) --er ER [--t T] [--cover HC] [--json]` | 2-D field solver: C, L and modal ε<sub>eff</sub> of N strips (mm; `--t` thickness, default 0) in microstrip, covered microstrip or stripline, and the `C [...] L [...]` lines for a `cline`. Method and validation: `solver/README.md`. |
 | `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
 | `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |
