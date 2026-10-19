@@ -40,8 +40,14 @@ jobs:
           sed 's/^\.param s = 0\.1025mm.*/.param s = 0.06mm/' examples/coupler-10dB-ro4350b.cir > /tmp/broken.cir
           grep -q '^.param s = 0.06mm' /tmp/broken.cir
           node tools/kicad.mjs /tmp/broken.cir --out kicad-out/broken-gap --board --date 2026-01-01 --force
+          # DIAGNOSTIC (temporary): same board without the net-tie declaration
+          mkdir -p kicad-diag && cp -r kicad-out/broken-gap kicad-diag/broken-nonettie
+          sed -i '/net_tie_pad_groups/d' kicad-diag/broken-nonettie/*.kicad_pcb kicad-diag/broken-nonettie/*.pretty/*.kicad_mod
       - name: KiCad ${{ matrix.kicad }}
         run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:${{ matrix.kicad }} bash tools/kicad-check.sh kicad-out
+      - name: DIAGNOSTIC (temporary)
+        if: always()
+        run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:${{ matrix.kicad }} bash -c 'export HOME=/tmp; for b in kicad-diag/*/*.kicad_pcb kicad-out/broken-gap/*.kicad_pcb; do kicad-cli pcb drc --severity-all --units mm -o /tmp/r.rpt "$b" >/dev/null 2>&1; m=$(grep -E "^\[|Found" /tmp/r.rpt | head -12 | sed ":a;N;\$!ba;s/\n/%0A/g"); echo "::notice title=diag $b::$m"; done'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
