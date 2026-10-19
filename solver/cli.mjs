@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // mtl2d command line (issue #11). Dimensions in mm.
 //
-//   node solver/cli.mjs --W 1,1,1 --S 0.2[,0.3] --h 0.508 --er 3.66 [--order K] [--json]
+//   node solver/cli.mjs --W 1,1,1 --S 0.2[,0.3] --h 0.508 --er 3.66 [--t 0.035] [--order K] [--json]
 //   node solver/cli.mjs --W 0.4,0.4 --S 0.2 --stripline 1.0 [--hb 0.5] --er 3
 //   node solver/cli.mjs --W 1 --h 0.5 --er 6 --cover 0.3            (covered microstrip, air gap 0.3)
 //
@@ -14,7 +14,7 @@ for (let i = 2; i < process.argv.length; i++) {
   const k = process.argv[i].replace(/^--/, '');
   if (k === 'json') args.json = true; else args[k] = process.argv[++i];
 }
-const usage = 'usage: node solver/cli.mjs --W w1,w2,… [--S s12,…] (--h H | --stripline B [--hb HB]) --er ER [--cover HC] [--order K] [--json]   (mm)';
+const usage = 'usage: node solver/cli.mjs --W w1,w2,… [--S s12,…] (--h H | --stripline B [--hb HB]) --er ER [--t T] [--cover HC] [--order K] [--json]   (mm; --t: strip thickness)';
 const list = (s) => (s ?? '').split(',').filter(Boolean).map(x => +x * 1e-3);
 const W = list(args.W);
 if (!W.length || !args.er || (!args.h && !args.stripline)) { console.error(usage); process.exit(1); }
@@ -25,7 +25,7 @@ const stack = args.stripline ? stripline({ b: +args.stripline * 1e-3, er, hb: ar
   : microstrip({ h: +args.h * 1e-3, er });
 let r;
 try {
-  r = solve(stripsFromWS(W, W.length > 1 ? (S.length === 1 ? S[0] : S) : []), stack, { order: args.order ? +args.order : undefined });
+  r = solve(stripsFromWS(W, W.length > 1 ? (S.length === 1 ? S[0] : S) : [], args.t ? +args.t * 1e-3 : 0), stack, { order: args.order ? +args.order : undefined });
 } catch (e) { console.error(e.message); process.exit(2); }
 const extra = W.length === 1 ? single(r) : W.length === 2 && W[0] === W[1] ? evenOdd(r) : null;
 if (args.json) { console.log(JSON.stringify({ C: r.C, C0: r.C0, L: r.L, epsEff: r.epsEff, ...extra, order: r.order }, null, 1)); process.exit(0); }

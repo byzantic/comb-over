@@ -139,5 +139,103 @@ function imageMoM(strips, h, er, Ns) {
   check('gap count must match', throws(() => stripsFromWS([1, 1, 1], [1]), /need 2 gaps/));
 }
 
+// ================================================================ finite thickness
+// independent check: pulse basis on the rectangle perimeters, graded panels, collocation, spatial
+// image series of the grounded slab (microstrip only)
+function bemThick(strips, h, er, Nh, Nv, grade = 3) {
+  const K = (er - 1) / (er + 1);
+  const imgs = [[0, -K]]; // [n, coef] image across z = -n h (n=0: interface)
+  for (let n = 1; Math.abs(K) ** (n - 1) > 1e-15 && n < 3000; n++) imgs.push([n, (K * K - 1) * (-K) ** (n - 1)]);
+  const panels = [];
+  // graded subdivision of [0,1] clustered at both ends: s -> 0.5(1 - cos(pi s))^grade-ish
+  const grid = (N) => { const g = []; for (let i = 0; i <= N; i++) { const s = i / N; const f = (x) => x ** grade / (x ** grade + (1 - x) ** grade); g.push(f(s)); } return g; };
+  strips.forEach((s, m) => {
+    const x0 = s.x - s.w / 2, x1 = s.x + s.w / 2, t = s.t;
+    const add = (p0, p1, N) => { const g = grid(N); for (let i = 0; i < N; i++) panels.push({ m, a: [p0[0] + (p1[0] - p0[0]) * g[i], p0[1] + (p1[1] - p0[1]) * g[i]], b: [p0[0] + (p1[0] - p0[0]) * g[i + 1], p0[1] + (p1[1] - p0[1]) * g[i + 1]] }); };
+    add([x0, 0], [x1, 0], Nh); add([x1, 0], [x1, t], Nv); add([x1, t], [x0, t], Nh); add([x0, t], [x0, 0], Nv);
+  });
+  const F = (u, v) => (Math.abs(v) < 1e-300 ? (u === 0 ? 0 : u * Math.log(Math.abs(u)) - u) : 0.5 * (u * Math.log(u * u + v * v) - 2 * u + 2 * v * Math.atan(u / v)));
+  const segInt = (p, a, b) => { // ∫ ln|p - q| ds over segment a→b
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), ex = (b[0] - a[0]) / L, ez = (b[1] - a[1]) / L;
+    const u0 = (a[0] - p[0]) * ex + (a[1] - p[1]) * ez, v = Math.abs(-(a[0] - p[0]) * ez + (a[1] - p[1]) * ex);
+    return F(u0 + L, v) - F(u0, v);
+  };
+  const n = panels.length, N = strips.length;
+  const A = Array.from({ length: n }, () => new Float64Array(n));
+  for (let i = 0; i < n; i++) {
+    const P = panels[i], pm = [(P.a[0] + P.b[0]) / 2, (P.a[1] + P.b[1]) / 2];
+    for (let j = 0; j < n; j++) {
+      const Q = panels[j], L = Math.hypot(Q.b[0] - Q.a[0], Q.b[1] - Q.a[1]);
+      let v = segInt(pm, Q.a, Q.b);
+      for (const [k, c] of imgs) { const zm = -k * h; const mir = (q) => [q[0], 2 * zm - q[1]]; v += c * segInt(pm, mir(Q.a), mir(Q.b)); }
+      A[i][j] = -v / (2 * Math.PI * L);
+    }
+  }
+  const B = panels.map(p => strips.map((_, k) => (p.m === k ? 1 : 0)));
+  for (let k = 0; k < n; k++) {
+    let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(A[i][k]) > Math.abs(A[p][k])) p = i;
+    [A[k], A[p]] = [A[p], A[k]]; [B[k], B[p]] = [B[p], B[k]];
+    for (let i = k + 1; i < n; i++) { const f = A[i][k] / A[k][k]; if (!f) continue; for (let j = k; j < n; j++) A[i][j] -= f * A[k][j]; for (let j = 0; j < N; j++) B[i][j] -= f * B[k][j]; }
+  }
+  for (let k = n - 1; k >= 0; k--) for (let j = 0; j < N; j++) { let t = B[k][j]; for (let i = k + 1; i < n; i++) t -= A[k][i] * B[i][j]; B[k][j] = t / A[k][k]; }
+  const C = strips.map(() => new Array(N).fill(0));
+  panels.forEach((p, i) => { for (let j = 0; j < N; j++) C[p.m][j] += B[i][j]; });
+  return C;
+}
+
+{
+  const h = 0.508e-3, er = 3.66, st = microstrip({ h, er }), t = 35e-6;
+  // reference: BEM at two meshes, Richardson with the observed order (≈ 2.8)
+  const ref = (strips, eps) => { const a = bemThick(strips, h, eps, 40, 8), b = bemThick(strips, h, eps, 80, 16); const f = 2 ** 2.8 - 1; return b.map((r, i) => r.map((v, j) => (v + (v - a[i][j]) / f) * EPS0)); };
+  const pair = stripsFromWS([1e-3, 1e-3], 0.2e-3, t), r = solve(pair, st);
+  const e1 = mdiff(ref(pair, er), r.C), e0 = mdiff(ref(pair, 1), r.C0);
+  check('thick pair (35 µm): C and C0 agree with the independent BEM to 1e-4 (of the diagonal)', e1 < 1e-4 && e0 < 1e-4, `${e1} ${e0}`);
+  const three = stripsFromWS([0.6e-3, 1.2e-3, 0.8e-3], [0.12e-3, 0.25e-3], 50e-6), r3 = solve(three, st);
+  const e3 = mdiff(ref(three, er), r3.C);
+  check('3 unequal thick lines (50 µm, 0.12 mm gap): every C entry agrees with the BEM to 1e-4', e3 < 1e-4, e3);
+}
+{
+  // Cohn: centred thick stripline, wide strip → C/ε = 4W/(b−t) + 4C'f/ε with the exact fringing
+  // capacitance of a semi-infinite thick plate between grounds (non-interacting fringes for W ≫ b)
+  const b = 1e-3, er = 2.2;
+  let worst = 0;
+  for (const x of [0.02, 0.05, 0.1, 0.2]) for (const W of [2e-3, 3e-3]) {
+    const t = x * b, cf = (1 / Math.PI) * (2 / (1 - x) * Math.log(1 / (1 - x) + 1) - (1 / (1 - x) - 1) * Math.log(1 / (1 - x) ** 2 - 1));
+    const r = solve([{ x: 0, w: W, t }], stripline({ b, er, hb: (b - t) / 2 }));
+    worst = Math.max(worst, rel(r.C[0][0] / EPS0 / er, 4 * W / (b - t) + 4 * cf));
+  }
+  check('thick centred stripline (t/b 0.02–0.2, wide strips) = Cohn\'s exact fringing result to 5e-5', worst < 5e-5, worst);
+}
+{
+  // t → 0 recovers the planar solver, for every kind of stack (each exercises a different reflection path)
+  const s = stripsFromWS([0.8e-3, 1e-3], 0.2e-3);
+  const stacks = [microstrip({ h: 0.508e-3, er: 3.66 }), stripline({ b: 1e-3, er: 3, hb: 0.4e-3 }), coveredMicrostrip({ h: 0.5e-3, er: 6, hc: 0.4e-3 }),
+    { below: [{ t: 0.3e-3, er: 4 }, { t: 0.2e-3, er: 2.2 }], above: [{ t: 0.1e-3, er: 3 }], top: 1 }];
+  let worst = 0;
+  for (const st of stacks) { const p = solve(s, st), q = solve(s.map(x => ({ ...x, t: 1e-9 })), st); worst = Math.max(worst, mdiff(p.C, q.C), mdiff(p.C0, q.C0)); }
+  check('t = 1 nm reproduces the zero-thickness solver to 2e-5 (microstrip, offset stripline, covered, overlay + 2-layer substrate)', worst < 2e-5, worst);
+}
+{
+  // Hammerstad–Jensen's thickness correction for single lines
+  let w = 0, dw = 0;
+  for (const [h, er] of [[0.254e-3, 3.66], [0.508e-3, 3.66], [1.524e-3, 3.66], [1.5e-3, 4.5]]) for (const u of [0.3, 1, 2, 5]) {
+    const W = u * h, f = single(solve([{ x: 0, w: W, t: 35e-6 }], microstrip({ h, er }))), f0 = single(solve([{ x: 0, w: W }], microstrip({ h, er })));
+    const c = msline({ W, h, er, t: 35e-6 }), c0 = msline({ W, h, er, t: 0 });
+    w = Math.max(w, rel(f.Z0, c.Z0)); dw = Math.max(dw, Math.abs((f.Z0 / f0.Z0) - (c.Z0 / c0.Z0)));
+  }
+  check('thick single microstrip: Z0 within 0.15 % of Hammerstad–Jensen with their thickness correction', w < 1.5e-3, w);
+  check('… and the thickness-induced change of Z0 agrees to 0.1 % of Z0 (11 % change at W/h 0.3 on 0.254 mm)', dw < 1e-3, dw);
+}
+{
+  const st = microstrip({ h: 0.508e-3, er: 3.66 });
+  const m = solve([{ x: -0.6e-3, w: 1e-3, t: 35e-6 }, { x: 0.6e-3, w: 1e-3 }], st);
+  check('mixed thick and zero-thickness strips solve (C positive definite, signs right)', m.C[0][0] > m.C[1][1] && m.C[0][1] < 0);
+  check('a strip that reaches the cover is refused', throws(() => solve([{ x: 0, w: 1e-3, t: 0.5e-3 }], coveredMicrostrip({ h: 0.5e-3, er: 4, hc: 0.4e-3 })), /reaches the next layer or the cover/));
+  const s10 = stripsFromWS(Array(10).fill(1e-3), 0.2e-3, 35e-6); solve(s10, st);
+  const r10 = solve(s10, st);
+  console.log(`       (10 thick lines: ${r10.ms.toFixed(0)} ms, orders ${r10.order}/${r10.orderWall})`);
+  check('10 thick lines solve in under 1.5 s', r10.ms < 1500, r10.ms);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

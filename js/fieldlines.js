@@ -2,17 +2,17 @@
 //
 // fieldLines({ W: [..], S: [..], sub, f0 }) → { C, L, Q(v), epsEff, warnings, info }
 //
-//   C, L      quasi-static per-unit-length Maxwell matrices of zero-thickness strips (solver/mtl2d.js)
+//   C, L      quasi-static per-unit-length Maxwell matrices of strips with the substrate's copper
+//             thickness t (rectangular cross-section; solver/mtl2d.js)
 //   Q(v)      per-mode Q for a mode voltage vector v (Section's per-mode loss hook):
 //               conductor  Wheeler's incremental inductance as a matrix: every conductor surface
-//                          receded by δ/2 (widths −δ, gaps +δ, h +δ), R = Kr·ω·ΔL, and for the mode
+//                          receded by δ/2 (widths −δ, gaps +δ, h +δ, t −δ), R = Kr·ω·ΔL, and for the mode
 //                          Qc = vᵀL⁻¹v / (Kr · vᵀL⁻¹ ΔL L⁻¹v)   (current i ∝ L⁻¹v)
 //               dielectric the filling-factor formula with the mode's own εeff, as for single lines
 //   epsEff    modal εeff (ascending)
 //
 // Results are cached by geometry and substrate: the optimiser re-evaluates the same section many times.
 import { solve, microstrip } from '../solver/mtl2d.js';
-import { mscoupled, msline } from './microstrip.js';
 
 const C0 = 299792458, MU0 = 4e-7 * Math.PI;
 const cache = new Map();
@@ -21,9 +21,9 @@ const CACHE_MAX = 400;
 const skinDepth = (f, sigma) => 1 / Math.sqrt(Math.PI * f * MU0 * sigma);
 const roughness = (rough, delta) => (rough > 0 ? 1 + 2 / Math.PI * Math.atan(1.4 * (rough / delta) ** 2) : 1);
 
-function solveWS(W, S, h, er) {
+function solveWS(W, S, h, er, t) {
   const strips = []; let x = 0;
-  W.forEach((w, i) => { strips.push({ x: x + w / 2, w }); x += w + (S[i] ?? 0); });
+  W.forEach((w, i) => { strips.push(t > 0 ? { x: x + w / 2, w, t } : { x: x + w / 2, w }); x += w + (S[i] ?? 0); });
   return solve(strips, microstrip({ h, er }));
 }
 
@@ -53,14 +53,14 @@ export function fieldLines({ W, S, sub, f0 }) {
   const key = JSON.stringify([W, S, h, er, tand, t, sigma, rough, f0]);
   if (cache.has(key)) { const v = cache.get(key); cache.delete(key); cache.set(key, v); return v; }
 
-  const r = solveWS(W, S, h, er);
+  const r = solveWS(W, S, h, er, t);
   const warnings = [];
   // conductor loss: receded geometry, air (L only)
   let dL = null, Kr = 1;
   if (f0 > 0 && sigma > 0) {
     const d = skinDepth(f0, sigma); Kr = roughness(rough, d);
     if (W.every(w => w > 2 * d)) {
-      const rec = solveWS(W.map(w => w - d), S.map(s => s + d), h + d, 1);
+      const rec = solveWS(W.map(w => w - d), S.map(s => s + d), h + d, 1, Math.max(t - d, 0));
       dL = rec.L.map((row, i) => row.map((x, j) => x - r.L[i][j]));
     }
   }
@@ -73,21 +73,6 @@ export function fieldLines({ W, S, sub, f0 }) {
     if (tand > 0 && er > 1) invQ += tand * er * (eps - 1) / (eps * (er - 1));
     return invQ > 0 ? 1 / invQ : Infinity;
   };
-  // how much strip thickness would change things (closed forms; tightest pair, or the line itself):
-  // the solver has t = 0
-  if (t > 0) {
-    try {
-      let dz, where;
-      if (N > 1) {
-        const k = S.indexOf(Math.min(...S)), Wp = (W[k] + W[k + 1]) / 2;
-        const a = mscoupled({ W: Wp, S: S[k], h, er, t: 0 }), b = mscoupled({ W: Wp, S: S[k], h, er, t });
-        dz = Math.max(Math.abs(b.Ze / a.Ze - 1), Math.abs(b.Zo / a.Zo - 1)); where = ` (worst mode of the pair at the tightest gap, ${(S[k] * 1e3).toPrecision(3)} mm)`;
-      } else {
-        dz = Math.abs(msline({ W: W[0], h, er, t }).Z0 / msline({ W: W[0], h, er, t: 0 }).Z0 - 1); where = '';
-      }
-      if (dz > 0.01) warnings.push(`the field solver models zero-thickness strips; ${(t * 1e6).toPrecision(3)} µm copper would lower the impedances by about ${(dz * 100).toFixed(1)} %${where}, closed-form estimate`);
-    } catch { /* outside the closed-form range: no estimate */ }
-  }
   const out = { C: r.C, L: r.L, C0: r.C0, Q, epsEff: r.epsEff, warnings, info: { order: r.order, ms: r.ms } };
   cache.set(key, out);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
