@@ -209,7 +209,7 @@ export function expandCap({ name, nodes, o, ev, sub, f, fail }) {
     if (m.srf < 3 * f) warnings.push(`self-resonance with ESL + via ${(m.srf / 1e9).toPrecision(3)} GHz is under 3 × f (${(f / 1e9).toPrecision(3)} GHz)`);
     if (m.Cpad > 0) lines.push(`C${name}_pad ${n1} 0 ${num(m.Cpad)}`);
     lines.push(`L${name}_esl ${n1} ${name}_x ${num(esl)}`, `C${name}_c ${name}_x ${name}_y ${num(C)} Q=${num(Q)}`, coldToGround(`${name}_y`));
-    return { lines, warnings, info: { type, pkg, C, Q, esl, Cpad: m.Cpad, Lvia: gnd ? m.Lvia : 0, Ceff: m.Ceff, srf: m.srf } };
+    return { lines, warnings, info: { type, pkg, C, Q, esl, Cpad: m.Cpad, Lvia: gnd ? m.Lvia : 0, Ceff: m.Ceff, srf: m.srf, via } };
   }
   if (type === 'printed') {
     needSub(); needF();
@@ -240,7 +240,7 @@ export function expandCap({ name, nodes, o, ev, sub, f, fail }) {
     const Cp = padC({ W: TRIMMER_FOOTPRINT.pads.w, L: TRIMMER_FOOTPRINT.pads.l, sub });
     lines.push(`C${name}_pad ${n1} 0 ${num(Cp)}`, `L${name}_esl ${n1} ${name}_x ${num(esl)}`, `C${name}_c ${name}_x ${name}_y ${num(C)} Q=${num(Q)}`, coldToGround(`${name}_y`));
     const m = smdModel({ pkg: '0603', C, Q, esl, sub, via, f });
-    return { lines, warnings, info: { type, mpn: t?.mpn, range: t && !t.why ? [t.Cmin, t.Cmax] : null, C, Q, esl, Cpad: Cp, Ceff: Cp + C / (1 - (2 * Math.PI * f) ** 2 * (esl + (gnd ? m.Lvia : 0)) * C) } };
+    return { lines, warnings, info: { type, mpn: t?.mpn, range: t && !t.why ? [t.Cmin, t.Cmax] : null, C, Q, esl, Cpad: Cp, Ceff: Cp + C / (1 - (2 * Math.PI * f) ** 2 * (esl + (gnd ? m.Lvia : 0)) * C), via } };
   }
   fail(`unknown cap type ${type} (ideal, smd, printed, trimmer)`);
 }

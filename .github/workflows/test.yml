@@ -36,6 +36,15 @@ jobs:
           done
           # worked example 8: impedance-defined coupler → microstrip → board, as the layout panel does it
           node tools/kicad.mjs examples/coupler-10dB-microstrip.cir --make jlc-ro4350b-1.524 --out kicad-out/example8-1524 --board --date 2026-01-01
+          # filter boards (#15): comb-line with 0603 capacitors, interdigital
+          for f in combline-5pole-ro4350b interdigital-3pole-fr4; do
+            node tools/kicad.mjs examples/$f.cir --out kicad-out/$f --board --date 2026-01-01
+          done
+          # worked example 9: specification → synthesised geometry → board (→ Gerbers in the KiCad step);
+          # the synthesis must reproduce the committed example
+          node tools/synth.mjs examples/combline-5pole-2g-ro4350b-1524.json --substrate jlc-ro4350b-1.524 --cap smd-0603 --out /tmp/example9.cir
+          cmp /tmp/example9.cir examples/combline-5pole-2g-ro4350b-1524.cir || { echo "::error title=example9::synthesis no longer reproduces examples/combline-5pole-2g-ro4350b-1524.cir"; diff /tmp/example9.cir examples/combline-5pole-2g-ro4350b-1524.cir | head -40; exit 1; }
+          node tools/kicad.mjs /tmp/example9.cir --out kicad-out/example9-comb --board --date 2026-01-01
           # loading-capacitor footprints (#14), library only
           node tools/kicad.mjs --caps jlc-ro4350b-0.508 --out kicad-out/caps-lib
           # deliberately broken 1: coupled-line gap 0.06 mm, below JLC's 0.1 mm. The gap is inside the

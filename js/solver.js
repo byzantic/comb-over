@@ -46,7 +46,8 @@ function buildNodes(d) {
   });
   const secTerms = d.sections.map(s => [...s.ends.A, ...s.ends.B].map(resolve));
   const elTerms = d.elements.map(e => [resolve(e.a), resolve(e.b)]);
-  return { n: index.size, portIdx, secTerms, elTerms, names: [...index.keys()] };
+  const blkTerms = (d.blocks ?? []).map(b => b.nodes.map(resolve));
+  return { n: index.size, portIdx, secTerms, elTerms, blkTerms, names: [...index.keys()] };
 }
 
 // Solve the network over the sweep. Returns {freq, P, S:{re,im} (nf×P×P)}.
@@ -70,6 +71,14 @@ export function solve(d, freqs = frequencies(d.freq)) {
     d.sections.forEach((s, si) => {
       const t = nodes.secTerms[si];
       const ys = s.admittance(f), m = ys.n;
+      for (let i = 0; i < m; i++) {
+        const a = t[i]; if (a < 0) continue;
+        for (let j = 0; j < m; j++) { const b = t[j]; if (b < 0) continue; Y.add(a, b, ys.re[i * m + j], ys.im[i * m + j]); }
+      }
+    });
+    // multi-port blocks (e.g. the microstrip tee, js/tee.js): admittance over their node list
+    (d.blocks ?? []).forEach((bl, bi) => {
+      const t = nodes.blkTerms[bi], ys = bl.y(f), m = ys.n;
       for (let i = 0; i < m; i++) {
         const a = t[i]; if (a < 0) continue;
         for (let j = 0; j < m; j++) { const b = t[j]; if (b < 0) continue; Y.add(a, b, ys.re[i * m + j], ys.im[i * m + j]); }

@@ -25,7 +25,7 @@
 // matrix (lossless): B_red = B_OO − B_OS (B_SS − 1/(ωLv))⁻¹ B_SO + ω(C_oe + C_l).
 //
 // Not modelled: the tap T-junction and the feed lines to the connectors (issue #15).
-import { geometry, assess, returnLossDb, rippleEdges, idealS21 } from './synth.js';
+import { assess, returnLossDb, rippleEdges, idealS21 } from './synth.js';
 import { parseNetlist } from './netlist.js';
 import { optimise, goalCost } from './optimize.js';
 import { solve as solveNet } from './solver.js';
@@ -34,6 +34,7 @@ import { makeSubstrate } from './substrates.js';
 import { fieldLines } from './fieldlines.js';
 import { solve as fieldSolve, microstrip } from '../solver/mtl2d.js';
 import { viaL, openEnd } from './discontinuities.js';
+import { smdForCeff, padC, TRIMMER_FOOTPRINT, TRIMMER_DEFAULTS, SMD_DEFAULT_Q } from './capacitors.js';
 import { msline, synthMsline, synthMscoupled } from './microstrip.js';
 import { jacobiEig, rSymFunc, rMul } from './linalg.js';
 
@@ -186,58 +187,77 @@ function buildNetlist(r, st, sub, via, opts = {}) {
   L.push(freq ? `.freq ${freq}` : `.freq ${fmt(fstart / 1e9, 6)}G ${fmt(fstop / 1e9, 6)}G 801`);
   L.push(`.ref ${fmt(T.f0 / 1e9, 9)}G`);
   L.push(`.substrate ${sub.id}`);
+  // board layout (#15): the template reads the geometry, vias, taps and capacitors from this netlist
+  if (!opts.bare && !opts.linear) L.push(`.layout ${structure}${structure === 'comb' && (st.cap?.type ?? 'ideal') === 'ideal' ? ' cap=smd-0603' : ''}`);
   L.push(opts.fixLength ? `.param th0 = ${fmt(th0, 9)}` : `.param th0 = ${fmt(th0, 9)} tune ${fmt(th0 * 0.97, 6)} ${fmt(th0 * 1.03, 6)}`);
-  L.push(`.param tt = ${fmt(tt, 7)} tune ${fmt(tt * 0.7, 4)} ${fmt(Math.min(tt * 1.3, th0 * 0.98), 4)}`);
+  L.push(`.param tt = ${fmt(tt, 7)} tune ${fmt(Math.max(tt * 0.7, st.hwDeg * q * 1.2), 4)} ${fmt(Math.min(tt * 1.3, th0 - st.hwDeg * q * 1.2), 4)}`);
+  L.push(`.param wf = ${mmS(st.wf)}   # tap feed width (${s.R0} ohm)`);
+  L.push(`.param hw = ${fmt(st.hwDeg * q, 9)}   # half the feed width in degrees at f0 (the tap junction spans tt ± hw)`);
   const wr = opts.wRange ?? [0.85, 1.15];
-  for (let i = 1; i <= nh; i++) L.push(`.param w${i} = ${mmS(st.Wh[i - 1])} tune ${mmS(Math.max(st.Wh[i - 1] * wr[0], sub.fab?.minTrace ?? 0))} ${mmS(st.Wh[i - 1] * wr[1])}`);
+  for (let i = 1; i <= nh; i++) L.push(opts.fixWidths ? `.param w${i} = ${mmS(st.Wh[i - 1])}` : `.param w${i} = ${mmS(st.Wh[i - 1])} tune ${mmS(Math.max(st.Wh[i - 1] * wr[0], sub.fab?.minTrace ?? 0))} ${mmS(st.Wh[i - 1] * wr[1])}`);
   const sr = opts.gapRange ?? [0.8, 1.25];
   for (let i = 1; i <= mh; i++) L.push(`.param s${i}${i + 1} = ${mmS(st.Sh[i - 1])} tune ${mmS(Math.max(st.Sh[i - 1] * sr[0], sub.fab?.minSpace ?? 0))} ${mmS(st.Sh[i - 1] * sr[1])}`);
   if (structure === 'comb') for (let i = 1; i <= nh; i++) L.push(`.param cl${i} = ${pF(st.Cl[i - 1])} tune ${pF(st.Cl[i - 1] * 0.85)} ${pF(st.Cl[i - 1] * 1.15)}`);
-  else if (st.Cl1 > 0) L.push(`.param cl1 = ${pF(st.Cl1)} tune ${pF(st.Cl1 * 0.3)} ${pF(st.Cl1 * 2 + 0.05e-12)}   # end-resonator trim (tap-loading compensation)`);
+  else if (st.ext1 > 0) L.push(`.param ext1 = ${mmS(st.ext1)} tune ${mmS(st.ext1 * 0.3)} ${mmS(st.ext1 * 2 + 0.05e-3)}   # end-resonator extension (tap-loading compensation)`);
   L.push('');
   portsOn.forEach(i => L.push(`port t${i} ${s.R0}`));
   L.push('');
-  const { secs } = geometry(structure, n, st.thDeg * Math.PI / 180, st.ttDeg * Math.PI / 180, { tapsOn, portsOn, groundOthers });
-  const deg = (x) => x * 180 / Math.PI;
-  const lenExpr = (x) => {
-    const c = [['tt*1deg', st.ttDeg], ['(th0-tt)*1deg', st.thDeg - st.ttDeg], ['(th0-2*tt)*1deg', st.thDeg - 2 * st.ttDeg], ['(2*tt-th0)*1deg', 2 * st.ttDeg - st.thDeg], ['th0*1deg', st.thDeg]]
-      .find(([, v]) => Math.abs(v - deg(x)) < 1e-7);
-    return c ? c[0] : `${fmt(deg(x) * q, 9)}deg`;
-  };
-  // shorted ends → via nodes; zero-length guard: sections shorter than 1e-9° are dropped by geometry()
-  const shortNode = (i) => (via ? `g${i}` : '0');
+  // planes along the lines (degrees at the tuning frequency), symbolic in th0, tt and hw so the
+  // section lengths follow the parameters: ends, and each tap's junction (tap ± hw, hw = half the
+  // feed width). Inside a junction the tapped line is carried by the tee; its strip in the coupled
+  // section is left floating there (it still shapes the fields of its neighbours).
   const shortAtA = (i) => structure === 'comb' || i % 2 === 1;   // 1-based
-  secs.forEach((sec, p) => {
-    const mapEnd = (nodes, atA) => nodes.map((x, k) => {
-      const i = k + 1;
-      if (x !== '0') return x;
-      // '0' at a shorted end is the via node; '0' at an open end (groundOthers) stays ground
-      const isShortEnd = shortAtA(i) ? (atA && p === 0) : (!atA && p === secs.length - 1);
-      return isShortEnd ? shortNode(i) : '0';
-    });
+  const P = (c) => ({ c, v: c[0] * st.thDeg + c[1] * st.ttDeg + c[2] * st.hwDeg });
+  const tapC = (i) => (shortAtA(i) ? [0, 1, 0] : [1, -1, 0]);
+  let planes = [P([0, 0, 0]), P([1, 0, 0])];
+  for (const i of tapsOn) { const c = tapC(i); planes.push(P([c[0], c[1], -1]), P([c[0], c[1], 1])); }
+  planes = planes.sort((a, b) => a.v - b.v).filter((p, k, a) => k === 0 || p.v - a[k - 1].v > 1e-9);
+  if (planes[0].v < -1e-9 || planes.at(-1).v > st.thDeg + 1e-9) throw new Error('the tap junction does not fit on the line (tap too close to an end)');
+  const same = (a, b) => Math.abs(a.v - b.v) < 1e-9;
+  const nodeAt = (i, k) => {
+    const pl = planes[k];
+    const atA = same(pl, P([0, 0, 0])), atB = same(pl, P([1, 0, 0]));
+    const shortEnd = shortAtA(i) ? atA : atB, openEnd = shortAtA(i) ? atB : atA;
+    if (shortEnd) return via ? `g${i}` : '0';
+    if (openEnd) return groundOthers && !portsOn.includes(i) && i !== 1 ? '0' : `r${i}`;
+    if (tapsOn.includes(i)) { const c = tapC(i); if (same(pl, P([c[0], c[1], -1]))) return `ta${i}`; if (same(pl, P([c[0], c[1], 1]))) return `tb${i}`; }
+    return `x${i}_${k}`;
+  };
+  const inJunction = (i, k) => tapsOn.includes(i) && (() => { const c = tapC(i), lo = P([c[0], c[1], -1]).v, hi = P([c[0], c[1], 1]).v; return planes[k].v >= lo - 1e-9 && planes[k + 1].v <= hi + 1e-9; })();
+  const term = (c, name) => (c === 0 ? '' : `${c > 0 ? '+' : '-'}${Math.abs(c) === 1 ? '' : `${Math.abs(c)}*`}${name}`);
+  const lenExpr = (a, b) => { const d = [0, 1, 2].map(k => b.c[k] - a.c[k]); const e = (term(d[0], 'th0') + term(d[1], 'tt') + term(d[2], 'hw')).replace(/^\+/, ''); return `(${e})*1deg`; };
+  for (let k = 0; k < planes.length - 1; k++) {
+    const A = [], B = [];
+    for (let i = 1; i <= n; i++) { const j = inJunction(i, k); A.push(j ? '-' : nodeAt(i, k)); B.push(j ? '-' : nodeAt(i, k + 1)); }
     if (opts.linear) {
-      // C and L linearised in the gap parameters around the last field solve (fast optimiser model)
+      // C and L linearised in the gap and width parameters around the last field solve (fast optimiser model)
       const { C0m, L0m, dC, dL, names, X0 } = opts.linear;
       const ex = (M0, dM, i, j) => `${M0[i][j]}${dM.map((D, g) => `${D[i][j] >= 0 ? '+' : ''}${D[i][j]}*(${names[g]}-${X0[g]})`).join('')}`;
-      L.push(`cline S${p + 1}`);
+      L.push(`cline S${k + 1}`);
       L.push(`  C [${C0m.map((row, i) => row.map((_, j) => ex(C0m, dC, i, j)).join(' ')).join('; ')}]`);
       L.push(`  L [${L0m.map((row, i) => row.map((_, j) => ex(L0m, dL, i, j)).join(' ')).join('; ')}]`);
     } else {
-      L.push(`cline S${p + 1}`, '  geom msl');
-      L.push(`  W [${Array.from({ length: n }, (_, k) => symW(k + 1)).join(' ')}]`);
-      L.push(`  S [${Array.from({ length: n - 1 }, (_, k) => symS(k + 1)).join(' ')}]`);
+      L.push(`cline S${k + 1}`, '  geom msl');
+      L.push(`  W [${Array.from({ length: n }, (_, m) => symW(m + 1)).join(' ')}]`);
+      L.push(`  S [${Array.from({ length: n - 1 }, (_, m) => symS(m + 1)).join(' ')}]`);
     }
-    L.push(`  len ${lenExpr(sec.len)}`);
+    L.push(`  len ${lenExpr(planes[k], planes[k + 1])}`);
     if (lossless) L.push('  Q 1e30');
-    L.push(`  A ${mapEnd(sec.A, true).join(' ')}`, `  B ${mapEnd(sec.B, false).join(' ')}`, 'end');
-  });
+    L.push(`  A ${A.join(' ')}`, `  B ${B.join(' ')}`, 'end');
+  }
+  // tap junctions (Hammerstad tee, js/tee.js): main arms on the resonator, side arm to the port
+  for (const i of tapsOn) L.push(`tee TJ${i} ta${i} tb${i} t${i} Wa=${symW(i)} Wb=${symW(i)} W2=wf`);
   if (via) for (let i = 1; i <= n; i++) L.push(`via V${i} g${i} d=${fmt(via.d * 1e3, 4)}mm n=${via.n}${lossless ? '' : ''}`);
   const W = fullW(st.Wh, n), coe = st.coe;
+  // loading capacitors: ideal, or a part with its pad, ESL and ground vias (js/capacitors.js, #14);
+  // the cl parameters are the parts' nominal values
+  const ct = st.cap?.type ?? 'ideal', cv = st.cap?.via;
+  const capLine = (i, p) => (ct === 'ideal' ? `C${i} r${i} 0 ${p}` : `cap C${i} r${i} C=${p} type=${ct}${ct === 'smd' ? ` pkg=${st.cap.pkg}` : ''}${ct === 'printed' ? '' : ` d=${fmt(cv.d * 1e3, 4)}mm n=${cv.n}`}${lossless && ct !== 'printed' ? ' Q=1e30' : ''}`);
   for (let i = 1; i <= n; i++) {
     const node = `r${i}`;
     if (groundOthers && !portsOn.includes(i) && !(i === 1)) continue;
-    if (structure === 'comb') L.push(`C${i} ${node} 0 ${symC(i)}`);
-    else if (st.Cl1 > 0 && (i === 1 || i === n)) L.push(`C${i} ${node} 0 cl1`);
+    if (structure === 'comb') L.push(capLine(i, symC(i)));
+    else if (st.ext1 > 0 && (i === 1 || i === n)) L.push(`T${i}_ext r${i} - W=${symW(i)} len=ext1   # end-resonator extension beyond the array`);
     L.push(`Coe${i} ${node} 0 ${pF(coe[i - 1])}   # open-end fringing (Δl of a ${fmt(W[i - 1] * 1e3, 4)} mm line)`);
   }
   if (!opts.bare) {
@@ -252,6 +272,38 @@ function buildNetlist(r, st, sub, via, opts = {}) {
     L.push(`.plot ylim=-70,0 db(S11) db(S21) db(${ideal})`, '.plot gd(S21)', '.smith S11');
   }
   return L.join('\n') + '\n';
+}
+
+// nominal capacitor value that gives the effective (ideal) capacitance Ceff at f, for the chosen part
+function nominalCap(Ceff, cap, sub, f) {
+  if (!cap || cap.type === 'ideal' || cap.type === 'printed') return Ceff;
+  if (cap.type === 'smd') {
+    const x = smdForCeff({ Ceff, pkg: cap.pkg, sub, via: cap.via, f });
+    if (!(x.C > 0)) throw new Error(x.why ?? 'no SMD value gives the loading capacitance');
+    return x.C;
+  }
+  // trimmer: its pad, ESL and the ground vias (as expandCap)
+  const Cp = padC({ W: TRIMMER_FOOTPRINT.pads.w, L: TRIMMER_FOOTPRINT.pads.l, sub });
+  const Ls = TRIMMER_DEFAULTS.esl + viaL({ d: cap.via.d, h: sub.dielectric.h, n: cap.via.n }).L, w = 2 * Math.PI * f, x = Ceff - Cp;
+  if (!(x > 0)) throw new Error('the trimmer pad alone exceeds the loading capacitance');
+  return x / (1 + w * w * Ls * x);
+}
+
+// open-stub extension of the end resonators (interdigital) with the input capacitance C at f:
+// tan(βΔ)/(ωZ0) = C
+function extFor(C, st, sub, f) {
+  if (!(C > 0)) return 0;
+  const l = msline({ W: st.Wh[0], h: sub.dielectric.h, er: sub.dielectric.er, t: sub.copper.t, f });
+  const w = 2 * Math.PI * f, beta = w * Math.sqrt(l.epsEff) / C0;
+  return Math.atan(w * l.Z0 * C) / beta;
+}
+
+// tap junction size: the feed width (port impedance on the substrate) and half of it in degrees
+function setJunction(r, st, sub, via) {
+  const { h, er } = sub.dielectric, t = sub.copper.t, n = r.spec.n;
+  st.wf = synthMsline({ Z0: r.spec.R0, h, er, t }).W;
+  const len = physContext(r, sub, via).section(fullW(st.Wh, n), fullS(st.Sh, n), st.thDeg, st.fTune).len;
+  st.hwDeg = st.wf / 2 / len * st.thDeg;
 }
 
 // S11 group-delay peak of the singly loaded first resonator → f_res, Qe (as synth.js measureQe)
@@ -279,7 +331,7 @@ function measureQe(r, st, sub, via, Qe) {
 }
 
 // ---------------------------------------------------------------- the refinement
-function refine(r, sub, via, geom, fTune, kScale, warnings, log) {
+function refine(r, sub, via, geom, fTune, kScale, warnings, log, capOpt) {
   const n = r.spec.n, structure = r.spec.structure;
   const ctx = physContext(r, sub, via);
   const nh = Math.ceil(n / 2), mh = Math.ceil((n - 1) / 2);
@@ -322,21 +374,22 @@ function refine(r, sub, via, geom, fTune, kScale, warnings, log) {
     const minS = sub.fab?.minSpace ?? 0;
     Sh = Sh.map((s0, i) => { if (s0 < minS) { if (!warnings.some(w => w.startsWith(`gap ${i + 1}`))) warnings.push(`gap ${i + 1}–${i + 2} would need ${fmt(s0 * 1e3, 4)} mm, below the minimum space ${minS * 1e3} mm; held at the minimum`); return minS; } return s0; });
   }
-  const st = { Wh, Sh, thDeg, fTune, coe, Cl: Cl.slice(0, nh), Cl1: 0 };
+  const st = { Wh, Sh, thDeg, fTune, coe, Cl: Cl.slice(0, nh).map(c => nominalCap(c, capOpt, sub, fTune)), ext1: 0, cap: capOpt };
+  setJunction(r, st, sub, via);
   // tap: Qe and resonator-1 frequency
   const Qe = r.Qe;
   const b = (() => { const sec = ctx.section(W(), S(), thDeg, fTune), shunt = structure === 'comb' ? Cl.map((c, j) => c + coe[j]) : coe; const df = fTune * 1e-4; return (w0 / 2) * (ctx.Bred(sec, fTune + df, [0], shunt)[0][0] - ctx.Bred(sec, fTune - df, [0], shunt)[0][0]) / (2 * Math.PI * 2 * df); })();
-  let tt = Math.asin(Math.min(0.95, Math.sin(thDeg * Math.PI / 180) * Math.sqrt(b * r.spec.R0 / Qe))) * 180 / Math.PI;
+  let tt = Math.max(Math.asin(Math.min(0.95, Math.sin(thDeg * Math.PI / 180) * Math.sqrt(b * r.spec.R0 / Qe))) * 180 / Math.PI, 1.2 * st.hwDeg);
   let cl1 = structure === 'comb' ? Cl[0] : 0, m;
   for (let it = 0; it < 15; it++) {
-    st.ttDeg = tt; if (structure === 'comb') st.Cl[0] = cl1; else st.Cl1 = cl1;
+    st.ttDeg = tt; if (structure === 'comb') st.Cl[0] = nominalCap(cl1, capOpt, sub, fTune); else st.ext1 = extFor(cl1, st, sub, fTune);
     m = measureQe(r, st, sub, via, Qe);
     const dq = m.Qe / Qe;
-    tt = Math.min(Math.asin(Math.min(0.999, Math.sin(tt * Math.PI / 180) * Math.sqrt(dq))) * 180 / Math.PI, thDeg * 0.98);
+    tt = Math.max(Math.min(Math.asin(Math.min(0.999, Math.sin(tt * Math.PI / 180) * Math.sqrt(dq))) * 180 / Math.PI, thDeg - 1.2 * st.hwDeg), 1.2 * st.hwDeg);
     cl1 = Math.max(0, cl1 + (2 * Math.PI * m.fres - w0) * 2 * b / (w0 * w0));
     if (Math.abs(dq - 1) < 1e-4 && Math.abs(m.fres / fTune - 1) < 1e-6) break;
   }
-  st.ttDeg = tt; if (structure === 'comb') st.Cl[0] = cl1; else st.Cl1 = cl1;
+  st.ttDeg = tt; if (structure === 'comb') st.Cl[0] = nominalCap(cl1, capOpt, sub, fTune); else st.ext1 = extFor(cl1, st, sub, fTune);
   m = measureQe(r, st, sub, via, Qe);
   if (Math.abs(m.Qe / Qe - 1) > 0.01) warnings.push(`the tap reaches Qe = ${fmt(m.Qe, 4)} instead of ${fmt(Qe, 4)}`);
   if (Math.abs(m.fres / fTune - 1) > 0.02 * r.spec.fbw) warnings.push(`tap loading leaves resonator 1 at ${fmt(m.fres / 1e9, 6)} GHz${structure === 'interdigital' ? ' (an end capacitor can only lower it)' : ''}`);
@@ -372,7 +425,7 @@ function applyParams(r, st, best) {
   st.Sh = Sh; st.Wh = Wh;
   if (best.tt != null) st.ttDeg = best.tt / q;
   if (best.th0 != null) st.thDeg = best.th0 / q;
-  if (r.spec.structure === 'interdigital') { if (best.cl1 != null) st.Cl1 = best.cl1; }
+  if (r.spec.structure === 'interdigital') { if (best.ext1 != null) st.ext1 = best.ext1; }
   else st.Cl = st.Cl.map((c, k) => best[`cl${k + 1}`] ?? c);
   return change;
 }
@@ -387,20 +440,42 @@ function idealEdges(r, T, p) {
 function polishGoals(r, st, sub, via, log, rounds = 8) {
   const T = r.spec.target ?? r.spec, [fa, fb] = rippleEdges(T.f0, T.fbw);
   const lo = r.skirt ? r.skirt.fl : fa - (fb - fa) / 2, hi = r.skirt ? r.skirt.fh : fb + (fb - fa) / 2;
-  let prev = null;
+  let prev = null, best = null;
   for (let round = 0; round < rounds; round++) {
-    const text = linearModel(r, st, sub, via, { freq: `${lo} ${hi} 161`, gapRange: [0.85, 1.15], wRange: [0.85, 1.15] });
-    const g = optimise(text, { maxiter: 600 }); let it, last;
+    setJunction(r, st, sub, via);
+    const text = linearModel(r, st, sub, via, { freq: `${lo} ${hi} 201`, gapRange: [0.85, 1.15], wRange: [0.85, 1.15] });
+    // frequencies: dense across the ripple band (the return-loss goal), a few on each skirt (the
+    // bandwidth bounds)
+    const [l3, h3] = idealEdges(r, T, 0.5), m3 = 0.015 * (h3 - l3);
+    const lin = (a, b, k) => Array.from({ length: k }, (_, i) => a + (b - a) * i / (k - 1));
+    const eps = 1e-6 * (fb - fa);                                                   // (endpoints strictly inside the goal range)
+    const ga = fa + 0.02 * (fb - fa) + eps, gb = fb - 0.02 * (fb - fa) - eps;       // the return-loss goal's range
+    // skirts: denser towards the band, where the bound bites
+    const sk = (a, b, k) => Array.from({ length: k }, (_, i) => b + (a - b) * (i / (k - 1)) ** 2);
+    const F = Float64Array.from([...sk(lo, l3 - m3 - eps, 9), ...lin(ga, gb, 41), ...sk(hi, h3 + m3 + eps, 9)].sort((a, b) => a - b));
+    const g = optimise(text, { maxiter: 400, freqs: F }); let it, last;
     while (!(it = g.next()).done) last = it.value;
     const out = it.value ?? last;
     const change = applyParams(r, st, out.best);
     // judge on the exact geometry (the linearised model is only good near its base point)
-    const de = parseNetlist(buildNetlist(r, st, sub, via, { lossless: true, freq: `${lo} ${hi} 161` }));
-    const exact = goalCost(de, solveNet(de)).cost;
+    const de = parseNetlist(buildNetlist(r, st, sub, via, { lossless: true, freq: `${lo} ${hi} 201` }));
+    const Fx = Float64Array.from([...F, ...lin(ga, gb, 241)].sort((a, b) => a - b));
+    const exact = goalCost(de, solveNet(de, Fx)).cost;
     log.push(`goal polish ${round + 1}: cost ${out.cost.toExponential(2)} (linearised), ${exact.toExponential(2)} (exact geometry), largest W/S change ${fmt(change * 100, 3)} %`);
-    if (exact === 0 || (prev != null && exact > prev * 0.9 && change < 0.01)) break;
+    st.goalCost = exact;
+    if (!best || exact < best.cost) best = { cost: exact, st: JSON.parse(JSON.stringify(st)) };
+    // done when the exact model meets the goals to within about 0.3 dB, or stops improving
+    if (exact < 0.1 || (prev != null && exact > prev * 0.9 && change < 0.01)) break;
     prev = exact;
   }
+  if (best && best.cost < st.goalCost) { Object.assign(st, best.st); log.push(`goal polish: kept round with exact cost ${best.cost.toExponential(2)}`); }
+}
+// the netlist's goals on the exact geometry (lossless): [{ goal, worst violation }]
+function goalReport(r, st, sub, via) {
+  const T = r.spec.target ?? r.spec, [fa, fb] = rippleEdges(T.f0, T.fbw);
+  const lo = r.skirt ? r.skirt.fl : fa - (fb - fa) / 2, hi = r.skirt ? r.skirt.fh : fb + (fb - fa) / 2;
+  const d = parseNetlist(buildNetlist(r, st, sub, via, { lossless: true, freq: `${lo} ${hi} 401` }));
+  return goalCost(d, solveNet(d)).report;
 }
 
 /**
@@ -414,7 +489,8 @@ export function realise(r, opts = {}) {
   if (opts.progress) { const push = log.push.bind(log); log.push = (...a) => { a.forEach(x => opts.progress(x)); return push(...a); }; }
   const T = r.spec.target ?? r.spec;
   const geom = mapGeometry(r, sub, warnings);
-  const st = refine(r, sub, via, geom, r.spec.f0, 1, warnings, log);
+  const capOpt = { type: opts.cap?.type ?? 'ideal', pkg: opts.cap?.pkg ?? '0603', via: via ?? { d: 0.3e-3, n: 2 } };
+  const st = refine(r, sub, via, geom, r.spec.f0, 1, warnings, log, capOpt);
   st.warnings = warnings;
   // the response shape is judged lossless (as the homogeneous synthesis is); the loss is reported separately
   const stat = (tag) => { const x = assess({ ...r, netlist: buildNetlist(r, st, sub, via, { lossless: true }) }); log.push(`${tag}: centre ${fmt(x.fc / 1e9, 7)} GHz, −3 dB FBW ${fmt(x.bw3 * 100, 5)} % (ideal ${fmt(x.bw3ideal * 100, 5)} %), worst core RL ${fmt(x.rlCore, 4)} dB (lossless)`); return x; };
@@ -429,20 +505,27 @@ export function realise(r, opts = {}) {
   const dl = parseNetlist(buildNetlist(r, st, sub, via, { bare: true, freq: `${T.f0} ${T.f0} 1` }));
   const s21 = solveNet(dl).S(2, 1), il0 = -20 * Math.log10(Math.hypot(s21.re[0], s21.im[0]));
   const Qs = dl.sections[0].Qm;
-  if (isFinite(a.rlTarget) && a.rlCore < a.rlTarget - 1) warnings.push(`the polished response reaches ${fmt(a.rlCore, 4)} dB return loss, short of the ideal ${fmt(a.rlTarget, 4)} dB: the non-adjacent couplings of this geometry could not be fully compensated; try another θ0 or Zr, or run the optimiser`);
-  if (isFinite(a.bw3) && Math.abs(a.bw3 / a.bw3ideal - 1) > 0.05) warnings.push(`the −3 dB bandwidth is ${fmt(a.bw3 * 100, 4)} %, ${fmt((a.bw3 / a.bw3ideal - 1) * 100, 3)} % from the ideal ${fmt(a.bw3ideal * 100, 4)} %`);
+  if (r.spec.type === 'chebyshev') {
+    const miss = goalReport(r, st, sub, via).filter(g => g.maxViolation > 1);   // tolerance: 1 dB on the ideal return loss
+    if (miss.length) warnings.push(`the geometry misses its goals by more than 1 dB (lossless): ${miss.map(g => `${g.goal.src} ${g.goal.op} ${g.goal.value} by up to ${fmt(g.maxViolation, 3)} dB`).join('; ')}; the non-adjacent couplings could not be fully compensated: try another θ0 or Zr, or run the optimiser`);
+  }
   const report = [
     `substrate ${sub.id}: h ${fmt(sub.dielectric.h * 1e3, 4)} mm, εr ${sub.dielectric.er}, copper ${fmt(sub.copper.t * 1e6, 4)} µm; field-solved array`,
     `widths ${W.map(w => fmt(w * 1e3, 4)).join(' ')} mm; gaps ${S.map(s => fmt(s * 1e3, 4)).join(' ')} mm`,
     `line length ${fmt(len * 1e3, 5)} mm (${fmt(st.thDeg * T.f0 / st.fTune, 5)}° at f0, mean modal velocity); tap ${fmt(tapLen * 1e3, 5)} mm from the shorted end`,
     via ? `shorted ends: ${via.n} × ${fmt(via.d * 1e3, 3)} mm vias (${fmt(physContext(r, sub, via).Lv * 1e12, 4)} pH); open ends: KJK Δl as a capacitance` : 'shorted ends ideal (no vias)',
     `realised (lossless): centre ${fmt(a.fc / 1e9, 6)} GHz, −3 dB FBW ${fmt(a.bw3 * 100, 4)} % (ideal ${fmt(a.bw3ideal * 100, 4)} %), worst return loss over the central 80 % of the ripple band ${fmt(a.rlCore, 4)} dB${isFinite(a.rlTarget) ? ` (ideal ${fmt(a.rlTarget, 4)} dB)` : ''}`,
-    `insertion loss at f0 ${fmt(il0, 3)} dB with the substrate's conductor and dielectric loss (modal Q ${Qs.map(q => fmt(q, 3)).join(', ')})`,
-    'not modelled: tap T-junction and feed lines (issue #15)',
+    `insertion loss at f0 ${fmt(il0, 3)} dB with the substrate's conductor and dielectric loss (modal Q ${Qs.map(q => fmt(q, 3)).join(', ')})${st.cap?.type === 'smd' ? `, and the capacitors' Q (${SMD_DEFAULT_Q}, the default for C0G parts)` : st.cap?.type === 'trimmer' ? `, and the trimmers' Q (${TRIMMER_DEFAULTS.Q})` : ''}`,
+    'tap junctions: Hammerstad tee (as Qucs); the board layout (.layout) adds the feed lines and edge connectors',
   ];
+  // the capacitor model's own notes (from the parser): self-resonance summarised, the rest as given
+  const capW = dl.warnings.map(w => w.replace(/^line \d+: /, '')).filter(w => /^C\d+: /.test(w));
+  const srf = capW.map(w => w.match(/self-resonance with ESL \+ via ([\d.]+) GHz/)).filter(Boolean).map(m => +m[1]);
+  if (srf.length) report.push(`capacitor self-resonance (ESL + vias) ${[...new Set([Math.min(...srf), Math.max(...srf)].map(x => fmt(x, 3)))].join('–')} GHz, under 3 f0: modelled, but above it the capacitors are inductive, so the upper stopband differs from an ideal-capacitor design`);
+  [...new Set(capW.filter(w => !/self-resonance/.test(w)))].forEach(w => report.push(`capacitor ${w}`));
   if (r.spec.structure === 'interdigital' && r._spread > 0) report.splice(3, 0, `inner resonators spread by ${fmt(r._spread * 100, 3)} % of f0 with a common length (inhomogeneous medium)`);
   st.report = report; st.warnings = warnings;
   const netlist = buildNetlist(r, st, sub, via);
-  return { netlist, geometry: { W, S, len, tapLen, thDeg: st.thDeg * T.f0 / st.fTune, Cl: r.spec.structure === 'comb' ? fullW(st.Cl, n) : null, Cl1: st.Cl1 }, report, warnings, assess: a, log, substrate: sub.id };
+  return { netlist, geometry: { W, S, len, tapLen, thDeg: st.thDeg * T.f0 / st.fTune, Cl: r.spec.structure === 'comb' ? fullW(st.Cl, n) : null, ext1: st.ext1 }, report, warnings, assess: a, log, substrate: sub.id };
 }
 

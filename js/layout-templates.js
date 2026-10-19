@@ -16,6 +16,7 @@ import { GROUND, OPEN } from './netlist.js';
 import { openEnd, viaL } from './discontinuities.js';
 const viaLpH = (drillMm, h, n) => viaL({ d: drillMm / 1e3, h, n }).L * 1e12;
 import { getConnector, launchCopper, minFeed, thicknessWarning, LAUNCH_MODES } from './connectors.js';
+import { capGeometry, smdForCeff, printedSize } from './capacitors.js';
 
 const mm = (x) => x * 1e3;
 const r4 = (x) => +x.toFixed(4);
@@ -398,7 +399,185 @@ function addConnectors(d, L, conn, mode) {
   L.warnings = warn ? [warn] : [];
 }
 
-const TEMPLATES = { coupler, schiffman, marchand };
+// ---------------------------------------------------------------- comb-line / interdigital arrays (#15)
+//   .layout comb [cap=smd-0603|smd-0402|smd-0805|trimmer|printed] [stub=1mm] [feed=..] [margin=..]
+//   .layout interdigital …
+// For the netlists the synthesis writes (js/synth-geom.js): N coupled lines given by W/S lists in
+// cascaded `cline … geom msl` sections, `via` elements at the shorted ends, tap ports on the outer
+// lines through `tee` junctions, loading capacitors (`cap` or ideal `C`) at the open ends of a comb.
+// Lines run along y (end A at y = 0); the taps leave sideways to edge ports. The whole array is one
+// DC-connected piece of copper with the ground (net GND in the preview; in KiCad the port nets are
+// joined to GND by a net tie in the part).
+function resonatorArray(d, kind, o) {
+  const secs = d.sections.filter(s => s.geom?.kind === 'mslN');
+  if (!secs.length) throw new Error(`.layout ${kind}: needs coupled-line sections given by W=[…] S=[…] lists (synthesise with "Realise in microstrip")`);
+  const W = secs[0].geom.W.map(mm), S = secs[0].geom.S.map(mm), N = W.length;
+  for (const s of secs) if (s.geom.W.some((w, i) => Math.abs(mm(w) - W[i]) > 1e-6) || s.geom.S.some((g, i) => Math.abs(mm(g) - S[i]) > 1e-6)) throw new Error(`.layout ${kind}: all sections must have the same widths and gaps`);
+  // cascade: section k's B nodes continue as section k+1's A nodes (a tapped line skips its junction)
+  const ys = [0]; secs.forEach(s => ys.push(ys.at(-1) + mm(s.len)));
+  const Ltot = ys.at(-1);
+  const xs = []; { let x = 0; W.forEach((w, i) => { xs.push(x + w / 2); x += w + (S[i] ?? 0); }); const mid = (xs[0] + xs.at(-1)) / 2; xs.forEach((_, i) => { xs[i] -= mid; }); }
+  const vias = d.elements.filter(e => e.via);
+  const viaAt = (node) => vias.find(e => e.a === node);
+  const endA = (i) => secs[0].ends.A[i], endB = (i) => secs.at(-1).ends.B[i];
+  const isShort = (node) => GROUND.has(node) || !!viaAt(node);
+  const shortTop = Array.from({ length: N }, (_, i) => {
+    const a = isShort(endA(i)), b = isShort(endB(i));
+    if (a === b) throw new Error(`.layout ${kind}: line ${i + 1} must be shorted (via) at exactly one end`);
+    return a;
+  });
+  if (kind === 'comb' && shortTop.some(t => t !== shortTop[0])) throw new Error('.layout comb: all lines must be shorted at the same end (this netlist is interdigital: use .layout interdigital)');
+  if (kind === 'interdigital' && shortTop.some((t, i) => i > 0 && t === shortTop[i - 1])) throw new Error('.layout interdigital: lines must be shorted at alternate ends');
+  // taps: tee junctions on the outer lines
+  const tees = (d.blocks ?? []).filter(b => b.type === 'tee');
+  const taps = tees.map(t => {
+    const [na, nb, side] = t.nodes;
+    let line = -1, ya = null, yb = null;
+    secs.forEach((s, k) => s.ends.B.forEach((n, i) => { if (n === na || n === nb) { line = i; (n === na ? (ya = ys[k + 1]) : (yb = ys[k + 1])); } }));
+    secs.forEach((s, k) => s.ends.A.forEach((n, i) => { if (n === na || n === nb) { line = i; (n === na ? (ya = ys[k]) : (yb = ys[k])); } }));
+    if (line < 0 || ya == null || yb == null) throw new Error(`.layout ${kind}: tee ${t.name} does not sit on a resonator line`);
+    if (line !== 0 && line !== N - 1) throw new Error(`.layout ${kind}: taps must be on the outer lines (tee ${t.name} is on line ${line + 1})`);
+    const p = needPort(d, side, `tee ${t.name} side arm`);
+    return { line, y: (ya + yb) / 2, wJ: Math.abs(yb - ya), wf: mm(t.geo.W2), port: p, tee: t, dir: line === 0 ? -1 : 1 };
+  });
+  if (taps.length !== 2 || taps[0].line === taps[1].line) throw new Error(`.layout ${kind}: needs one tap on each outer line`);
+  taps.forEach(t => { if (Math.abs(t.wJ - t.wf) > 0.01) throw new Error(`.layout ${kind}: tee ${t.tee.name} spans ${r4(t.wJ)} mm of line but its feed is ${r4(t.wf)} mm wide`); });
+  // loading capacitors at the open ends: `cap` elements, or ideal C (realised as cap=… here)
+  const openNode = (i) => (shortTop[i] ? endB(i) : endA(i));
+  const capOpt = (o.cap ?? 'smd-0603').split('-');
+  const caps = [];
+  for (let i = 0; i < N; i++) {
+    const node = openNode(i);
+    const part = (d.caps ?? []).find(c => c.node === node && c.type !== 'ideal');
+    const ideal = d.elements.find(e => e.type === 'C' && e.a === node && GROUND.has(e.b) && !/^Coe/i.test(e.name) && !/_pad$|_c$/.test(e.name));
+    const idealCap = (d.caps ?? []).find(c => c.node === node && c.type === 'ideal');
+    if (part) caps.push({ line: i, node, name: part.name, type: part.type, pkg: part.pkg, a: part.a, via: part.via ? { d: part.via.d * 1e3, n: part.via.n } : null, C: part.C });
+    else if (ideal || idealCap) {
+      const Ceff = ideal ? ideal.value : idealCap.C, name = ideal ? ideal.name : idealCap.name;
+      const [type, pkg] = capOpt, v = viaAt(endA(i)) ?? viaAt(endB(i)) ?? vias[0];
+      const via = { d: v ? v.via.d * 1e3 : 0.3, n: v ? v.via.n : 2 };
+      let C = Ceff;
+      if (type === 'smd') { const x = smdForCeff({ Ceff, pkg: pkg ?? '0603', sub: d.substrate, via: { d: via.d / 1e3, n: via.n }, f: d.fref }); if (!(x.C > 0)) throw new Error(`.layout ${kind}: ${name}: ${x.why}`); C = x.C; }
+      caps.push({ line: i, node, name, type, pkg: pkg ?? '0603', via, C, Ceff, realised: true, ideal: !!ideal });
+    }
+  }
+  const sub = d.substrate, fab = sub.fab;
+  // board room for a via fence: the KiCad export keeps the F.Cu pour max(3h, 1) mm off the part (RF
+  // keepout) and places stitching vias only outside it, so the board extends a via row beyond that
+  // (unless margin= / feed= are given)
+  const fenceRoom = Math.max(3 * sub.dielectric.h * 1e3, 1) + 2, given = d.layout.opts ?? {};
+  const stub = o.stub ?? 1, feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom);
+  const items = [], dims = [], notes = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
+  const G = String(d.ports.length + 1);
+  // lines, with a via land at the shorted end
+  const lands = [];
+  for (let i = 0; i < N; i++) {
+    const x = xs[i], w = W[i], ysh = shortTop[i] ? 0 : Ltot;
+    const polys = [rect(x - w / 2, 0, x + w / 2, Ltot)];
+    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: polys[0], width: w, label: `resonator ${i + 1}`, role: 'core' });
+    const v = viaAt(shortTop[i] ? endA(i) : endB(i));
+    if (v) {
+      const dr = v.via.d * 1e3, nv = v.via.n, vp = dr + 0.3, gv = 0.2;
+      const row = nv * vp + (nv - 1) * gv, pw = Math.max(w, row + 0.2), ext = vp / 2 + 0.1;
+      const landFull = rect(x - pw / 2, Math.min(ysh - ext, ysh + ext), x + pw / 2, Math.max(ysh - ext, ysh + ext));
+      polys.push(landFull);
+      lands.push({ line: i, pw });
+      items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: landFull, width: pw, label: `via land ${i + 1}`, role: 'core' });
+      for (let k = 0; k < nv; k++) {
+        const vx = x - row / 2 + vp / 2 + k * (vp + gv);
+        items.push({ type: 'via', x: vx, y: ysh, drill: dr, pad: vp, net: 'GND', role: 'core' });
+        core.vias.push({ num: G, node: 'GND', x: vx, y: ysh, drill: dr, pad: vp });
+      }
+    } else if (!GROUND.has(shortTop[i] ? endA(i) : endB(i))) throw new Error(`.layout ${kind}: line ${i + 1} has no via at its shorted end`);
+    core.pads.push({ num: G, node: 'GND', polys, at: [x, Ltot / 2] });
+  }
+  // taps: feed stub in the part, feed to the board edge
+  const feedItems = [];
+  for (const t of taps) {
+    const i = t.line, xe = xs[i] + t.dir * W[i] / 2, xr = xe + t.dir * stub, xedge = xr + t.dir * feedLen;
+    const stubPoly = rect(Math.min(xe, xr), t.y - t.wf / 2, Math.max(xe, xr), t.y + t.wf / 2);
+    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: stubPoly, width: t.wf, label: `tap ${t.port.node}`, role: 'core' });
+    const path = [[xedge, t.y], [xr, t.y]];
+    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(Math.min(xedge, xr), t.y - t.wf / 2, Math.max(xedge, xr), t.y + t.wf / 2), width: t.wf, label: `feed ${t.port.node}`, role: 'feed', node: t.port.node, path });
+    items.push({ type: 'port', name: t.port.node, net: 'GND', x: xedge, y: t.y, dir: [t.dir, 0], width: t.wf, z0: t.port.z });
+    // the tapped resonator is the port's pad in the part (its copper, land and stub)
+    const pad = core.pads[i];
+    pad.num = portNum(d, t.port.node); pad.node = t.port.node; pad.polys.push(stubPoly);
+    pad.at = [xr - t.dir * Math.min(t.wf / 4, 0.05), t.y];
+    core.refs.push(refOf(d, t.port.node, [xr, t.y], [t.dir, 0], t.wf, t.wf));
+    feedItems.push({ t, xedge });
+  }
+  core.ties.push([...taps.map(t => portNum(d, t.port.node)), G]);
+  // end extensions (open single-line stubs at an open end: the interdigital end trim)
+  for (let i = 0; i < N; i++) {
+    const node = openNode(i);
+    const ext = d.sections.find(s => s.geom?.kind === 'msl1' && ((s.ends.A[0] === node && OPEN.has(s.ends.B[0])) || (s.ends.B[0] === node && OPEN.has(s.ends.A[0]))));
+    if (!ext) continue;
+    const le = mm(ext.len), we = mm(ext.geom.W), top = !shortTop[i];
+    const poly = top ? rect(xs[i] - we / 2, -le, xs[i] + we / 2, 0) : rect(xs[i] - we / 2, Ltot, xs[i] + we / 2, Ltot + le);
+    items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: poly, width: we, label: `extension ${i + 1}`, role: 'core' });
+    core.pads[i].polys.push(poly);
+    notes.push(`line ${i + 1} extends ${r4(le)} mm beyond the array (${ext.name}, modelled as an uncoupled open stub)`);
+  }
+  // capacitors: separate parts on the board, in the capacitor-local frame of js/capacitors.js
+  const parts = [];
+  for (const c of caps) {
+    const i = c.line, top = !shortTop[i], yo = top ? 0 : Ltot, dir = [0, top ? -1 : 1];
+    const a = c.type === 'printed' ? (c.a ?? printedSize({ C: c.C, sub, f: d.fref }).a) : undefined;
+    const g = capGeometry({ type: c.type, pkg: c.pkg, a, via: c.via ?? { d: 0.3, n: 2 } });
+    const T = ([u, v]) => [xs[i] + dir[0] * u - dir[1] * v, yo + dir[1] * u + dir[0] * v];     // local +x along dir
+    const tp = (poly) => poly.map(T);
+    g.hot.forEach(poly => items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: tp(poly), width: Math.min(...[0, 1].map(k => Math.max(...poly.map(p => p[k])) - Math.min(...poly.map(p => p[k])))), label: `${c.name} pad 1`, role: 'part' }));
+    g.cold.forEach(poly => items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: tp(poly), width: Math.min(...[0, 1].map(k => Math.max(...poly.map(p => p[k])) - Math.min(...poly.map(p => p[k])))), label: `${c.name} pad 2`, role: 'part' }));
+    g.vias.forEach(v => { const [vx, vy] = T([v.x, v.y]); items.push({ type: 'via', x: vx, y: vy, drill: v.drill, pad: v.pad, net: 'GND', role: 'part' }); });
+    items.push({ type: 'courtyard', name: c.name, pts: tp(g.crt) });
+    parts.push({ kind: 'cap', name: c.name, type: c.type, pkg: c.pkg, a, via: c.via ?? { d: 0.3, n: 2 }, at: [xs[i], yo], dir, node: taps.find(t => t.line === i)?.port.node ?? 'GND', C: c.C, Ceff: c.Ceff, bbox: tp(g.crt) });
+  }
+  // board
+  const allPts = items.filter(it => it.pts).flatMap(it => it.pts).concat(items.filter(it => it.type === 'via').map(v => [v.x, v.y]));
+  const ymin = Math.min(...allPts.map(p => p[1])) - margin, ymax = Math.max(...allPts.map(p => p[1])) + margin;
+  const x0 = Math.min(...feedItems.map(f => f.xedge)), x1 = Math.max(...feedItems.map(f => f.xedge));
+  const outline = rect(x0, ymin, x1, ymax);
+  items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
+  dims.push({ a: [xs[0] - W[0] / 2 - 1.2, 0], b: [xs[0] - W[0] / 2 - 1.2, Ltot], text: `ℓ ${r4(Ltot)} mm` });
+  dims.push({ a: [xs[0], Ltot / 2], b: [xs.at(-1), Ltot / 2], text: `W ${W.map(r4).join('/')} · S ${S.map(r4).join('/')} mm`, dy: 0.6 });
+  // netlists: the source netlist with the feeds (as built, with connectors added later) / feed stubs
+  // (core, between the part's reference planes), and the capacitors realised where they were ideal
+  const transform = (feed) => {
+    let lines = d.text.split(/\r?\n/).filter(l => !/^\s*\.layout\b/i.test(l));
+    for (const t of taps) {
+      const ti = lines.findIndex(l => new RegExp(`^\\s*tee\\s+${t.tee.name}\\b`, 'i').test(l));
+      lines[ti] = lines[ti].replace(new RegExp(`(\\s)${t.port.node}(\\s)`), `$1${t.port.node}_k$2`);
+      lines.splice(ti + 1, 0, `T${t.port.node}_f ${t.port.node} ${t.port.node}_k W=${r4(t.wf)}mm len=${r4(feed(t))}mm`);
+    }
+    for (const c of caps.filter(c => c.realised)) {
+      const re = c.ideal ? new RegExp(`^\\s*${c.name}\\s+${c.node}\\s+0\\s`) : new RegExp(`^\\s*cap\\s+${c.name}\\s`, 'i');
+      const ci = lines.findIndex(l => re.test(l));
+      if (ci < 0) continue;
+      const v = c.via;
+      lines[ci] = `cap ${c.name} ${c.node} C=${+(c.C * 1e12).toPrecision(6)}p type=${c.type}${c.type === 'smd' ? ` pkg=${c.pkg}` : ''}${c.type === 'printed' ? '' : ` d=${v.d}mm n=${v.n}`}   # realised from the ideal ${+(c.Ceff * 1e12).toPrecision(6)} pF (effective at f0)`;
+    }
+    return lines;
+  };
+  const asBuilt = transform(t => feedLen + stub);
+  const ti = asBuilt.findIndex(l => /^\s*\.title\b/i.test(l));
+  if (ti >= 0) asBuilt[ti] = asBuilt[ti].replace(/^\s*\.title\s+/i, '.title as built: ');
+  const netlist = asBuilt.join('\n') + '\n';
+  const coreLines = transform(() => stub);
+  if (ti >= 0) coreLines[ti] = coreLines[ti].replace(/^\s*\.title\s+/i, '.title core (between the part reference planes): ');
+  core.netlist = coreLines.join('\n') + '\n';
+  const realised = caps.filter(c => c.realised);
+  if (realised.length) notes.push(`ideal loading capacitors realised as ${capOpt.join(' ')} parts, nominal values for the same effective capacitance at f0 (${realised.map(c => `${c.name} ${r4(c.C * 1e12)} pF`).join(', ')}); exact values: use E24 parts plus trimming, or trimmers`);
+  const wide = lands.filter(l => l.pw > W[l.line] + 1e-6);
+  if (wide.length) notes.push(`via lands wider than their lines (${wide.map(l => `line ${l.line + 1}: ${r4(l.pw)} mm`).join(', ')}): not modelled`);
+  notes.push(`taps: Hammerstad tee (as Qucs) with ${taps.map(t => r4(t.wf)).join('/')} mm feeds; the part includes a ${r4(stub)} mm feed stub at each tap`);
+  return { outline, items, dims, netlist, core, notes, parts, fence: true };
+}
+const comb = (d, _, o) => resonatorArray(d, 'comb', o);
+const interdigital = (d, _, o) => resonatorArray(d, 'interdigital', o);
+
+const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital };
 export const templateNames = Object.keys(TEMPLATES);
 
 // Build the layout for a parsed netlist with a .layout statement. Returns the layout with DRC results.

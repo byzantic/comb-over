@@ -5,7 +5,11 @@
   },
   {
     "file": "combline-5pole-ro4350b.cir",
-    "name": "Comb-line 5-pole on 0.762 mm RO4350B, synthesised geometry (manual §7.6)"
+    "name": "Comb-line 5-pole on 0.762 mm RO4350B, synthesised geometry with 0603 capacitors (manual §7.6)"
+  },
+  {
+    "file": "combline-5pole-2g-ro4350b-1524.cir",
+    "name": "Comb-line 5-pole, 2 GHz 10 %, on 1.524 mm RO4350B with layout (Example 9: spec to Gerbers)"
   },
   {
     "file": "combline-4pole.cir",

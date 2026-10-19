@@ -1,0 +1,12 @@
+{
+  "structure": "comb",
+  "type": "chebyshev",
+  "n": 5,
+  "ripple": 0.1,
+  "f0": 2e9,
+  "fbw": 0.1,
+  "theta0Deg": 45,
+  "Zr": 55,
+  "er": 3.66,
+  "R0": 50
+}

@@ -437,6 +437,18 @@ export function boardProject(layout, opts = {}) {
       L.push(`\t(segment\n\t\t(start ${num(pts[i][0])} ${num(pts[i][1])})\n\t\t(end ${num(pts[i + 1][0])} ${num(pts[i + 1][1])})\n\t\t(width ${num(f.width)})\n\t\t(layer "F.Cu")\n\t\t(net ${nets[f.node][0]})\n\t\t(uuid ${q(uuid())})\n\t)`);
     }
   });
+  // other parts of the layout (#15: loading capacitors on the resonator ends), with their nets
+  const parts = layout.parts ?? [];
+  parts.forEach((p, k) => {
+    if (p.kind !== 'cap') return;
+    const opt = { type: p.type, pkg: p.pkg, a: p.a, via: p.via };
+    const lf = capFootprint(opt);
+    files[`${lib.lib}.pretty/${lf.name}.kicad_mod`] = lf.text;
+    const value = p.type === 'printed' ? 'printed pad' : `${+(p.C * 1e12).toPrecision(3)}pF${p.type === 'trimmer' ? ' (trimmer setting)' : ''}`;
+    const emb = capFootprint({ ...opt, lib: lib.lib, embed: { at: p.at, rot: rotTo(p.dir) }, nets: { hot: nets[p.node], gnd: nets.GND }, ref: `C${k + 1}`, value, uuid });
+    L.push(emb.text.trim().split('\n').map(l => '\t' + l).join('\n'));
+    connBoxes.push(p.bbox);
+  });
   // stitching vias (grid) and fences along the feeds; only where the top pour will be, so every via
   // joins both pours: clear of signal copper by topClr, outside the part's keepout, inside the board
   const o = layout.outline;
@@ -452,6 +464,15 @@ export function boardProject(layout, opts = {}) {
   for (const s of trackSegs) {                                  // fences first, so the grid fills around them
     const l = dist2(s.a, s.b), ux = (s.b[0] - s.a[0]) / l, uy = (s.b[1] - s.a[1]) / l, off = s.w / 2 + (topPour ? topClr : clearance) + vr + 0.1;
     for (let u = 0; u <= l + 1e-9; u += pitch / 2) for (const sg of [1, -1]) add([s.a[0] + ux * u - uy * off * sg, s.a[1] + uy * u + ux * off * sg]);
+  }
+  // fence ring just outside the RF keepout (filter templates): a closed row of vias round the part,
+  // broken only where a feed or a part crosses it
+  if (layout.fence) {
+    const r = inflateRect(bboxOf(core), keep + vr + 0.06), per = 2 * (r.x1 - r.x0 + r.y1 - r.y0), k = Math.ceil(per / (pitch / 2));
+    for (let i = 0; i < k; i++) {
+      let u = i * per / k; const w = r.x1 - r.x0, hh = r.y1 - r.y0;
+      add(u < w ? [r.x0 + u, r.y0] : (u -= w) < hh ? [r.x1, r.y0 + u] : (u -= hh) < w ? [r.x1 - u, r.y1] : [r.x0, r.y1 - (u - w)]);
+    }
   }
   const gx0 = bx0 + ((bx1 - bx0) % pitch) / 2, gy0 = by0 + ((by1 - by0) % pitch) / 2;
   for (let y = gy0; y <= by1; y += pitch) for (let x = gx0; x <= bx1; x += pitch) add([x, y]);
@@ -473,12 +494,16 @@ export function boardProject(layout, opts = {}) {
   files[`${name}.kicad_pcb`] = board;
   files[`${name}.kicad_pro`] = projectFile(name, { clearance, minTrack, minDrill: (fab.minDrill ?? 0.3) * 1e3, edgeClr });
   files[`${name}-asbuilt.cir`] = layout.netlist;
-  if (conn) files[`${name}.kicad_dru`] = `(version 1)\n(rule "Edge-launch connector pads meet the board edge"\n\t(constraint edge_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.memberOfFootprint('J*')"))\n`;
+  const dru = [];
+  if (conn) dru.push(`(rule "Edge-launch connector pads meet the board edge"\n\t(constraint edge_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.memberOfFootprint('J*')"))`);
+  if (parts.length) dru.push(`(rule "Loading capacitors sit on the resonator ends of the RF part"\n\t(constraint courtyard_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.memberOfFootprint('C*') || B.memberOfFootprint('C*')"))`);
+  if (dru.length) files[`${name}.kicad_dru`] = `(version 1)\n${dru.join('\n')}\n`;
   files['README.txt'] += [
     '',
     'Board (KiCad project)',
     `  ${name}.kicad_pro / .kicad_pcb   open the .kicad_pro in KiCad 9`,
     `  ${name}-asbuilt.cir              the whole board as laid out (part + feeds), for comb-over`,
+    ...(parts.length ? [`  - ${parts.length} loading capacitors C1..C${parts.length} on the resonator ends (Value = nominal capacitance; see the as-built netlist)`] : []),
     conn ? `  - ${layout.feeds.length} ports J1..J${layout.feeds.length}: ${conn.name} (${conn.footprint} pads, launch taper to the feed width, 3 ground vias per ground pad); ${name}.kicad_dru lets their pads meet the board edge`
       : `  - ${layout.feeds.length} ports J1..J${layout.feeds.length}: placeholder pads at the board edge (connector=none)`,
     ...(layout.warnings || []).map(w => `  - WARNING: ${w}`),
@@ -545,17 +570,23 @@ export function zip(files, root = '') {
 // ---------------------------------------------------------------- loading-capacitor footprints (#14)
 // One footprint per option, in the capacitor-local frame of js/capacitors.js (origin at the resonator
 // end, +x away from the line). Pad 1 = hot side (resonator), pad 2 = ground (with its vias).
-export function capFootprint({ type, pkg = '0603', a, via = { d: 0.3, n: 2 }, name }) {
+export function capFootprint({ type, pkg = '0603', a, via = { d: 0.3, n: 2 }, name, embed, nets, ref = 'C**', value, lib, uuid: uuidIn }) {
   const g = capGeometry({ type, pkg, a, via });
   const nm = name || (type === 'smd' ? `CAP_${pkg}_GND${via.n}V` : type === 'trimmer' ? `CAP_TZC3_GND${via.n}V` : `CAP_PRINTED_${num(a).replace('.', 'p')}mm`);
-  const uuid = uuidFactory(`cap:${nm}`);
-  const L = [`(footprint ${q(nm)}`, `\t(version ${KICAD_BOARD_VERSION})\n\t(generator ${q(GENERATOR)})\n\t(generator_version "9.0")`, '\t(layer "F.Cu")'];
+  const uuid = uuidIn ?? uuidFactory(`cap:${nm}`);
+  // embedded in a board: library-qualified name, placement, pad rotation and nets (as smaFootprint)
+  const rot = embed?.rot ? ` ${embed.rot}` : '';
+  const netTok = (k) => (nets?.[k] ? `\n\t\t(net ${nets[k][0]} ${q(nets[k][1])})\n\t\t(pinfunction ${q(k === 'hot' ? '1' : '2')})\n\t\t(pintype "passive")` : '');
+  const L = [`(footprint ${q(embed ? `${lib}:${nm}` : nm)}`];
+  if (!embed) L.push(`\t(version ${KICAD_BOARD_VERSION})\n\t(generator ${q(GENERATOR)})\n\t(generator_version "9.0")`);
+  L.push('\t(layer "F.Cu")');
+  if (embed) L.push(`\t(uuid ${q(uuid())})\n\t(at ${num(embed.at[0])} ${num(embed.at[1])}${rot})`);
   const src = type === 'smd' ? `pads from KiCad Capacitor_SMD:${SMD_PACKAGES[pkg].kicad}` : type === 'trimmer' ? `pads from KiCad Capacitor_SMD:${TRIMMER_FOOTPRINT.kicad} (Murata TZC3)` : 'square pad to the ground plane';
   const desc = `comb-over loading capacitor (${type}${type === 'smd' ? ' ' + pkg : ''}): pad 1 on the resonator end, pad 2 to ground${g.vias.length ? ` through ${g.vias.length} vias` : ''}; ${src}`;
   L.push(`\t(descr ${q(desc)})`, '\t(tags "comb-over capacitor RF")');
   const bb = { x0: Math.min(...g.crt.map(p => p[0])), x1: Math.max(...g.crt.map(p => p[0])), y0: Math.min(...g.crt.map(p => p[1])), y1: Math.max(...g.crt.map(p => p[1])) };
-  L.push(textProp('Reference', 'C**', [(bb.x0 + bb.x1) / 2, bb.y0 - 1], 'F.Fab', uuid()));
-  L.push(textProp('Value', nm, [(bb.x0 + bb.x1) / 2, bb.y1 + 1], 'F.Fab', uuid(), { hide: true }));
+  L.push(textProp('Reference', ref, [(bb.x0 + bb.x1) / 2, bb.y0 - 1], 'F.Fab', uuid()));
+  L.push(textProp('Value', value ?? nm, [(bb.x0 + bb.x1) / 2, bb.y1 + 1], 'F.Fab', uuid(), { hide: true }));
   L.push(textProp('Datasheet', '', [0, 0], 'F.Fab', uuid(), { hide: true }));
   L.push(textProp('Description', desc, [0, 0], 'F.Fab', uuid(), { hide: true }));
   L.push(`\t(attr ${type === 'printed' ? 'smd exclude_from_pos_files exclude_from_bom' : 'smd'})`);
@@ -564,14 +595,14 @@ export function capFootprint({ type, pkg = '0603', a, via = { d: 0.3, n: 2 }, na
   const rectPad = (n, poly, layers, round) => {
     const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    return `\t(pad ${q(n)} smd ${round ? 'roundrect' : 'rect'}\n\t\t(at ${num(cx)} ${num(cy)})\n\t\t(size ${num(Math.max(...xs) - Math.min(...xs))} ${num(Math.max(...ys) - Math.min(...ys))})\n\t\t(layers ${layers})${round ? '\n\t\t(roundrect_rratio 0.25)' : ''}\n\t\t(uuid ${q(uuid())})\n\t)`;
+    return `\t(pad ${q(n)} smd ${round ? 'roundrect' : 'rect'}\n\t\t(at ${num(cx)} ${num(cy)}${rot})\n\t\t(size ${num(Math.max(...xs) - Math.min(...xs))} ${num(Math.max(...ys) - Math.min(...ys))})\n\t\t(layers ${layers})${round ? '\n\t\t(roundrect_rratio 0.25)' : ''}${netTok(n === '1' ? 'hot' : 'gnd')}\n\t\t(uuid ${q(uuid())})\n\t)`;
   };
   const round = type === 'smd';                                  // KiCad's chip-capacitor pads are roundrects
   const part = '"F.Cu" "F.Mask" "F.Paste"';
   if (type === 'printed') L.push(rectPad('1', g.hot[0], '"F.Cu" "F.Mask"', false));
   else {
     L.push(rectPad('1', g.hot[0], part, round), rectPad('2', g.cold[0], part, round), rectPad('2', g.cold[1], '"F.Cu" "F.Mask"', false));
-    for (const v of g.vias) L.push(`\t(pad "2" thru_hole circle\n\t\t(at ${num(v.x)} ${num(v.y)})\n\t\t(size ${num(v.pad)} ${num(v.pad)})\n\t\t(drill ${num(v.drill)})\n\t\t(layers "*.Cu")\n\t\t(remove_unused_layers no)\n\t\t(zone_connect 2)\n\t\t(uuid ${q(uuid())})\n\t)`);
+    for (const v of g.vias) L.push(`\t(pad "2" thru_hole circle\n\t\t(at ${num(v.x)} ${num(v.y)}${rot})\n\t\t(size ${num(v.pad)} ${num(v.pad)})\n\t\t(drill ${num(v.drill)})\n\t\t(layers "*.Cu")\n\t\t(remove_unused_layers no)${netTok('gnd')}\n\t\t(zone_connect 2)\n\t\t(uuid ${q(uuid())})\n\t)`);
   }
   L.push('\t(embedded_fonts no)', ')');
   return { name: nm, text: L.join('\n') + '\n', geometry: g };

@@ -42,13 +42,13 @@ export function goalCost(d, res, data = null) {
 }
 
 // Generator: yields {iter, cost, best:{name:value}} periodically; returns final.
-export function* optimise(text, { maxiter, files = null } = {}) {
+export function* optimise(text, { maxiter, files = null, freqs: freqsIn = null } = {}) {
   const base = parseNetlist(text);
   const tuned = base.params.filter(p => p.tune);
   if (!tuned.length) throw new Error('no ".param … tune lo hi" parameters to optimise');
   if (!base.goals.length) throw new Error('no .goal statements');
   maxiter = maxiter ?? base.opt.maxiter ?? 400;
-  const freqs = goalFreqs(base);
+  const freqs = freqsIn ?? goalFreqs(base);                   // an explicit list (e.g. dense only where it matters)
   if (!freqs.length) throw new Error('no sweep points fall inside the goal frequency ranges');
   const data = attachData(base, freqs, files).data;          // imported S-parameters on the goal points (#17)
   const n = tuned.length;

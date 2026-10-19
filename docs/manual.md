@@ -146,6 +146,7 @@ Unknown directives are ignored with a warning.
 | `wire N1 N2 [N3 …]` | Joins nodes (a zero-ohm short). Use this instead of a 0 Ω resistor. |
 | `cap <name> N1 [N2] C=.. [type=ideal\|smd\|printed\|trimmer] [pkg=0402\|0603\|0805] [Q=..] [esl=..] [d=..] [n=..] [a=..] [series=E12\|E24] [mpn=..]` | A loading capacitor with its parasitic model (§7.5): to ground unless N2 is given. |
 | `via <name> N1 [N2] d=.. [n=..] [h=..] [Q=..]` | `n` plated vias of drill `d` from N1 to ground (or to N2), as the Goldfarb–Pucel inductance (§4.7). `h` defaults to the `.substrate` height. |
+| `tee <name> A B SIDE Wa=.. Wb=.. W2=..` | Microstrip T-junction on the `.substrate` (§4.7): main line A–B (arm widths Wa, Wb), side arm SIDE of width W2. Its reference planes are the edges of the crossing strips. |
 | `cline NAME … end` | Coupled multiconductor section (§4). |
 
 Element names follow SPICE: the first letter selects the type (`C1`, `Cload`, `Lchoke`, `T5`).
@@ -403,7 +404,7 @@ The line model is pure TEM, so it has no parasitics of its own (§9.3). The layo
 | **Open end** | Equivalent length extension Δl of the open-circuited line (Kirschning, Jansen & Koster, *Electronics Letters* 1981; stated accuracy about 2.5 % for 0.01 ≤ W/h ≤ 100, εr ≤ 128). | Marchand main line: a `Tmain_oe … len=Δl` stub on the open end in the as-built and core netlists. |
 | **Via to ground** | L = (μ0/2π)[h ln((h + √(r² + h²))/r) + 1.5(r − √(r² + h²))], r = d/2 (Goldfarb & Pucel, *IEEE MGWL* 1991). n vias in parallel give L/n, with mutual coupling neglected, which is optimistic for closely spaced vias. | `via` element; Marchand grounded ends (a stub to the via-pad centre plus `via … n=2`). |
 | **Edge-connector launch** | Placeholder series L / shunt C at each port, with parameters `sma_l` and `sma_c`. | Every connector port (§8.4). |
-| **T-junction** | Not yet. | Needed only by tapped comb-line and interdigital layouts (issue #15). |
+| **T-junction** | Hammerstad's model as implemented in Qucs (`mstee`): a junction node with a shunt susceptance B<sub>T</sub>, reached from each main arm through a line of length W2/2 − d and an ideal transformer, and from the side arm through a line of length max(Wa, Wb)/2 − d2 (negative for a wide main line). Plane shifts, transformer ratios and B<sub>T</sub> follow the equivalent parallel-plate widths and the first higher-order-mode frequency f<sub>p</sub> = 0.4 Z/h (GHz, h in mm). | `tee` element; the tap of every synthesised comb-line or interdigital filter (§7.6), where the junction spans the feed width of the resonator. |
 
 **Typical values:**
 
@@ -414,7 +415,9 @@ The line model is pure TEM, so it has no parasitics of its own (§9.3). The layo
 
 **Effect on the Marchand demo.** On 1.524 mm RO4350B, the 2 × 0.3 mm vias at each grounded end (0.25 nH, j1.6 Ω at 1 GHz) and the 0.52 mm open-end extension move the outputs by less than 0.1 dB at f0.
 
-**Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.
+**The tee as a network.** The transformers are folded into the main-arm lines (Y′ = TᵀY<sub>line</sub>T with T = diag(1, 1/T<sub>x</sub>)), so the junction is a 4-node admittance block over the three arms and the internal junction node, stamped like a line section. It is lossless; the arms' conductor and dielectric loss over a few hundred micrometres is ignored. At low frequency it reduces to the ideal three-way junction (S11 = −1/3, S21 = 2/3).
+
+**Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee is checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (`tests/tee.mjs`); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.
 
 
 ## 5. Plots and trace expressions
@@ -637,42 +640,44 @@ The designer warns, in the netlist comments and the status line, when an option 
 - self-resonance below 3 f0;
 - more than 1 dB of loss from capacitor Q.
 
-**Footprints.** `capFootprint()` in `js/kicad.js` gives each option's KiCad footprint: pad 1 on the resonator end, pad 2 and its via land to ground. The comb-line layouts of issue #15 place them. `node tools/kicad.mjs --caps SUBSTRATE --out DIR` writes them as a library, and CI checks that library in KiCad.
+**Footprints.** `capFootprint()` in `js/kicad.js` gives each option's KiCad footprint: pad 1 on the resonator end, pad 2 and its via land to ground. The comb-line layout template places them on the board (§8.1, §8.3). `node tools/kicad.mjs --caps SUBSTRATE --out DIR` writes them as a library, and CI checks that library in KiCad.
 
 ### 7.6 Physical geometry in microstrip
 
-With **Realise in microstrip** set to a substrate, the dialog goes on from the homogeneous design to a buildable geometry. It produces a netlist whose array is given by its strip widths and gaps (`geom msl W [...] S [...]`, solved by the field solver with the substrate's copper thickness, §4.6). The netlist also has a `via` at every shorted end and the open-end fringing at every open end. The computation takes from a few seconds to about 20 s, and runs in the background. The steps:
+With **Realise in microstrip** set to a substrate, the dialog goes on from the homogeneous design to a buildable geometry. It produces a netlist whose array is given by its strip widths and gaps (`geom msl W [...] S [...]`, solved by the field solver with the substrate's copper thickness, §4.6). The netlist also has a `via` at every shorted end, the open-end fringing at every open end, a `tee` junction at each tap, the loading capacitors as chosen under **Loading capacitors** (§7.5), and a `.layout` line for the board (§8.1). The computation takes from a few seconds to about 40 s, and runs in the background. The steps:
 
 1. **Map the admittances.** Find widths and gaps (symmetric) whose field-solved characteristic admittance matrix Yc matches the design's Y0 on the diagonal and in the adjacent couplings. Newton's method in ln W and ln S does this, first with zero-thickness strips, then with the real copper. Widths and gaps below the substrate's fabrication limits are clamped, with a warning.
 2. **Coupled-resonator refinement on the physical model.** The model is the inhomogeneous multi-mode section, with via inductance (Goldfarb–Pucel) at each shorted end and the KJK open-end Δl as a capacitance at each open end. Throughout, the other resonators are shorted at their open ends, as in §7.2:
    - each resonator is tuned to f0: its own loading capacitor for comb-line, the common length for interdigital;
    - each gap is adjusted until the pair's split-mode coupling equals the prototype's;
-   - the tap and the end capacitor are set from the S11 group delay of the singly loaded first resonator.
+   - the tap and the end capacitor are set from the S11 group delay of the singly loaded first resonator, with the tap's T-junction in place (the junction spans the 50 Ω feed width, so it changes with the tap position only through the tee model).
+   - With SMD or trimmer capacitors, each resonator is tuned with the part's own model (pad capacitance, ESL, ground vias), and the nominal value is the one whose effective capacitance at f0 is right. Interdigital filters have no capacitors; the end resonators' trim is a short extension of the line beyond the array (`ext1`).
 
    The reduced susceptance comes directly from the section's admittance matrix: B = B<sub>OO</sub> − B<sub>OS</sub>(B<sub>SS</sub> − 1/ωL<sub>via</sub>)⁻¹B<sub>SO</sub> + ω(C<sub>oe</sub> + C<sub>l</sub>).
-3. **Polish on the actual spec.** The goal optimiser works on the netlist's goals: return loss across the ripple band, and the −3 dB band at most 3 % wider than ideal. It moves the gaps, widths, length, loading capacitors and tap. For speed, C and L are linearised in the widths and gaps around the last field solve. Each step is limited to ±15 % (a trust region), and the geometry is solved again exactly after each round until the exact model meets the goals.
+3. **Polish on the actual spec.** The goal optimiser works on the netlist's goals: return loss across the ripple band, and the −3 dB band at most 3 % wider than ideal. It moves the gaps, widths, length, loading capacitors and tap. The response shape is judged lossless: lines and capacitors without their Q. For speed, C and L are linearised in the widths and gaps around the last field solve. Each step is limited to ±15 % (a trust region), and the geometry is solved again exactly after each round until the exact model meets the goals.
 
 **Why step 3 is needed.** In microstrip, coupling between non-adjacent resonators is significant, because it is mostly inductive and falls off slowly. For the 5-pole comb below, k13/k12 ≈ 0.2. The nearest-neighbour design then gives only 6–10 dB return loss in these examples, and no choice of adjacent couplings can make the response exactly Chebyshev. The cross-couplings also put a transmission zero above the band (at 2.1 GHz for that comb), so the skirts come out asymmetric: steeper above and gentler below. The polish therefore aims at the return loss and the bandwidth, and leaves the skirt shapes to the physics.
 
-**Results** (also in `tests/synth-geom.mjs`; the netlists are `examples/combline-5pole-ro4350b.cir` and `examples/interdigital-3pole-fr4.cir`):
+**Results** (`tests/synth-geom.mjs` checks the same designs with ideal capacitors; the netlists are `examples/combline-5pole-ro4350b.cir`, with 0603 capacitors, and `examples/interdigital-3pole-fr4.cir`):
 
 | | 5-pole comb-line, 2 GHz, 5 %, 0.1 dB, θ0 45°, Zr 60 Ω on 0.762 mm RO4350B | 3-pole interdigital, 1.5 GHz, 10 %, 0.1 dB, Zr 50 Ω on 1.6 mm FR-4 |
 |---|---|---|
-| geometry | W 1.147 / 1.186 / 1.183 mm, S 2.861 / 3.676 mm, ℓ 11.26 mm, tap 2.04 mm | W 2.87 / 2.47 mm, S 2.62 mm, ℓ 25.70 mm, tap 4.57 mm |
-| return loss, central 80 % of the band | 16.51 dB (ideal 16.43) | 16.88 dB (ideal 16.43) |
-| centre | 1.9977 GHz | 1.4983 GHz |
-| −3 dB bandwidth | 5.668 % (ideal 5.674 %) | 14.36 % (ideal 13.89 %) |
-| insertion loss at f0 | 2.15 dB (modal Q ≈ 172) | 2.43 dB (modal Q ≈ 51, FR-4 tan δ 0.02) |
+| geometry | W 1.205 / 1.211 / 1.240 mm, S 2.437 / 3.516 mm, ℓ 11.51 mm, tap 2.28 mm | W 3.006 / 2.476 mm, S 2.488 mm, ℓ 25.67 mm, tap 4.73 mm |
+| capacitors | 0603, 1.06 / 0.98 / 0.99 pF nominal | none (end extension 1.12 mm) |
+| return loss, central 80 % of the band | 16.37 dB (ideal 16.43) | 16.90 dB (ideal 16.43) |
+| centre | 1.9970 GHz | 1.5004 GHz |
+| −3 dB bandwidth | 5.555 % (ideal 5.674 %) | 14.29 % (ideal 13.89 %) |
+| insertion loss at f0 | 3.47 dB (modal Q ≈ 173; capacitor Q 300) | 2.37 dB (modal Q ≈ 51, FR-4 tan δ 0.02) |
 
-These are judged on the lossless response, as for the homogeneous synthesis; the insertion loss is reported separately. A narrow comb-line on low-loss laminate still loses about 2 dB, because the copper limits Q to about 170 at 2 GHz on 0.762 mm.
+These are judged on the lossless response, as for the homogeneous synthesis; the insertion loss is reported separately. A narrow comb-line on low-loss laminate loses about 2 dB with ideal capacitors, because the copper limits Q to about 170 at 2 GHz on 0.762 mm. The 0603 capacitors' assumed Q of 300 adds another 1.3 dB: at 5 % bandwidth every resonator Q counts. Set `Q=` on the `cap` lines from your part's datasheet. Worked example 9 doubles the bandwidth and the board thickness, which brings the loss down to 1.5 dB.
 
-**Not modelled yet:**
-- **Feed.** The tap T-junction and the feed lines to the connectors are left to the layout (issue #15). For now, each tap port sits directly on the resonator.
-- **Loading capacitors.** The capacitor realisation of §7.5 (SMD, trimmer, printed pad) isn't combined with the physical geometry yet, so the capacitors stay ideal, one per resonator (`cl1`, `cl2`, …).
+**Capacitor choice belongs in the synthesis.** An SMD part's ESL and via make its effective capacitance rise with frequency, which steepens the resonator slope and narrows the band by several per cent. With the capacitor chosen in the dialog the synthesis compensates; an ideal capacitor realised only at layout time (`.layout comb cap=…`) keeps the same C<sub>eff</sub> at f0 but not the slope.
+
+**The feed.** The tap port of the netlist sits at the side arm of the tee. The feed lines and connectors are added by the layout (§8.1), whose as-built netlist carries them.
 
 The netlist keeps `tune` ranges on every geometric parameter, so it can be optimised further with the substrate's loss included.
 
-**When it falls short.** The report and the status line say so if the return loss stays more than 1 dB below the ideal, or the bandwidth is off by more than 5 %. Another θ0 or Zr, or running the optimiser on the result, usually helps.
+**When it falls short.** The report and the status line say so if, in the lossless model, any goal is missed by more than 1 dB. Another θ0 or Zr, or running the optimiser on the result, usually helps.
 
 ## 8. Export and sharing
 
@@ -693,7 +698,7 @@ When a netlist arrives from a link of either kind and you already had a differen
 
 ### 8.1 Layout
 
-A `.layout` statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it in the **layout panel** above the plots. [Worked example 8](examples/08-coupler-to-board.md) goes from an impedance-defined coupler to a KiCad board using only the panel.
+A `.layout` statement turns sections given by physical dimensions (§4.6) into a board layout. The designer shows it in the **layout panel** above the plots. [Worked example 8](examples/08-coupler-to-board.md) goes from an impedance-defined coupler to a KiCad board using only the panel; [worked example 9](examples/09-combline-to-gerbers.md) from a filter specification to Gerbers.
 
 **The layout panel.** The netlist text stays the source of truth: every control rewrites a line of it and re-runs.
 
@@ -719,6 +724,8 @@ Hovering a copper shape in the preview shows its net and width.
 .layout coupler K                         # 4-port coupled-line coupler
 .layout schiffman CS TREF                 # C-section (far ends joined) + reference line
 .layout marchand S1 S2                    # two coupled sections, grounded secondaries
+.layout comb [cap=smd-0603]               # comb-line resonator array (from Realise in microstrip)
+.layout interdigital                      # interdigital resonator array
 ```
 
 | option | default | meaning |
@@ -731,6 +738,8 @@ Hovering a copper shape in the preview shows its net and width.
 | `gap` (marchand) | 0.5 mm or the fab minimum | separation between the two sections' secondary lines, where the outputs come out |
 | `drill` (marchand) | 0.3 mm or the fab minimum | grounding-via drill; the pad is 0.3 mm larger |
 | `vias` (marchand) | 2 | grounding vias at each grounded end |
+| `stub` (comb, interdigital) | 1 mm | length of feed-width line from the resonator edge that belongs to the part |
+| `cap` (comb) | `smd-0603` | how ideal loading capacitors in the netlist are realised: `smd-0402`/`0603`/`0805`, `trimmer`, `printed` |
 
 **What the templates do:**
 
@@ -741,6 +750,13 @@ Hovering a copper shape in the preview shows its net and width.
 - **Ground.** The back of the board is a full ground pour.
 - **Schiffman reference line.** It is lengthened by the length of the C-section's feeds, so the designed phase difference between the two networks is kept.
 - **Marchand.** The secondary lines get via pads at their grounded ends. The two sections are separated by `gap` so that both outputs can leave from between them, which adds a short uncoupled piece of main line.
+- **Comb-line and interdigital.** The templates read the resonator array from the netlist that **Realise in microstrip** writes (§7.6): the `geom msl W [...] S [...]` sections stacked along the lines, the `via` at each shorted end, a `tee` at each tap and the loading capacitors. They check that the netlist is what the template draws: every line shorted at exactly one end (all the same end for comb, alternate ends for interdigital), a tap on each outer line, each tee spanning its feed width. Then:
+  - **Resonators** are drawn as one strip each, with a via land at the shorted end (two vias of the netlist's drill, land width max(W, row + 0.2 mm)). A land wider than its line is noted, since it is not modelled.
+  - **Taps.** A feed-width stub (`stub`) leaves the outer line at the tee, and the 50 Ω feed runs from it to the edge connector. The tapped resonator, its land and the stub are the port's pad in the part.
+  - **Capacitors** (comb) are placed on the open end of each resonator as separate footprints (§7.5): pad 1 on the line, pad 2 to ground through its vias, pointing away from the array. Ideal capacitors in the netlist are realised with `cap=`, at the nominal value whose effective capacitance at f0 is the ideal one; the notes give the values.
+  - **End extensions** (interdigital `ext1`) are drawn as line beyond the array.
+  - **Board room.** The board extends the RF keepout plus a via row beyond the part (unless `margin=` and `feed=` are given), so the KiCad board gets a closed via fence (§8.3).
+  The as-built netlist renames each tee's side node and inserts the feed line (stub + feed) and the connector; the core netlist has only the stubs. In the preview all copper is on net GND, since these filters are DC shorts.
 
 **Checks.** The layout is checked against the substrate's fabrication limits:
 
@@ -758,9 +774,9 @@ For the 10 dB coupler at 5 GHz the as-built coupling is −10.25 dB, against −
 - bends;
 - coupling between the diverging feed sections;
 - the Schiffman bridge;
-- T-junctions (not used by these templates).
+- the comb-line via lands where they are wider than the line, and the capacitor footprints' own coupling to the array.
 
-It does model the discontinuities of §4.7: grounding vias (Marchand), the open end of the Marchand main line, and a tunable placeholder for each connector launch.
+It does model the discontinuities of §4.7: grounding vias, open ends, the filter taps' T-junctions, and a tunable placeholder for each connector launch. For the synthesised filters the as-built response tracks the design closely: worked example 9 moves by 0.001 % in centre and 0.07 % (relative) in −3 dB width.
 
 **SVG** downloads the preview. From the command line:
 
@@ -815,25 +831,27 @@ node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mas
 | `NAME.kicad_pro`, `NAME.kicad_pcb` | the project and board (file version 20241229) |
 | `NAME-asbuilt.cir` | the as-built netlist of the whole board (§8.1) |
 | `NAME.pretty`, `NAME.kicad_sym`, lib tables, `NAME.cir` | the component library of §8.2, which also holds the connector footprints |
-| `NAME.kicad_dru` | a custom design rule that lets the connector pads meet the board edge |
+| `NAME.kicad_dru` | custom design rules: the connector pads may meet the board edge; the loading capacitors' courtyards may overlap the part they sit on |
 
 **What is on the board:**
 
 - **The part** from §8.2, placed with its nets: one net per port node, plus GND.
 - **Ports.** `J1`…`Jn` are edge-launch SMA footprints (§8.4) on the board edge. With `connector=none` they are placeholder pads (`PORT_…`) the width of the feed.
+- **Loading capacitors** (comb-line). `C1`…`Cn`, footprints `CAP_<pkg>_GND<n>V` (§7.5) from the project library, rotated onto each resonator's open end, with pad 1 on the resonator's net (the port net on a tapped line, GND inside) and the Value the nominal capacitance.
 - **Feeds.** Port-impedance tracks along the layout's feed paths, from each port pad to the part's reference planes.
 - **Ground.**
   - A full GND pour on B.Cu.
   - A GND pour on F.Cu, kept the part's keepout distance (max(3h, 1 mm)) clear of all RF copper.
   - Stitching vias on a grid of pitch min(λ<sub>eff</sub>/10, 5 mm), at least 1.5 mm, where both pours exist.
   - Fence vias along both sides of each feed at half that pitch.
+  - For the filter templates, a fence ring just outside the part's keepout, broken only where feeds, connectors and capacitors cross it.
 - **Stack-up.** Taken from the substrate: core thickness, εr, tanδ, copper thickness and ENIG finish. KiCad's stack-up manager and impedance calculator therefore see the same board as comb-over.
 - **Design rules.** The board and project carry the fab's minimum space and trace width as the default net class clearance and track width.
 - **Notes.** The title block and a note on User.Comments record the substrate, f0, the part name and the netlist hash, and warn the fab not to substitute material or thickness.
 
 The F.Cu pour can be switched off from the command line (`--no-top-pour`). On thick substrates the 3h clearance leaves little room for it anyway. The 1.524 mm Marchand and Schiffman demos get only a few vias, while the 0.508 mm coupler gets a full fence.
 
-**Validation.** Every pull request generates KiCad projects and checks them with KiCad's own tools in the official `kicad/kicad` containers (`tools/kicad-check.sh`). The projects are the three demos, worked example 8 (converted to microstrip as the layout panel does it) and a deliberately broken board. The checks are:
+**Validation.** Every pull request generates KiCad projects and checks them with KiCad's own tools in the official `kicad/kicad` containers (`tools/kicad-check.sh`). The projects are the three demos, worked example 8 (converted to microstrip as the layout panel does it), the comb-line and interdigital filters of §7.6, worked example 9 (synthesised from its specification in CI, which must reproduce the committed netlist exactly) and a deliberately broken board. The checks are:
 
 - the footprint and symbol libraries parse;
 - every footprint re-saves identically with KiCad's writer;
@@ -952,6 +970,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node solver/cli.mjs --W w1,w2,… --S s12,… (--h H \| --stripline B) --er ER [--t T] [--cover HC] [--json]` | 2-D field solver: C, L and modal ε<sub>eff</sub> of N strips (mm; `--t` thickness, default 0) in microstrip, covered microstrip or stripline, and the `C [...] L [...]` lines for a `cline`. Method and validation: `solver/README.md`. |
 | `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
+| `node tools/synth.mjs SPEC.json\|JSON [--substrate ID] [--cap ideal\|smd-0603\|…\|trimmer] [--out FILE.cir]` | Filter synthesis headless: the dialog's design, and with `--substrate` its **Realise in microstrip** (§7.6). The report goes to stderr; exits with code 1 on warnings. |
 | `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
