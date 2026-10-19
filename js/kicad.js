@@ -291,7 +291,7 @@ function portFootprint(w, pl, { lib, embed, net, ref = 'J1', uuid = uuidFactory(
 // a launch taper to the feed width wf (a separate pad "1" without paste), and each ground pad gets
 // three thru-hole vias tying the top and bottom ground pads (and pours) together.
 const smaName = (c, wf, mode) => `${c.footprint}_${mode === 'library' ? 'L' : 'W'}${wf.toFixed(3).replace('.', 'p')}`;
-function smaFootprint(c, wf0, { lib, embed, nets, ref = 'J1', uuid = uuidFactory(`sma:${c.id}:${wf}`), drill = 0.3, mode = 'matched' } = {}) {
+function smaFootprint(c, wf0, { lib, embed, nets, ref = 'J1', uuid = uuidFactory(`sma:${c.id}:${wf0}`), drill = 0.3, mode = 'matched' } = {}) {
   const wf = Math.round(wf0 * 1000) / 1000;              // 1 µm: one footprint per feed width as named
   const name = smaName(c, wf, mode), s = c.signal, g = c.ground, Lt = launchTaper(c, wf, mode), pw = padWidth(c, wf, mode);
   const rot = embed?.rot ? ` ${embed.rot}` : '';
