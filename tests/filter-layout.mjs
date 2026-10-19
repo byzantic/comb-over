@@ -23,8 +23,9 @@ for (const [name, text, spec, n, kind] of [['comb-line 5-pole, 1.524 mm RO4350B,
   const short = L.items.filter(i => i.type === 'via' && i.role !== 'part');
   check(`${name}: two shorting vias per line (${n} lines)`, short.length === 2 * n, short.length);
   check(`${name}: resonators, a ground pour on B.Cu, two edge ports`, L.items.filter(i => i.type === 'zone' && i.layer === 'B.Cu').length === 1 && L.items.filter(i => i.type === 'port').length === 2);
-  check(`${name}: the part has a pad per line, the tapped lines numbered as the ports, tied to ground (DC-shorted filter)`,
-    L.core.pads.length === n && L.core.pads.filter(p => p.node && p.node !== 'GND').length === 2 && L.core.ties.length === 1 && L.core.ties[0].length === 3);
+  check(`${name}: the part has a pad per line, the tapped lines numbered as the ports, all tied to ground (DC-shorted filter); comb-line resonators carrying a capacitor are nets of their own`,
+    L.core.pads.length === n && L.core.pads.filter(p => /^t\d$/.test(p.node)).length === 2 && L.core.ties.length === 1
+    && L.core.ties[0].length === (kind === 'comb' ? n + 1 : 3) && L.core.pads.filter(p => !/^t\d$/.test(p.node)).every(p => p.node === (kind === 'comb' ? `r${L.core.pads.indexOf(p) + 1}` : 'GND')));
   const nl = L.netlist;
   check(`${name}: as-built netlist: no .layout, a feed line at each tap, tees moved to the inner node`,
     !/^\.layout/m.test(nl) && (nl.match(/^Tt\d_f t\d(_lc)? t\d_k W=[\d.]+mm len=[\d.]+mm/mg) || []).length === 2 && (nl.match(/^tee TJ\d ta\d tb\d t\d_k /mg) || []).length === 2 && /^\.title as built: /m.test(nl));
@@ -42,7 +43,7 @@ for (const [name, text, spec, n, kind] of [['comb-line 5-pole, 1.524 mm RO4350B,
   check('comb: one 0603 part per resonator, at the open end, with a courtyard and two vias each',
     L.parts.length === 5 && L.parts.every(p => p.kind === 'cap' && p.type === 'smd' && p.pkg === '0603' && p.via.n === 2) &&
     L.items.filter(i => i.type === 'courtyard' && /^C\d$/.test(i.name)).length === 5 && L.items.filter(i => i.type === 'via' && i.role === 'part').length === 10);
-  check('comb: the outer capacitors connect to the port nets, the inner ones to ground', L.parts.filter(p => p.node !== 'GND').map(p => p.node).sort().join() === 't1,t5');
+  check('comb: the outer capacitors connect to the port nets, the inner ones to their resonator nets', L.parts.map(p => p.node).join() === 't1,r2,r3,r4,t5');
   // ideal capacitors in the netlist are realised as parts for the same effective capacitance
   const ideal = COMB.replace(/^cap (C\d) (r\d) C=(cl\d) .*$/mg, '$1 $2 0 $3').replace(/^\.layout comb$/m, '.layout comb cap=smd-0603');
   const Li = lay(ideal);
@@ -78,13 +79,16 @@ for (const [name, text, spec, n, kind] of [['comb-line 5-pole, 1.524 mm RO4350B,
   check('board: references C1…C5, values the nominal capacitances (pF, 3 significant figures)', caps.every(f => { const r = f.match(/"Reference" "(C\d)"/)[1], v = +f.match(/"Value" "([\d.]+)pF"/)[1]; return Math.abs(v - want[r]) < 0.006; }));
   const padNets = (f) => [...f.matchAll(/\(pad "(\d)"[\s\S]*?\(net \d+ "([^"]+)"\)/g)].map(m => `${m[1]}:${m[2]}`);
   const byRef = Object.fromEntries(caps.map(f => [f.match(/"Reference" "(C\d)"/)[1], padNets(f)]));
-  check('board: capacitor pad 1 on the resonator net (t1/t5 on the tapped lines, GND inside), pad 2 and its vias on GND',
-    byRef.C1.includes('1:t1') && byRef.C5.includes('1:t5') && byRef.C3.includes('1:GND') && Object.values(byRef).every(p => p.filter(x => x.startsWith('2:')).every(x => x === '2:GND')), JSON.stringify(byRef));
+  check('board: capacitor pad 1 on the resonator net (t1/t5 on the tapped lines, r2…r4 inside), pad 2 and its vias on GND',
+    byRef.C1.includes('1:t1') && byRef.C5.includes('1:t5') && byRef.C3.includes('1:r3') && Object.values(byRef).every(p => p.filter(x => x.startsWith('2:')).every(x => x === '2:GND')), JSON.stringify(byRef));
   check('board: rotated to point away from the open ends', caps.every(f => /^\(at [-\d.]+ [-\d.]+ (90|270)\)$/.test(f.match(/\(at [^)]*\)/)[0])));
-  check('.kicad_dru: courtyard rule for the capacitors (they sit on the RF part by design)', /courtyard_clearance \(min 0mm\)\)\n\t\(severity ignore\)\n\t\(condition "A\.memberOfFootprint\('C\*'\) \|\| B\.memberOfFootprint\('C\*'\)"\)/.test(b.files[`${lib}.kicad_dru`]));
+  check('.kicad_dru: courtyard rule for the capacitors (they sit on the RF part by design)', /courtyard_clearance \(min 0mm\)\)\n\t\(severity ignore\)\n\t\(condition "A\.Reference == 'C\*' \|\| B\.Reference == 'C\*'"\)/.test(b.files[`${lib}.kicad_dru`]));
   check('board: as-built netlist written with the feed lines and connectors', /^Tt1_f /m.test(b.files[`${lib}-asbuilt.cir`]));
   const vias = [...pcb.matchAll(/\n\t\(via\n\t\t\(at ([-\d.]+) ([-\d.]+)\)/g)].map(m => [+m[1], +m[2]]);
-  check('board: stitching/fence vias, most of them in the ring round the part (via fence)', vias.length >= 20 && new Set(vias.map(v => v[1].toFixed(2))).size < vias.length * 0.6, vias.length);
+  check('board: stitching/fence vias, most of them in the ring round the part (via fence)', vias.length >= 12 && new Set(vias.map(v => v[1].toFixed(2))).size < vias.length * 0.6, vias.length);
+  const sym = b.files[`${lib}.kicad_sym`];
+  check('symbol: pins for the ports, the resonator nets r2…r4 and GND', ['t1', 't5', 'r2', 'r3', 'r4', 'GND'].every(n => sym.includes(`(name "${n}"`)));
+  check('.kicad_dru: hole clearance relaxed only inside the RF part (shorting vias in a net-tied resonator)', /hole_clearance \(min 0mm\)\)\n\t\(condition "A\.memberOfFootprint\('RF\*'\) && B\.memberOfFootprint\('RF\*'\)"\)/.test(b.files[`${lib}.kicad_dru`]));
   check('board is deterministic', boardProject(lay(COMB), { source: COMB, date: '2026-01-01' }).board === pcb);
 }
 

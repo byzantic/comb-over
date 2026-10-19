@@ -492,6 +492,10 @@ function resonatorArray(d, kind, o) {
     } else if (!GROUND.has(shortTop[i] ? endA(i) : endB(i))) throw new Error(`.layout ${kind}: line ${i + 1} has no via at its shorted end`);
     core.pads.push({ num: G, node: 'GND', polys, at: [x, Ltot / 2] });
   }
+  // comb-line with capacitors: each untapped resonator is its own net (r2, …), tied to GND in the part,
+  // so that its capacitor joins two nets (a GND–GND part would be an unrouted connection to KiCad)
+  let nextNum = +G;
+  const ownNet = kind === 'comb' && caps.length > 0;
   // taps: feed stub in the part, feed to the board edge
   const feedItems = [];
   for (const t of taps) {
@@ -508,7 +512,8 @@ function resonatorArray(d, kind, o) {
     core.refs.push(refOf(d, t.port.node, [xr, t.y], [t.dir, 0], t.wf, t.wf));
     feedItems.push({ t, xedge });
   }
-  core.ties.push([...taps.map(t => portNum(d, t.port.node)), G]);
+  if (ownNet) core.pads.forEach((p, i) => { if (p.num === G) { p.num = String(++nextNum); p.node = openNode(i); } });
+  core.ties.push([...taps.map(t => portNum(d, t.port.node)), G, ...core.pads.filter(p => +p.num > +G).map(p => p.num)]);
   // end extensions (open single-line stubs at an open end: the interdigital end trim)
   for (let i = 0; i < N; i++) {
     const node = openNode(i);
@@ -532,7 +537,7 @@ function resonatorArray(d, kind, o) {
     g.cold.forEach(poly => items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: tp(poly), width: Math.min(...[0, 1].map(k => Math.max(...poly.map(p => p[k])) - Math.min(...poly.map(p => p[k])))), label: `${c.name} pad 2`, role: 'part' }));
     g.vias.forEach(v => { const [vx, vy] = T([v.x, v.y]); items.push({ type: 'via', x: vx, y: vy, drill: v.drill, pad: v.pad, net: 'GND', role: 'part' }); });
     items.push({ type: 'courtyard', name: c.name, pts: tp(g.crt) });
-    parts.push({ kind: 'cap', name: c.name, type: c.type, pkg: c.pkg, a, via: c.via ?? { d: 0.3, n: 2 }, at: [xs[i], yo], dir, node: taps.find(t => t.line === i)?.port.node ?? 'GND', C: c.C, Ceff: c.Ceff, bbox: tp(g.crt) });
+    parts.push({ kind: 'cap', name: c.name, type: c.type, pkg: c.pkg, a, via: c.via ?? { d: 0.3, n: 2 }, at: [xs[i], yo], dir, node: core.pads[i].node, C: c.C, Ceff: c.Ceff, bbox: tp(g.crt) });
   }
   // board
   const allPts = items.filter(it => it.pts).flatMap(it => it.pts).concat(items.filter(it => it.type === 'via').map(v => [v.x, v.y]));

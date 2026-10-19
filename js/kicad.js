@@ -159,6 +159,9 @@ export function symbol(layout, opts = {}) {
     const s = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'top' : 'bottom');
     side[s].push({ num: r.num, name: r.node, key: s === 'left' || s === 'right' ? r.at[1] : r.at[0] });
   }
+  // pads that are neither ports nor ground (comb-line resonators carrying a loading capacitor): top
+  const refNums = new Set(core.refs.map(r => r.num)), seen = new Set();
+  for (const p of core.pads) if (p.node !== 'GND' && !refNums.has(p.num) && !seen.has(p.num)) { seen.add(p.num); side.top.push({ num: p.num, name: p.node, key: p.at[0] }); }
   const gnd = [...new Set(core.vias.map(v => v.num).concat(core.pads.filter(p => p.node === 'GND').map(p => p.num)))];
   for (const g of gnd) side.bottom.push({ num: g, name: 'GND', key: Infinity });
   for (const s of Object.values(side)) s.sort((a, b) => a.key - b.key);
@@ -448,6 +451,7 @@ export function boardProject(layout, opts = {}) {
     const emb = capFootprint({ ...opt, lib: lib.lib, embed: { at: p.at, rot: rotTo(p.dir) }, nets: { hot: nets[p.node], gnd: nets.GND }, ref: `C${k + 1}`, value, uuid });
     L.push(emb.text.trim().split('\n').map(l => '\t' + l).join('\n'));
     connBoxes.push(p.bbox);
+    signal.push(p.bbox);           // the F.Cu pour keeps its clearance from the part, so no via there would reach it
   });
   // stitching vias (grid) and fences along the feeds; only where the top pour will be, so every via
   // joins both pours: clear of signal copper by topClr, outside the part's keepout, inside the board
@@ -468,7 +472,9 @@ export function boardProject(layout, opts = {}) {
   // fence ring just outside the RF keepout (filter templates): a closed row of vias round the part,
   // broken only where a feed or a part crosses it
   if (layout.fence) {
-    const r = inflateRect(bboxOf(core), keep + vr + 0.06), per = 2 * (r.x1 - r.x0 + r.y1 - r.y0), k = Math.ceil(per / (pitch / 2));
+    const bb = bboxOf(core);
+    for (const pt of parts.flatMap(q => q.bbox ?? [])) { bb.x0 = Math.min(bb.x0, pt[0]); bb.y0 = Math.min(bb.y0, pt[1]); bb.x1 = Math.max(bb.x1, pt[0]); bb.y1 = Math.max(bb.y1, pt[1]); }   // round the capacitors too
+    const r = inflateRect(bb, keep + vr + 0.06), per = 2 * (r.x1 - r.x0 + r.y1 - r.y0), k = Math.ceil(per / (pitch / 2));
     for (let i = 0; i < k; i++) {
       let u = i * per / k; const w = r.x1 - r.x0, hh = r.y1 - r.y0;
       add(u < w ? [r.x0 + u, r.y0] : (u -= w) < hh ? [r.x1, r.y0 + u] : (u -= hh) < w ? [r.x1 - u, r.y1] : [r.x0, r.y1 - (u - w)]);
@@ -496,7 +502,8 @@ export function boardProject(layout, opts = {}) {
   files[`${name}-asbuilt.cir`] = layout.netlist;
   const dru = [];
   if (conn) dru.push(`(rule "Edge-launch connector pads meet the board edge"\n\t(constraint edge_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.memberOfFootprint('J*')"))`);
-  if (parts.length) dru.push(`(rule "Loading capacitors sit on the resonator ends of the RF part"\n\t(constraint courtyard_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.memberOfFootprint('C*') || B.memberOfFootprint('C*')"))`);
+  if (parts.length) dru.push(`(rule "Loading capacitors sit on the resonator ends of the RF part"\n\t(constraint courtyard_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.Reference == 'C*' || B.Reference == 'C*'"))`);
+  if (layout.fence) dru.push(`(rule "Shorting vias inside the resonators of the RF part (one conductor, net-tied)"\n\t(constraint hole_clearance (min 0mm))\n\t(condition "A.memberOfFootprint('RF*') && B.memberOfFootprint('RF*')"))`);
   if (dru.length) files[`${name}.kicad_dru`] = `(version 1)\n${dru.join('\n')}\n`;
   files['README.txt'] += [
     '',

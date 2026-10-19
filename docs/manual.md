@@ -831,20 +831,20 @@ node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mas
 | `NAME.kicad_pro`, `NAME.kicad_pcb` | the project and board (file version 20241229) |
 | `NAME-asbuilt.cir` | the as-built netlist of the whole board (§8.1) |
 | `NAME.pretty`, `NAME.kicad_sym`, lib tables, `NAME.cir` | the component library of §8.2, which also holds the connector footprints |
-| `NAME.kicad_dru` | custom design rules: the connector pads may meet the board edge; the loading capacitors' courtyards may overlap the part they sit on |
+| `NAME.kicad_dru` | custom design rules: the connector pads may meet the board edge; the loading capacitors' courtyards may overlap the part they sit on; inside a filter part, the shorting-via holes may sit in the tapped resonator's copper (one conductor, net-tied) |
 
 **What is on the board:**
 
 - **The part** from §8.2, placed with its nets: one net per port node, plus GND.
 - **Ports.** `J1`…`Jn` are edge-launch SMA footprints (§8.4) on the board edge. With `connector=none` they are placeholder pads (`PORT_…`) the width of the feed.
-- **Loading capacitors** (comb-line). `C1`…`Cn`, footprints `CAP_<pkg>_GND<n>V` (§7.5) from the project library, rotated onto each resonator's open end, with pad 1 on the resonator's net (the port net on a tapped line, GND inside) and the Value the nominal capacitance.
+- **Loading capacitors** (comb-line). `C1`…`Cn`, footprints `CAP_<pkg>_GND<n>V` (§7.5) from the project library, rotated onto each resonator's open end, with pad 1 on the resonator's net and the Value the nominal capacitance. A tapped line is its port's net; every other comb-line resonator is a net of its own (`r2`, …, the netlist's open-end node, with a symbol pin), tied to GND in the part's net tie like the ports. To KiCad a capacitor from GND to GND would be an unrouted connection.
 - **Feeds.** Port-impedance tracks along the layout's feed paths, from each port pad to the part's reference planes.
 - **Ground.**
   - A full GND pour on B.Cu.
   - A GND pour on F.Cu, kept the part's keepout distance (max(3h, 1 mm)) clear of all RF copper.
   - Stitching vias on a grid of pitch min(λ<sub>eff</sub>/10, 5 mm), at least 1.5 mm, where both pours exist.
   - Fence vias along both sides of each feed at half that pitch.
-  - For the filter templates, a fence ring just outside the part's keepout, broken only where feeds, connectors and capacitors cross it.
+  - For the filter templates, a fence ring round the part and its capacitors, just outside the keepout, broken only where the feeds and connectors cross it.
 - **Stack-up.** Taken from the substrate: core thickness, εr, tanδ, copper thickness and ENIG finish. KiCad's stack-up manager and impedance calculator therefore see the same board as comb-over.
 - **Design rules.** The board and project carry the fab's minimum space and trace width as the default net class clearance and track width.
 - **Notes.** The title block and a note on User.Comments record the substrate, f0, the part name and the netlist hash, and warn the fab not to substitute material or thickness.

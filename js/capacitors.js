@@ -151,13 +151,13 @@ export function capGeometry({ type, pkg = '0603', a, via = { d: 0.3, n: 2 } }) {
     const { x, l, w } = fp.pads;
     // hot pad starts at the line end (x = 0); the part's pads are 2x apart; beyond the cold pad a
     // ground land carries the vias
-    const hx = l / 2, cx = hx + 2 * x, vp = via.d + 0.3, gap = 0.15;
+    const hx = l / 2, cx = hx + 2 * x, vp = via.d + 0.3, gap = 0.15, ov = 0.05;   // ov: copper overlap, so pads join
     const landL = via.n * vp + (via.n - 1) * gap + 0.3, landW = Math.max(w, vp + 0.3), lx0 = cx + l / 2;
     const vias = Array.from({ length: via.n }, (_, i) => ({ x: lx0 + 0.15 + vp / 2 + i * (vp + gap), y: 0, drill: via.d, pad: vp }));
     const x1 = lx0 + landL, yc = Math.max(fp.crt[1], landW / 2 + 0.25);
     return {
-      hot: [rectC(hx, 0, l, w)],
-      cold: [rectC(cx, 0, l, w), [[lx0, -landW / 2], [x1, -landW / 2], [x1, landW / 2], [lx0, landW / 2]]],
+      hot: [[[-ov, -w / 2], [l, -w / 2], [l, w / 2], [-ov, w / 2]]],
+      cold: [rectC(cx, 0, l, w), [[lx0 - ov, -landW / 2], [x1, -landW / 2], [x1, landW / 2], [lx0 - ov, landW / 2]]],
       vias, part: { x: hx + x, kicad: fp.kicad },
       crt: [[-0.25, -yc], [x1 + 0.25, -yc], [x1 + 0.25, yc], [-0.25, yc]],
     };

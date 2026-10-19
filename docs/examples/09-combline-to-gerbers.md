@@ -78,10 +78,10 @@ node tools/kicad.mjs examples/combline-5pole-2g-ro4350b-1524.cir --out board/ --
 
 The project (manual §8.3) holds:
 
-- the filter as one part, `COMB_2G00_jlc-ro4350b-1.524`, with the tapped lines as the port pads and the inner lines on GND, tied as one net tie (the filter is a DC short);
+- the filter as one part, `COMB_2G00_jlc-ro4350b-1.524`, with the tapped lines as the port pads and the inner lines as nets `r2`…`r4`, all tied to GND in one net tie (the filter is a DC short);
 - five `CAP_0603_GND2V` footprints `C1`…`C5` on the open ends, valued 1.22pF … 1.22pF;
 - two SMA edge launches `J1`, `J2` and their 50 Ω tracks;
-- GND pours on both layers, with 26 stitching and fence vias (pitch 5 mm), most of them in a ring round the part's RF keepout;
+- GND pours on both layers, with 20 stitching and fence vias (pitch 5 mm) in a ring round the part and its capacitors, outside the RF keepout;
 - the as-built netlist and a `.kicad_dru` that allows the connector pads at the board edge and the capacitor courtyards on the part.
 
 ## 5. Gerbers

@@ -162,10 +162,10 @@
 </code></pre>
 <p>The project (manual §8.3) holds:</p>
 <ul>
-<li>the filter as one part, <code>COMB_2G00_jlc-ro4350b-1.524</code>, with the tapped lines as the port pads and the inner lines on GND, tied as one net tie (the filter is a DC short);</li>
+<li>the filter as one part, <code>COMB_2G00_jlc-ro4350b-1.524</code>, with the tapped lines as the port pads and the inner lines as nets <code>r2</code>…<code>r4</code>, all tied to GND in one net tie (the filter is a DC short);</li>
 <li>five <code>CAP_0603_GND2V</code> footprints <code>C1</code>…<code>C5</code> on the open ends, valued 1.22pF … 1.22pF;</li>
 <li>two SMA edge launches <code>J1</code>, <code>J2</code> and their 50 Ω tracks;</li>
-<li>GND pours on both layers, with 26 stitching and fence vias (pitch 5 mm), most of them in a ring round the part&#39;s RF keepout;</li>
+<li>GND pours on both layers, with 20 stitching and fence vias (pitch 5 mm) in a ring round the part and its capacitors, outside the RF keepout;</li>
 <li>the as-built netlist and a <code>.kicad_dru</code> that allows the connector pads at the board edge and the capacitor courtyards on the part.</li>
 </ul>
 <h2 id="5-gerbers"><a class="anchor" href="#5-gerbers" aria-hidden="true">#</a>5. Gerbers</h2>
