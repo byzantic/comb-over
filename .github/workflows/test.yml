@@ -36,18 +36,18 @@ jobs:
           done
           # worked example 8: impedance-defined coupler → microstrip → board, as the layout panel does it
           node tools/kicad.mjs examples/coupler-10dB-microstrip.cir --make jlc-ro4350b-1.524 --out kicad-out/example8-1524 --board --date 2026-01-01
-          # deliberately broken: coupler gap 0.06 mm, below JLC's 0.1 mm; KiCad's DRC must catch it
-          sed 's/^\.param s = 0\.1025mm.*/.param s = 0.06mm/' examples/coupler-10dB-ro4350b.cir > /tmp/broken.cir
-          grep -q '^.param s = 0.06mm' /tmp/broken.cir
-          node tools/kicad.mjs /tmp/broken.cir --out kicad-out/broken-gap --board --date 2026-01-01 --force
-          # DIAGNOSTIC (temporary): same board without the net-tie declaration
-          mkdir -p kicad-diag && cp -r kicad-out/broken-gap kicad-diag/broken-nonettie
-          sed -i '/net_tie_pad_groups/d' kicad-diag/broken-nonettie/*.kicad_pcb kicad-diag/broken-nonettie/*.pretty/*.kicad_mod
+          # deliberately broken 1: coupled-line gap 0.06 mm, below JLC's 0.1 mm. The gap is inside the
+          # part, a net-tie footprint, where KiCad does not check clearance (verified on 9.0.8 and 10.0.7),
+          # so comb-over's own DRC must refuse the export.
+          sed 's/^\.param s = 0\.1025mm.*/.param s = 0.06mm/' examples/coupler-10dB-ro4350b.cir > /tmp/broken-gap.cir
+          grep -q '^.param s = 0.06mm' /tmp/broken-gap.cir
+          if node tools/kicad.mjs /tmp/broken-gap.cir --out /tmp/broken-gap --board; then echo "::error title=broken-gap::export of a sub-minimum gap was not refused"; exit 1; fi
+          # deliberately broken 2: connectors on an 8 mm pitch, their 11.16 mm courtyards overlap. Exported
+          # anyway; KiCad's DRC must catch it on the board.
+          sed 's/^\.layout coupler K.*/.layout coupler K pitch=8mm/' examples/coupler-10dB-ro4350b.cir > /tmp/broken-pitch.cir
+          node tools/kicad.mjs /tmp/broken-pitch.cir --out kicad-out/broken-pitch --board --date 2026-01-01 --force
       - name: KiCad ${{ matrix.kicad }}
         run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:${{ matrix.kicad }} bash tools/kicad-check.sh kicad-out
-      - name: DIAGNOSTIC (temporary)
-        if: always()
-        run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:${{ matrix.kicad }} bash -c 'export HOME=/tmp; for b in kicad-diag/*/*.kicad_pcb kicad-out/broken-gap/*.kicad_pcb; do kicad-cli pcb drc --severity-all --units mm -o /tmp/r.rpt "$b" >/dev/null 2>&1; m=$(grep -E "^\[|Found" /tmp/r.rpt | head -12 | sed ":a;N;\$!ba;s/\n/%0A/g"); echo "::notice title=diag $b::$m"; done'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

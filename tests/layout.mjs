@@ -123,6 +123,10 @@ const db = (r, i, j, k) => { const s = r.S(i, j); return 20 * Math.log10(Math.hy
   check('matched launch keeps the coupling within 0.3 dB; the library pad on 0.508 mm does not', Math.abs(db(rm, 3, 1, k) - db(r0, 3, 1, k)) < 0.3 && Math.abs(db(rl, 3, 1, k) - db(r0, 3, 1, k)) > 0.5, `${db(rm, 3, 1, k)} ${db(rl, 3, 1, k)} vs ${db(r0, 3, 1, k)}`);
   const none = buildLayout(parseNetlist(ex('coupler-10dB-ro4350b.cir').replace('.layout coupler K', '.layout coupler K connector=none')));
   check('connector=none: no connector copper, old 10 mm pitch', !none.items.some(i => i.role === 'connector') && near(Math.abs(none.items.filter(i => i.type === 'port')[0].y - none.items.filter(i => i.type === 'port')[2].y), 10, 1e-9));
+  const tight = buildLayout(parseNetlist(ex('coupler-10dB-ro4350b.cir').replace('.layout coupler K', '.layout coupler K pitch=8mm')));
+  check('connector courtyards overlapping at an 8 mm pitch are a DRC error', tight.errors.filter(e => e.rule === 'courtyard').length === 2);
+  const touch = buildLayout(parseNetlist(ex('coupler-10dB-ro4350b.cir').replace('.layout coupler K', '.layout coupler K pitch=11.16mm')));
+  check('…and touching courtyards (pitch = courtyard width) are not', touch.errors.every(e => e.rule !== 'courtyard'), JSON.stringify(touch.errors));
   const sch = buildLayout(parseNetlist(ex('schiffman-ro4350b.cir')));
   check('no thickness warning on 1.524 mm RO4350B (1.594 mm with copper)', sch.warnings.length === 0);
 }

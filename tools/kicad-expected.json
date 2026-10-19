@@ -5,6 +5,6 @@
     "example8-1524": ["isolated_copper"]
   },
   "must_fail": {
-    "broken-gap": ["clearance"]
+    "broken-pitch": ["courtyards_overlap"]
   }
 }
