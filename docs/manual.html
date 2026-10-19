@@ -886,19 +886,29 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </tr>
 </thead>
 <tbody><tr>
+<td><code>connector</code></td>
+<td><code>amphenol-132289</code></td>
+<td>edge-launch connector at every port (§8.4); <code>none</code> for bare feeds to the edge</td>
+</tr>
+<tr>
+<td><code>launch</code></td>
+<td><code>matched</code></td>
+<td><code>matched</code>: the connector&#39;s signal pad is the feed width; <code>library</code>: KiCad&#39;s 1.5 mm pad plus a taper (§8.4)</td>
+</tr>
+<tr>
 <td><code>pitch</code></td>
-<td>10 mm</td>
-<td>spacing between neighbouring ports on the same edge (room for the edge-launch SMA bodies)</td>
+<td>12 mm (10 mm without a connector)</td>
+<td>spacing between neighbouring ports on the same edge; the default clears the connector&#39;s courtyard (11.16 mm)</td>
 </tr>
 <tr>
 <td><code>feed</code></td>
-<td>5 mm</td>
+<td>connector pad + launch taper + 1 mm, rounded up to 0.5 mm (5 mm without a connector)</td>
 <td>length of the straight port-impedance feed at each port</td>
 </tr>
 <tr>
 <td><code>margin</code></td>
-<td>4 mm</td>
-<td>board margin beyond the copper, at the board edges without ports</td>
+<td>6 mm (4 mm without a connector)</td>
+<td>board margin beyond the copper; the default keeps the connector&#39;s ground pads on the board</td>
 </tr>
 <tr>
 <td><code>gap</code> (marchand)</td>
@@ -920,7 +930,8 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <ul>
 <li><strong>Coordinates.</strong> Everything is in millimetres, with the y axis pointing down as in KiCad.</li>
 <li><strong>Port feeds.</strong> Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.</li>
-<li><strong>Leaving a coupled line.</strong> A feed first runs diagonally (45°) at the coupled-line width, and widens to the feed width as soon as it is clear of its neighbour by the coupling gap.</li>
+<li><strong>Leaving a coupled line.</strong> A feed first runs diagonally (45°) at the coupled-line width. As soon as it is clear of its neighbour by the coupling gap, a linear taper of length max(w<sub>f</sub>, 3|w<sub>f</sub> − W|) widens it to the feed width w<sub>f</sub>. The taper replaces an abrupt width step and belongs to the part (§8.2). The as-built netlist models it as three stepped sections.</li>
+<li><strong>Connectors.</strong> An edge-launch SMA at every port (§8.4).</li>
 <li><strong>Ground.</strong> The back of the board is a full ground pour.</li>
 <li><strong>Schiffman reference line.</strong> It is lengthened by the length of the C-section&#39;s feeds, so the designed phase difference between the two networks is kept.</li>
 <li><strong>Marchand.</strong> The secondary lines get via pads at their grounded ends. The two sections are separated by <code>gap</code> so that both outputs can leave from between them, which adds a short uncoupled piece of main line.</li>
@@ -932,10 +943,10 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <li>copper too close to the board edge or outside it.</li>
 </ul>
 <p>Results appear under the preview.</p>
-<p><strong>As-built netlist.</strong> The <strong>As-built netlist</strong> button opens the netlist of what is laid out: the original sections plus every feed line. Simulate it to see what the feeds do to the response; your previous netlist is kept for <strong>Restore it</strong>.</p>
-<p>For the 10 dB coupler at 5 GHz the as-built coupling is −10.20 dB, against −10.07 dB for the bare section, and the match stays below −33 dB. The as-built netlist does not model:</p>
+<p><strong>As-built netlist.</strong> The <strong>As-built netlist</strong> button opens the netlist of what is laid out: the original sections plus every taper, feed line and connector pad section. Simulate it to see what the feeds do to the response; your previous netlist is kept for <strong>Restore it</strong>.</p>
+<p>For the 10 dB coupler at 5 GHz the as-built coupling is −10.25 dB, against −10.07 dB for the bare section, and the match stays below −34 dB. The as-built netlist does not model:</p>
 <ul>
-<li>bends and width steps;</li>
+<li>bends;</li>
 <li>coupling between the diverging feed sections;</li>
 <li>the Schiffman bridge;</li>
 <li>grounding-via inductance (issue #5).</li>
@@ -944,7 +955,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <pre><code class="language-sh">node tools/layout.mjs examples/coupler-10dB-ro4350b.cir --svg coupler.svg --netlist asbuilt.cir
 </code></pre>
 <h3 id="82-kicad-component-library"><a class="anchor" href="#82-kicad-component-library" aria-hidden="true">#</a>8.2 KiCad component library</h3>
-<p><strong>KiCad library</strong> (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it is §8.3; edge-launch SMA connectors come with issue #8.</p>
+<p><strong>KiCad library</strong> (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it, with its connectors, is §8.3.</p>
 <p>The zip holds one folder:</p>
 <div class="table-wrap"><table>
 <thead>
@@ -985,7 +996,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <li><strong>Solder mask</strong> is opened over the conductors, which matches the model (no mask dielectric). The paste layer is not used.</li>
 <li><strong>Properties:</strong> the substrate (h, εr, tanδ, copper thickness) and a hash of the source netlist.</li>
 </ul>
-<p><strong>Core netlist.</strong> <code>PART.cir</code> is the as-built netlist without the board feeds, so it can be dropped into another simulation. For the 10 dB coupler at 5 GHz: bare section −10.07 dB, core −10.11 dB, as built with 5 mm feeds −10.20 dB.</p>
+<p><strong>Core netlist.</strong> <code>PART.cir</code> is the as-built netlist without the board feeds, so it can be dropped into another simulation. For the 10 dB coupler at 5 GHz: bare section −10.07 dB, core −10.14 dB, as built with feeds and connector pads −10.25 dB.</p>
 <p>The <strong>Schiffman</strong> reference line in the part is the designed length plus the C-section&#39;s in-part escape lengths, and its two board feeds are as long as the C-section&#39;s feeds. The phase difference is therefore set by the part alone.</p>
 <p>From the command line:</p>
 <pre><code class="language-sh">node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mask covered] [--keepout 2] [--name PART]
@@ -1010,13 +1021,17 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </tr>
 <tr>
 <td><code>NAME.pretty</code>, <code>NAME.kicad_sym</code>, lib tables, <code>NAME.cir</code></td>
-<td>the component library of §8.2, which now also holds the port placeholder footprints</td>
+<td>the component library of §8.2, which also holds the connector footprints</td>
+</tr>
+<tr>
+<td><code>NAME.kicad_dru</code></td>
+<td>a custom design rule that lets the connector pads meet the board edge</td>
 </tr>
 </tbody></table></div>
 <p><strong>What is on the board:</strong></p>
 <ul>
 <li><strong>The part</strong> from §8.2, placed with its nets: one net per port node, plus GND.</li>
-<li><strong>Ports.</strong> <code>J1</code>…<code>Jn</code> are placeholder pads (<code>PORT_…</code>) at the board edge, the width of the feed. Issue #8 replaces them with edge-launch SMA footprints.</li>
+<li><strong>Ports.</strong> <code>J1</code>…<code>Jn</code> are edge-launch SMA footprints (§8.4) on the board edge. With <code>connector=none</code> they are placeholder pads (<code>PORT_…</code>) the width of the feed.</li>
 <li><strong>Feeds.</strong> Port-impedance tracks along the layout&#39;s feed paths, from each port pad to the part&#39;s reference planes.</li>
 <li><strong>Ground.</strong><ul>
 <li>A full GND pour on B.Cu.</li>
@@ -1031,9 +1046,41 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </ul>
 <p>The F.Cu pour can be switched off from the command line (<code>--no-top-pour</code>). On thick substrates the 3h clearance leaves little room for it anyway. The 1.524 mm Marchand and Schiffman demos get only a few vias, while the 0.508 mm coupler gets a full fence.</p>
 <p><strong>Validation.</strong> CI generates the three demo projects and checks them with KiCad 9&#39;s own <code>kicad-cli</code> and <code>pcbnew</code>: parse, zone fill, DRC and Gerber export. There are no DRC errors.</p>
-<p>The coupler and Schiffman boards show &quot;isolated copper&quot; warnings on their GND pours. Their GND net has no pads yet (vias and zones alone do not count), and the SMA ground pads of issue #8 will connect it.</p>
+<p>The coupler and Schiffman boards have no DRC violations at all.</p>
+<p>The Marchand board has two &quot;isolated copper&quot; warnings. On 1.524 mm material the 3h keepout around the part, a rectangle, leaves only small top-pour islands, each touching a single connector ground pad. A keepout that follows the conductors instead of their bounding box would fix this.</p>
 <pre><code class="language-sh">node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out board/ --board [--zip] [--no-top-pour] [--via-pitch MM]
 </code></pre>
+<h3 id="84-edge-launch-connectors"><a class="anchor" href="#84-edge-launch-connectors" aria-hidden="true">#</a>8.4 Edge-launch connectors</h3>
+<p>Every port gets an edge-launch SMA. The default, and so far the only one, is the <strong>Amphenol RF 132289</strong>, a 50 Ω jack rated 0–18 GHz for <strong>0.062&quot; (1.57 mm) boards</strong> (<a href="https://ciiva.com/part/132289-579270">listing</a>). Its pads come from KiCad&#39;s library footprint <code>Connector_Coaxial:SMA_Amphenol_132289_EdgeMount</code> (CC-BY-SA 4.0 with the KiCad library exception):</p>
+<ul>
+<li>a 5.08 mm signal pad;</li>
+<li>5.08 × 1.5 mm ground pads at ±4.25 mm, on both copper layers;</li>
+<li>an 11.16 mm courtyard, which sets the default 12 mm port pitch.</li>
+</ul>
+<p>The generated footprint (<code>SMA_Amphenol_132289_EdgeMount_W&lt;feed width&gt;</code>) has its origin on the board edge. It adds three thru-hole ground vias in each ground pad to tie the top and bottom ground together at the launch. The pads carry paste, so expect solder to wick into those vias. A <code>.kicad_dru</code> rule (severity ignore) lets the connector&#39;s pads meet the board edge.</p>
+<p><strong>Launch.</strong> The signal pad is a 5 mm length of line, so its width matters:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>launch=</code></th>
+<th>signal pad</th>
+<th>when</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>matched</code> (default)</td>
+<td>the feed width w<sub>f</sub></td>
+<td>the pad is simply part of the 50 Ω line</td>
+</tr>
+<tr>
+<td><code>library</code></td>
+<td>KiCad&#39;s 1.5 mm, then a taper of max(1 mm, 2|Δw|) to w<sub>f</sub></td>
+<td>to keep the stock land pattern</td>
+</tr>
+</tbody></table></div>
+<p>On 0.508 mm RO4350B the stock 1.5 mm pad is a 41 Ω, 5 mm section, about 50° at 5 GHz, at every port. It moves the 10 dB coupler&#39;s coupling from −10.07 dB to −11.29 dB. With <code>launch=matched</code> it stays at −10.25 dB.</p>
+<p>The as-built netlist models the pad and any taper as line sections. The connector itself, its pin and the launch transition are not modelled (issue #5).</p>
+<p><strong>Board thickness.</strong> The connector&#39;s ground legs straddle the board. The layout card warns when the board (core + 2 × copper) is more than ±0.15 mm from the connector&#39;s 1.57 mm, which is the case for the 0.508 mm coupler demo. Either choose a variant of the connector made for the actual thickness, or use a 1.57 mm stack-up. The 1.524 mm RO4350B demos (1.594 mm with copper) fit.</p>
 <hr>
 <h2 id="9-the-model-its-assumptions-and-limits"><a class="anchor" href="#9-the-model-its-assumptions-and-limits" aria-hidden="true">#</a>9. The model, its assumptions and limits</h2>
 <h3 id="91-section-admittance-matrix"><a class="anchor" href="#91-section-admittance-matrix" aria-hidden="true">#</a>9.1 Section admittance matrix</h3>

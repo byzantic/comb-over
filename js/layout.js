@@ -148,6 +148,7 @@ export function drc(layout, { edgeClearance = 0.3 } = {}) {
     }
     let dmin = Infinity;
     for (let i = 0; i < edge.length; i++) for (let k = 0; k < p.pts.length; k++) dmin = Math.min(dmin, segDist(p.pts[k], p.pts[(k + 1) % p.pts.length], edge[i], edge[(i + 1) % edge.length]));
+    if (p.edgeOk) continue;                              // connector pads meet the edge by design
     const atPort = ports.some(pt => pt.net === p.net && p.pts.some(([x, y]) => Math.hypot(x - pt.x, y - pt.y) <= (pt.width || 0) / 2 + 1e-6));
     if (!atPort && dmin < edgeClearance) errors.push({ rule: 'edge', value: dmin, limit: edgeClearance, msg: `${p.label || p.net} is ${dmin.toFixed(3)} mm from the board edge (minimum ${edgeClearance} mm)` });
   }

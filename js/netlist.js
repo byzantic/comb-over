@@ -179,13 +179,14 @@ export function parseNetlist(text, overrides = {}) {
       if (d.layout) fail(ln, 'only one .layout statement is allowed');
       const t = toks.slice(1), names = [], opts = {};
       if (!t.length) fail(ln, '.layout TEMPLATE SECTION… [pitch=..] [feed=..] [margin=..]');
-      const LEN = new Set(['pitch', 'feed', 'margin', 'gap', 'drill']), RAW = new Set(['vias']);
+      const LEN = new Set(['pitch', 'feed', 'margin', 'gap', 'drill']), RAW = new Set(['vias']), STR = new Set(['connector', 'launch']);
       for (const x of t.slice(1)) {
         const k = kv(x);
         if (!k) { names.push(x); continue; }
         const key = k[0].toLowerCase();
         if (LEN.has(key)) opts[key] = ev(k[1], ln) * 1e3;          // layout works in millimetres
         else if (RAW.has(key)) opts[key] = ev(k[1], ln);
+        else if (STR.has(key)) opts[key] = k[1].toLowerCase();
         else fail(ln, `unknown .layout option "${k[0]}"`);
       }
       d.layout = { type: t[0].toLowerCase(), sections: names, opts, line: ln + 1 };

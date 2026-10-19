@@ -17,6 +17,7 @@ const L = buildLayout(d);
 console.log(`${L.type} layout on ${L.substrate.name}: ${L.size[0].toFixed(2)} × ${L.size[1].toFixed(2)} mm`);
 console.log(L.errors.length ? L.errors.map(e => `DRC: ${e.msg}`).join('\n') : 'DRC: design rules met');
 L.notes.forEach(n => console.log(`note: ${n}`));
+(L.warnings || []).forEach(w => console.log(`WARNING: ${w}`));
 d.warnings.forEach(w => console.log(`warning: ${w}`));
 if (opt.svg) { writeFileSync(opt.svg, toSVG(L)); console.log(`wrote ${opt.svg}`); }
 if (opt.netlist) { writeFileSync(opt.netlist, L.netlist); console.log(`wrote ${opt.netlist}`); }
