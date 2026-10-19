@@ -944,7 +944,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <pre><code class="language-sh">node tools/layout.mjs examples/coupler-10dB-ro4350b.cir --svg coupler.svg --netlist asbuilt.cir
 </code></pre>
 <h3 id="82-kicad-component-library"><a class="anchor" href="#82-kicad-component-library" aria-hidden="true">#</a>8.2 KiCad component library</h3>
-<p><strong>KiCad library</strong> (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it (feeds, SMA connectors, ground pour) is a separate step (issues #7, #8).</p>
+<p><strong>KiCad library</strong> (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it is §8.3; edge-launch SMA connectors come with issue #8.</p>
 <p>The zip holds one folder:</p>
 <div class="table-wrap"><table>
 <thead>
@@ -988,9 +988,52 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <p><strong>Core netlist.</strong> <code>PART.cir</code> is the as-built netlist without the board feeds, so it can be dropped into another simulation. For the 10 dB coupler at 5 GHz: bare section −10.07 dB, core −10.11 dB, as built with 5 mm feeds −10.20 dB.</p>
 <p>The <strong>Schiffman</strong> reference line in the part is the designed length plus the C-section&#39;s in-part escape lengths, and its two board feeds are as long as the C-section&#39;s feeds. The phase difference is therefore set by the part alone.</p>
 <p>From the command line:</p>
-<pre><code class="language-sh">node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mask covered] [--keepout 2] [--name PART] [--check]
+<pre><code class="language-sh">node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mask covered] [--keepout 2] [--name PART]
 </code></pre>
-<p><code>--check</code> also writes a small check board (the part, a test pad and track at each feed, a B.Cu ground pour) and a <code>.kicad_pro</code> with the substrate&#39;s fab rules. CI runs KiCad 9&#39;s <code>kicad-cli</code> on it (parse, zone fill, DRC, Gerber export) for every demo.</p>
+<p><code>--board</code> writes the whole KiCad project instead (§8.3).</p>
+<h3 id="83-kicad-board"><a class="anchor" href="#83-kicad-board" aria-hidden="true">#</a>8.3 KiCad board</h3>
+<p><strong>KiCad project</strong> (on the layout card) downloads a complete KiCad 9 project for the layout: open the <code>.kicad_pro</code>, press <strong>B</strong> to fill the zones, and the board is ready for review and Gerber export.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>file</th>
+<th>contents</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>NAME.kicad_pro</code>, <code>NAME.kicad_pcb</code></td>
+<td>the project and board (file version 20241229)</td>
+</tr>
+<tr>
+<td><code>NAME-asbuilt.cir</code></td>
+<td>the as-built netlist of the whole board (§8.1)</td>
+</tr>
+<tr>
+<td><code>NAME.pretty</code>, <code>NAME.kicad_sym</code>, lib tables, <code>NAME.cir</code></td>
+<td>the component library of §8.2, which now also holds the port placeholder footprints</td>
+</tr>
+</tbody></table></div>
+<p><strong>What is on the board:</strong></p>
+<ul>
+<li><strong>The part</strong> from §8.2, placed with its nets: one net per port node, plus GND.</li>
+<li><strong>Ports.</strong> <code>J1</code>…<code>Jn</code> are placeholder pads (<code>PORT_…</code>) at the board edge, the width of the feed. Issue #8 replaces them with edge-launch SMA footprints.</li>
+<li><strong>Feeds.</strong> Port-impedance tracks along the layout&#39;s feed paths, from each port pad to the part&#39;s reference planes.</li>
+<li><strong>Ground.</strong><ul>
+<li>A full GND pour on B.Cu.</li>
+<li>A GND pour on F.Cu, kept the part&#39;s keepout distance (max(3h, 1 mm)) clear of all RF copper.</li>
+<li>Stitching vias on a grid of pitch min(λ<sub>eff</sub>/10, 5 mm), at least 1.5 mm, where both pours exist.</li>
+<li>Fence vias along both sides of each feed at half that pitch.</li>
+</ul>
+</li>
+<li><strong>Stack-up.</strong> Taken from the substrate: core thickness, εr, tanδ, copper thickness and ENIG finish. KiCad&#39;s stack-up manager and impedance calculator therefore see the same board as comb-over.</li>
+<li><strong>Design rules.</strong> The board and project carry the fab&#39;s minimum space and trace width as the default net class clearance and track width.</li>
+<li><strong>Notes.</strong> The title block and a note on User.Comments record the substrate, f0, the part name and the netlist hash, and warn the fab not to substitute material or thickness.</li>
+</ul>
+<p>The F.Cu pour can be switched off from the command line (<code>--no-top-pour</code>). On thick substrates the 3h clearance leaves little room for it anyway. The 1.524 mm Marchand and Schiffman demos get only a few vias, while the 0.508 mm coupler gets a full fence.</p>
+<p><strong>Validation.</strong> CI generates the three demo projects and checks them with KiCad 9&#39;s own <code>kicad-cli</code> and <code>pcbnew</code>: parse, zone fill, DRC and Gerber export. There are no DRC errors.</p>
+<p>The coupler and Schiffman boards show &quot;isolated copper&quot; warnings on their GND pours. Their GND net has no pads yet (vias and zones alone do not count), and the SMA ground pads of issue #8 will connect it.</p>
+<pre><code class="language-sh">node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out board/ --board [--zip] [--no-top-pour] [--via-pitch MM]
+</code></pre>
 <hr>
 <h2 id="9-the-model-its-assumptions-and-limits"><a class="anchor" href="#9-the-model-its-assumptions-and-limits" aria-hidden="true">#</a>9. The model, its assumptions and limits</h2>
 <h3 id="91-section-admittance-matrix"><a class="anchor" href="#91-section-admittance-matrix" aria-hidden="true">#</a>9.1 Section admittance matrix</h3>
@@ -1088,8 +1131,8 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <td>Builds the <code>.layout</code> of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule.</td>
 </tr>
 <tr>
-<td><code>node tools/kicad.mjs FILE.cir --out DIR [--zip] [--check] [--mask covered] [--keepout MM] [--name PART]</code></td>
-<td>Writes the <code>.layout</code> core as a self-contained KiCad 9 library (footprint, symbol, library tables, core netlist); <code>--check</code> adds a check board for kicad-cli (§8.2).</td>
+<td><code>node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]</code></td>
+<td>Writes the <code>.layout</code> core as a self-contained KiCad 9 library (§8.2), or with <code>--board</code> the whole KiCad project (§8.3).</td>
 </tr>
 <tr>
 <td><code>npm run docs</code></td>

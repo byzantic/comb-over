@@ -568,7 +568,7 @@ node tools/layout.mjs examples/coupler-10dB-ro4350b.cir --svg coupler.svg --netl
 
 ### 8.2 KiCad component library
 
-**KiCad library** (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it (feeds, SMA connectors, ground pour) is a separate step (issues #7, #8).
+**KiCad library** (on the layout card) downloads the core of the layout as a self-contained KiCad 9 library, a footprint plus a matching schematic symbol, so the part can be reused in any design. The board around it is §8.3; edge-launch SMA connectors come with issue #8.
 
 The zip holds one folder:
 
@@ -599,10 +599,44 @@ The **Schiffman** reference line in the part is the designed length plus the C-s
 From the command line:
 
 ```sh
-node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mask covered] [--keepout 2] [--name PART] [--check]
+node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out lib/ [--zip] [--mask covered] [--keepout 2] [--name PART]
 ```
 
-`--check` also writes a small check board (the part, a test pad and track at each feed, a B.Cu ground pour) and a `.kicad_pro` with the substrate's fab rules. CI runs KiCad 9's `kicad-cli` on it (parse, zone fill, DRC, Gerber export) for every demo.
+`--board` writes the whole KiCad project instead (§8.3).
+
+### 8.3 KiCad board
+
+**KiCad project** (on the layout card) downloads a complete KiCad 9 project for the layout: open the `.kicad_pro`, press **B** to fill the zones, and the board is ready for review and Gerber export.
+
+| file | contents |
+|---|---|
+| `NAME.kicad_pro`, `NAME.kicad_pcb` | the project and board (file version 20241229) |
+| `NAME-asbuilt.cir` | the as-built netlist of the whole board (§8.1) |
+| `NAME.pretty`, `NAME.kicad_sym`, lib tables, `NAME.cir` | the component library of §8.2, which now also holds the port placeholder footprints |
+
+**What is on the board:**
+
+- **The part** from §8.2, placed with its nets: one net per port node, plus GND.
+- **Ports.** `J1`…`Jn` are placeholder pads (`PORT_…`) at the board edge, the width of the feed. Issue #8 replaces them with edge-launch SMA footprints.
+- **Feeds.** Port-impedance tracks along the layout's feed paths, from each port pad to the part's reference planes.
+- **Ground.**
+  - A full GND pour on B.Cu.
+  - A GND pour on F.Cu, kept the part's keepout distance (max(3h, 1 mm)) clear of all RF copper.
+  - Stitching vias on a grid of pitch min(λ<sub>eff</sub>/10, 5 mm), at least 1.5 mm, where both pours exist.
+  - Fence vias along both sides of each feed at half that pitch.
+- **Stack-up.** Taken from the substrate: core thickness, εr, tanδ, copper thickness and ENIG finish. KiCad's stack-up manager and impedance calculator therefore see the same board as comb-over.
+- **Design rules.** The board and project carry the fab's minimum space and trace width as the default net class clearance and track width.
+- **Notes.** The title block and a note on User.Comments record the substrate, f0, the part name and the netlist hash, and warn the fab not to substitute material or thickness.
+
+The F.Cu pour can be switched off from the command line (`--no-top-pour`). On thick substrates the 3h clearance leaves little room for it anyway. The 1.524 mm Marchand and Schiffman demos get only a few vias, while the 0.508 mm coupler gets a full fence.
+
+**Validation.** CI generates the three demo projects and checks them with KiCad 9's own `kicad-cli` and `pcbnew`: parse, zone fill, DRC and Gerber export. There are no DRC errors.
+
+The coupler and Schiffman boards show "isolated copper" warnings on their GND pours. Their GND net has no pads yet (vias and zones alone do not count), and the SMA ground pads of issue #8 will connect it.
+
+```sh
+node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out board/ --board [--zip] [--no-top-pour] [--via-pitch MM]
+```
 
 ---
 
@@ -676,7 +710,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
 | `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
-| `node tools/kicad.mjs FILE.cir --out DIR [--zip] [--check] [--mask covered] [--keepout MM] [--name PART]` | Writes the `.layout` core as a self-contained KiCad 9 library (footprint, symbol, library tables, core netlist); `--check` adds a check board for kicad-cli (§8.2). |
+| `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
 
