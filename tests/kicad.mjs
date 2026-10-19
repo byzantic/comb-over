@@ -6,7 +6,7 @@ import { parseNetlist } from '../js/netlist.js';
 import { solve } from '../js/solver.js';
 import { buildLayout } from '../js/layout-templates.js';
 import { polygonArea } from '../js/layout.js';
-import { componentLibrary, checkBoard, footprint, crc32, zip, KICAD_BOARD_VERSION, KICAD_SYMBOL_VERSION } from '../js/kicad.js';
+import { componentLibrary, boardProject, footprint, crc32, zip, KICAD_BOARD_VERSION, KICAD_SYMBOL_VERSION } from '../js/kicad.js';
 
 let pass = 0, fail = 0;
 const check = (name, cond, info = '') => { if (cond) { pass++; console.log(`  ok   ${name}`); } else { fail++; console.log(`  FAIL ${name} ${info}`); } };
@@ -89,16 +89,38 @@ for (const [file, f0, nPorts, gnd] of [['coupler-10dB-ro4350b.cir', 5e9, 4, fals
   check(`${tag}: core netlist within 0.3 dB of the bare design (S21 at f0)`, Math.abs(db(c, 2, 1, k) - db(r0, 2, 1, k)) < 0.3, `${db(c, 2, 1, k)} vs ${db(r0, 2, 1, k)}`);
   // reproducible
   check(`${tag}: output is deterministic`, componentLibrary(L, { source: src }).files[`${lib.lib}.pretty/${lib.name}.kicad_mod`] === fpText);
-  // check board
-  const b = checkBoard(L, { source: src });
+  // board project (#7)
+  const b = boardProject(L, { source: src, date: '2026-01-01' });
   let pcb; try { pcb = sexpr(b.board); } catch (e) { pcb = null; }
-  check(`${tag}: check board is well-formed, KiCad 9 version`, pcb && pcb[0] === 'kicad_pcb' && kid(pcb, 'version')[1] === String(KICAD_BOARD_VERSION));
+  check(`${tag}: board is well-formed, KiCad 9 version`, pcb && pcb[0] === 'kicad_pcb' && kid(pcb, 'version')[1] === String(KICAD_BOARD_VERSION));
   const nets = Object.fromEntries(kids(pcb, 'net').map(n => [n[1], s(n[2])]));
-  const efp = kids(pcb, 'footprint').find(f => s(f[1]).endsWith(lib.name));
+  const fps = kids(pcb, 'footprint');
+  const efp = fps.find(f => s(f[1]).endsWith(':' + lib.name));
   check(`${tag}: embedded part pads carry their nets`, kids(efp, 'pad').every(p => { const n = kid(p, 'net'); return n && nets[n[1]] === s(n[2]); }));
   check(`${tag}: pin function only on the board copy (as KiCad writes it)`, !/pinfunction/.test(fpText) && kids(efp, 'pad').every(p => kid(p, 'pinfunction')));
   check(`${tag}: a feed track per port`, new Set(kids(pcb, 'segment').map(t => kid(t, 'net')[1])).size === nPorts);
+  const portFps = fps.filter(f => /:PORT_/.test(s(f[1])));
+  check(`${tag}: a port placeholder J1..J${nPorts} per port, footprint in the bundled library`, portFps.length === nPorts && portFps.every(f => b.files[`${lib.lib}.pretty/${s(f[1]).split(':')[1]}.kicad_mod`]));
+  const setup = kid(pcb, 'setup'), st = kid(setup, 'stackup');
+  const diel = kids(st, 'layer').find(l => s(l[1]) === 'dielectric 1');
+  check(`${tag}: stack-up dielectric = substrate (h, εr, tanδ)`, near(+kid(diel, 'thickness')[1], L.substrate.dielectric.h * 1e3, 1e-6) && +kid(diel, 'epsilon_r')[1] === L.substrate.dielectric.er && +kid(diel, 'loss_tangent')[1] === L.substrate.dielectric.tand);
+  check(`${tag}: board thickness = h + 2t`, near(+kid(kid(pcb, 'general'), 'thickness')[1], (L.substrate.dielectric.h + 2 * L.substrate.copper.t) * 1e3, 1e-6));
+  const tb = kid(pcb, 'title_block');
+  check(`${tag}: title block carries substrate and netlist hash`, s(kid(tb, 'date')[1]) === '2026-01-01' && kids(tb, 'comment').some(c => s(c[2]).includes(lib.hash)));
+  const zones = kids(pcb, 'zone').map(z => s(kid(z, 'layer')[1]) + ':' + s(kid(z, 'net_name')[1]));
+  check(`${tag}: GND pours on B.Cu and F.Cu`, zones.includes('B.Cu:GND') && zones.includes('F.Cu:GND'));
+  // stitching vias: GND, inside the board, clear of all signal copper by the top-pour clearance
+  const vias = kids(pcb, 'via').map(v => [+kid(v, 'at')[1], +kid(v, 'at')[2], +kid(v, 'size')[1], nets[kid(v, 'net')[1]]]);
+  const keep = b.footprint.keepout;
+  const sigNodes = new Set(L.core.pads.filter(p => p.node !== 'GND').map(p => p.node));
+  const pip = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) inside = !inside; } return inside; };
+  const segd = (p, a, c) => { const vx = c[0] - a[0], vy = c[1] - a[1], l2 = vx * vx + vy * vy, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l2)); return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy); };
+  const pd = (p, poly) => pip(p, poly) ? 0 : Math.min(...poly.map((q, i) => segd(p, q, poly[(i + 1) % poly.length])));
+  const sigPolys = [...L.core.pads.filter(p => sigNodes.has(p.node)).flatMap(p => p.polys), ...L.items.filter(i => i.role === 'feed').map(i => i.pts)];
+  check(`${tag}: stitching vias are GND, inside the board, ≥ keepout clear of signal copper`, vias.length > 0 && vias.every(([x, y, dd, n]) => n === 'GND' && pip([x, y], L.outline) && Math.min(...sigPolys.map(pp => pd([x, y], pp))) >= keep + dd / 2 - 1e-6), `${vias.length} vias`);
+  check(`${tag}: project files: board, project, part, symbol, as-built netlist`, ['.kicad_pcb', '.kicad_pro', '-asbuilt.cir', '.kicad_sym'].every(e => b.files[`${lib.lib}${e}`]) && b.files['fp-lib-table']);
   check(`${tag}: project file sets clearance to the fab minimum space`, JSON.parse(b.project).net_settings.classes[0].clearance === Math.max(0.1, L.substrate.fab.minSpace * 1e3));
+  check(`${tag}: board is deterministic for a given date`, boardProject(L, { source: src, date: '2026-01-01' }).board === b.board);
 }
 
 // mask option

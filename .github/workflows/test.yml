@@ -23,10 +23,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Generate parts and check boards
+      - name: Generate KiCad projects
         run: |
           for f in coupler-10dB-ro4350b schiffman-ro4350b marchand-ro4350b; do
-            node tools/kicad.mjs examples/$f.cir --out kicad-out/$f --check
+            node tools/kicad.mjs examples/$f.cir --out kicad-out/$f --board --date 2026-01-01
           done
       - name: kicad-cli (KiCad 9)
         run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:9.0 bash tools/kicad-check.sh kicad-out

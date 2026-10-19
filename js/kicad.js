@@ -242,57 +242,176 @@ export function componentLibrary(layout, opts = {}) {
   return { lib, name, hash, files, footprint: fp, symbol: sym };
 }
 
-// ---------------------------------------------------------------- check board (for kicad-cli DRC)
-// A minimal board: the part, a test pad at each feed's board-edge end, the feeds as tracks, a B.Cu
-// GND pour and the Edge.Cuts outline. Its only purpose is to let kicad-cli check the part (#9); the
-// full board writer is issue #7.
-export function checkBoard(layout, opts = {}) {
+// ---------------------------------------------------------------- board (issue #7)
+const BOARD_LAYERS = `\t(layers\n\t\t(0 "F.Cu" signal)\n\t\t(2 "B.Cu" signal)\n\t\t(9 "F.Adhes" user "F.Adhesive")\n\t\t(11 "B.Adhes" user "B.Adhesive")\n\t\t(13 "F.Paste" user)\n\t\t(15 "B.Paste" user)\n\t\t(5 "F.SilkS" user "F.Silkscreen")\n\t\t(7 "B.SilkS" user "B.Silkscreen")\n\t\t(1 "F.Mask" user)\n\t\t(3 "B.Mask" user)\n\t\t(17 "Dwgs.User" user "User.Drawings")\n\t\t(19 "Cmts.User" user "User.Comments")\n\t\t(21 "Eco1.User" user "User.Eco1")\n\t\t(23 "Eco2.User" user "User.Eco2")\n\t\t(25 "Edge.Cuts" user)\n\t\t(27 "Margin" user)\n\t\t(31 "F.CrtYd" user "F.Courtyard")\n\t\t(29 "B.CrtYd" user "B.Courtyard")\n\t\t(35 "F.Fab" user)\n\t\t(33 "B.Fab" user)\n\t)`;
+
+// 2-layer stack-up from the substrate, so KiCad's stack-up manager and impedance calculator agree.
+function stackup(sub) {
+  const t = num(sub.copper.t * 1e3), d = sub.dielectric;
+  const cu = (n) => `\t\t\t(layer ${q(n)}\n\t\t\t\t(type "copper")\n\t\t\t\t(thickness ${t})\n\t\t\t)`;
+  const mask = (n, ty) => `\t\t\t(layer ${q(n)}\n\t\t\t\t(type ${q(ty)})\n\t\t\t\t(color "Green")\n\t\t\t\t(thickness 0.01)\n\t\t\t)`;
+  return [
+    '\t\t(stackup',
+    '\t\t\t(layer "F.SilkS"\n\t\t\t\t(type "Top Silk Screen")\n\t\t\t)',
+    '\t\t\t(layer "F.Paste"\n\t\t\t\t(type "Top Solder Paste")\n\t\t\t)',
+    mask('F.Mask', 'Top Solder Mask'), cu('F.Cu'),
+    `\t\t\t(layer "dielectric 1"\n\t\t\t\t(type "core")\n\t\t\t\t(thickness ${num(d.h * 1e3)})\n\t\t\t\t(material ${q(d.material)})\n\t\t\t\t(epsilon_r ${num(d.er)})\n\t\t\t\t(loss_tangent ${num(d.tand)})\n\t\t\t)`,
+    cu('B.Cu'), mask('B.Mask', 'Bottom Solder Mask'),
+    '\t\t\t(layer "B.Paste"\n\t\t\t\t(type "Bottom Solder Paste")\n\t\t\t)',
+    '\t\t\t(layer "B.SilkS"\n\t\t\t\t(type "Bottom Silk Screen")\n\t\t\t)',
+    '\t\t\t(copper_finish "ENIG")',
+    '\t\t\t(dielectric_constraints yes)',
+    '\t\t)',
+  ].join('\n');
+}
+
+// Placeholder for an edge connector (issue #8 replaces it with an SMA): one SMD pad of the feed width.
+const portName = (w, pl) => `PORT_${num(w).replace('.', 'p')}x${num(pl).replace('.', 'p')}mm`;
+function portFootprint(w, pl, { lib, embed, net, ref = 'J1', uuid = uuidFactory(`port:${w}:${pl}`) } = {}) {
+  const name = portName(w, pl);
+  const L = [`(footprint ${q(embed ? `${lib}:${name}` : name)}`];
+  if (!embed) L.push(`\t(version ${KICAD_BOARD_VERSION})\n\t(generator ${q(GENERATOR)})\n\t(generator_version "9.0")`);
+  L.push('\t(layer "F.Cu")');
+  if (embed) L.push(`\t(uuid ${q(uuid())})\n\t(at ${num(embed.at[0])} ${num(embed.at[1])}${embed.rot ? ' ' + embed.rot : ''})`);
+  L.push(`\t(descr "Port placeholder: feed end for an edge-launch connector (comb-over)")`);
+  L.push(textProp('Reference', ref, [0, -w / 2 - 1.2], 'F.Fab', uuid()));
+  L.push(textProp('Value', name, [0, w / 2 + 1.2], 'F.Fab', uuid(), { hide: true }));
+  L.push(textProp('Datasheet', '', [0, 0], 'F.Fab', uuid(), { hide: true }));
+  L.push(textProp('Description', 'Port placeholder (comb-over)', [0, 0], 'F.Fab', uuid(), { hide: true }));
+  L.push('\t(attr smd exclude_from_bom allow_missing_courtyard)');
+  L.push(`\t(pad "1" smd rect\n\t\t(at 0 0${embed?.rot ? ' ' + embed.rot : ''})\n\t\t(size ${num(pl)} ${num(w)})\n\t\t(layers "F.Cu" "F.Mask")${net ? `\n\t\t(net ${net[0]} ${q(net[1])})\n\t\t(pinfunction "1")\n\t\t(pintype "passive")` : ''}\n\t\t(uuid ${q(uuid())})\n\t)`);
+  L.push('\t(embedded_fonts no)', ')');
+  return { name, text: L.join('\n') + '\n' };
+}
+
+const ptSegDist = (p, a, b) => {
+  const vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy;
+  const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l2)) : 0;
+  return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy);
+};
+const ptPolyDist = (p, poly) => {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  if (inside) return 0;
+  let d = Infinity;
+  for (let i = 0; i < poly.length; i++) d = Math.min(d, ptSegDist(p, poly[i], poly[(i + 1) % poly.length]));
+  return d;
+};
+
+/**
+ * KiCad 9 project for a layout: the part from componentLibrary() placed with its nets, a port
+ * placeholder and 50 Ω track at every feed, F.Cu and B.Cu GND pours, stitching and fence vias,
+ * stack-up from the substrate, title block, and a .kicad_pro with the fab rules.
+ * opts: componentLibrary options plus
+ *   topPour (true), topClear (mm, default the part keepout), viaPitch (mm, default min(λeff/10, 5)),
+ *   viaDrill (mm), title, date (YYYY-MM-DD).
+ * Returns { lib, name, files } where files are the project files (library included).
+ */
+export function boardProject(layout, opts = {}) {
   const lib = componentLibrary(layout, opts);
-  const core = layout.core, sub = layout.substrate;
-  const uuid = uuidFactory(`board:${lib.name}`);
-  const nodes = [...new Set([...core.pads.map(p => p.node), ...core.vias.map(v => v.node), 'GND'])];
+  const core = layout.core, sub = layout.substrate, fab = sub.fab;
+  const uuid = uuidFactory(`board:${lib.name}:${lib.hash}`);
+  const ports = layout.feeds.map(f => f.node);
+  const nodes = [...new Set([...core.pads.map(p => p.node), ...core.vias.map(v => v.node), ...ports, 'GND'])];
   const nets = {}; nodes.forEach((n, i) => { nets[n] = [i + 1, n]; });
   const { ox, oy } = lib.footprint.origin;
-  const fp = footprint(layout, { name: lib.name, lib: lib.lib, hash: lib.hash, nets, embed: { at: [ox, oy] }, mask: opts.mask, keepout: opts.keepout });
+  const keep = lib.footprint.keepout;
+  const fp = footprint(layout, { ...opts, name: lib.name, lib: lib.lib, hash: lib.hash, nets, embed: { at: [ox, oy] } });
   const h = sub.dielectric.h * 1e3, t = sub.copper.t * 1e3;
-  const fab = sub.fab;
   const clearance = Math.max(0.1, (fab.minSpace ?? 0.1) * 1e3);
+  const minTrack = Math.max(0.1, (fab.minTrace ?? 0.1) * 1e3);
   const edgeClr = 0.3;
+  const topPour = opts.topPour ?? true;
+  const topClr = opts.topClear ?? keep;
+  const drill = opts.viaDrill ?? Math.max(0.3, (fab.minDrill ?? 0.3) * 1e3), viaD = drill + 0.3, vr = viaD / 2;
+  const f0 = core.f0 || 1e9;
+  const lam = 299792458 / f0 / Math.sqrt((sub.dielectric.er + 1) / 2) * 1e3;
+  const pitch = opts.viaPitch ?? Math.max(1.5, Math.min(lam / 10, 5));
+  const files = { ...lib.files };
   const L = [];
   L.push(`(kicad_pcb\n\t(version ${KICAD_BOARD_VERSION})\n\t(generator ${q(GENERATOR)})\n\t(generator_version "9.0")`);
   L.push(`\t(general\n\t\t(thickness ${num(h + 2 * t)})\n\t\t(legacy_teardrops no)\n\t)\n\t(paper "A4")`);
-  L.push(`\t(layers\n\t\t(0 "F.Cu" signal)\n\t\t(2 "B.Cu" signal)\n\t\t(9 "F.Adhes" user "F.Adhesive")\n\t\t(11 "B.Adhes" user "B.Adhesive")\n\t\t(13 "F.Paste" user)\n\t\t(15 "B.Paste" user)\n\t\t(5 "F.SilkS" user "F.Silkscreen")\n\t\t(7 "B.SilkS" user "B.Silkscreen")\n\t\t(1 "F.Mask" user)\n\t\t(3 "B.Mask" user)\n\t\t(17 "Dwgs.User" user "User.Drawings")\n\t\t(19 "Cmts.User" user "User.Comments")\n\t\t(21 "Eco1.User" user "User.Eco1")\n\t\t(23 "Eco2.User" user "User.Eco2")\n\t\t(25 "Edge.Cuts" user)\n\t\t(27 "Margin" user)\n\t\t(31 "F.CrtYd" user "F.Courtyard")\n\t\t(29 "B.CrtYd" user "B.Courtyard")\n\t\t(35 "F.Fab" user)\n\t\t(33 "B.Fab" user)\n\t)`);
-  L.push(`\t(setup\n\t\t(pad_to_mask_clearance 0)\n\t\t(allow_soldermask_bridges_in_footprints no)\n\t\t(tenting front back)\n\t)`);
+  const date = opts.date || new Date().toISOString().slice(0, 10);
+  const d = sub.dielectric;
+  L.push(`\t(title_block\n\t\t(title ${q(opts.title || layout.title || lib.name)})\n\t\t(date ${q(date)})\n\t\t(company "comb-over")\n\t\t(comment 1 ${q(`${sub.name}: h ${num(d.h * 1e3)} mm, er ${d.er}, tand ${d.tand}, Cu ${num(t * 1e3)} um`)})\n\t\t(comment 2 ${q(`${layout.type}, f0 ${num(f0 / 1e9)} GHz; part ${lib.lib}:${lib.name}`)})\n\t\t(comment 3 ${q(`source netlist hash ${lib.hash || 'n/a'}`)})\n\t)`);
+  L.push(BOARD_LAYERS);
+  L.push(`\t(setup\n${stackup(sub)}\n\t\t(pad_to_mask_clearance 0)\n\t\t(allow_soldermask_bridges_in_footprints no)\n\t\t(tenting front back)\n\t)`);
   L.push(`\t(net 0 "")`);
   for (const n of nodes) L.push(`\t(net ${nets[n][0]} ${q(n)})`);
   L.push(fp.text.trim().split('\n').map(l => '\t' + l).join('\n'));
-  // test pads at the board-edge end of each feed, pulled in from the edge by the edge clearance
-  let k = 0;
-  for (const f of layout.feeds) {
-    const [e, nxt] = f.path, u = [nxt[0] - e[0], nxt[1] - e[1]], l = Math.hypot(...u);
-    const ux = u[0] / l, uy = u[1] / l, pl = Math.min(1, l / 2);
-    // pad and the track's round end must both stay clear of the edge
-    const back = edgeClr + 0.05 + Math.max(pl, f.width) / 2;
+  // ports and feed tracks; copper of other nets kept for the via placement below
+  const signal = core.pads.filter(p => p.node !== 'GND').flatMap(p => p.polys);
+  const trackSegs = [];
+  layout.feeds.forEach((f, k) => {
+    const [e, nxt] = f.path, ux = (nxt[0] - e[0]) / dist2(e, nxt), uy = (nxt[1] - e[1]) / dist2(e, nxt);
+    const pl = Math.min(1, dist2(e, nxt) / 2);
+    const back = edgeClr + 0.05 + Math.max(pl, f.width) / 2;          // pad and the track's round end clear the edge
     const c = [e[0] + ux * back, e[1] + uy * back];
-    const sz = Math.abs(ux) > Math.abs(uy) ? [pl, f.width] : [f.width, pl];
-    L.push(`\t(footprint "comb-over:FeedEnd"\n\t\t(layer "F.Cu")\n\t\t(uuid ${q(uuid())})\n\t\t(at ${num(c[0])} ${num(c[1])})\n\t\t(property "Reference" "TP${++k}"\n\t\t\t(at 0 0 0)\n\t\t\t(layer "F.Fab")\n\t\t\t(hide yes)\n\t\t\t(uuid ${q(uuid())})\n\t\t\t(effects\n\t\t\t\t(font (size 1 1) (thickness 0.15))\n\t\t\t)\n\t\t)\n\t\t(property "Value" "FeedEnd"\n\t\t\t(at 0 0 0)\n\t\t\t(layer "F.Fab")\n\t\t\t(hide yes)\n\t\t\t(uuid ${q(uuid())})\n\t\t\t(effects\n\t\t\t\t(font (size 1 1) (thickness 0.15))\n\t\t\t)\n\t\t)\n\t\t(attr smd exclude_from_pos_files exclude_from_bom allow_missing_courtyard)\n\t\t(pad "1" smd rect\n\t\t\t(at 0 0)\n\t\t\t(size ${num(sz[0])} ${num(sz[1])})\n\t\t\t(layers "F.Cu" "F.Mask")\n\t\t\t(net ${nets[f.node][0]} ${q(f.node)})\n\t\t\t(uuid ${q(uuid())})\n\t\t)\n\t\t(embedded_fonts no)\n\t)`);
-    // track from the test pad centre along the feed path to the reference plane
+    const rot = Math.abs(uy) > Math.abs(ux) ? 90 : 0;
+    const pf = portFootprint(f.width, pl, { lib: lib.lib });
+    files[`${lib.lib}.pretty/${pf.name}.kicad_mod`] = pf.text;
+    const emb = portFootprint(f.width, pl, { lib: lib.lib, embed: { at: c, rot }, net: nets[f.node], ref: `J${k + 1}`, uuid });
+    L.push(emb.text.trim().split('\n').map(l => '\t' + l).join('\n'));
     const pts = [c, ...f.path.slice(1)];
     for (let i = 0; i < pts.length - 1; i++) {
+      trackSegs.push({ a: pts[i], b: pts[i + 1], w: f.width });
       L.push(`\t(segment\n\t\t(start ${num(pts[i][0])} ${num(pts[i][1])})\n\t\t(end ${num(pts[i + 1][0])} ${num(pts[i + 1][1])})\n\t\t(width ${num(f.width)})\n\t\t(layer "F.Cu")\n\t\t(net ${nets[f.node][0]})\n\t\t(uuid ${q(uuid())})\n\t)`);
     }
-  }
+  });
+  // stitching vias (grid) and fences along the feeds; only where the top pour will be, so every via
+  // joins both pours: clear of signal copper by topClr, outside the part's keepout, inside the board
   const o = layout.outline;
+  const xs = o.map(p => p[0]), ys = o.map(p => p[1]);
+  const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
+  const ko = inflateRect(bboxOf(core), keep + vr + 0.05);
+  const sigDist = (p) => Math.min(...signal.map(poly => ptPolyDist(p, poly)), ...trackSegs.map(s => ptSegDist(p, s.a, s.b) - s.w / 2));
+  const ok = (p) => p[0] >= bx0 + edgeClr + vr + 0.2 && p[0] <= bx1 - edgeClr - vr - 0.2 && p[1] >= by0 + edgeClr + vr + 0.2 && p[1] <= by1 - edgeClr - vr - 0.2
+    && !(p[0] > ko.x0 && p[0] < ko.x1 && p[1] > ko.y0 && p[1] < ko.y1) && sigDist(p) >= (topPour ? topClr : clearance) + vr + 0.05;
+  const vias = [];
+  const add = (p) => { if (ok(p) && vias.every(v => Math.hypot(v[0] - p[0], v[1] - p[1]) >= pitch * 0.7)) vias.push(p); };
+  for (const s of trackSegs) {                                  // fences first, so the grid fills around them
+    const l = dist2(s.a, s.b), ux = (s.b[0] - s.a[0]) / l, uy = (s.b[1] - s.a[1]) / l, off = s.w / 2 + (topPour ? topClr : clearance) + vr + 0.1;
+    for (let u = 0; u <= l + 1e-9; u += pitch / 2) for (const sg of [1, -1]) add([s.a[0] + ux * u - uy * off * sg, s.a[1] + uy * u + ux * off * sg]);
+  }
+  const gx0 = bx0 + ((bx1 - bx0) % pitch) / 2, gy0 = by0 + ((by1 - by0) % pitch) / 2;
+  for (let y = gy0; y <= by1; y += pitch) for (let x = gx0; x <= bx1; x += pitch) add([x, y]);
+  for (const v of vias) L.push(`\t(via\n\t\t(at ${num(v[0])} ${num(v[1])})\n\t\t(size ${num(viaD)})\n\t\t(drill ${num(drill)})\n\t\t(layers "F.Cu" "B.Cu")\n\t\t(net ${nets.GND[0]})\n\t\t(uuid ${q(uuid())})\n\t)`);
   for (let i = 0; i < o.length; i++) {
     const a = o[i], b = o[(i + 1) % o.length];
     L.push(`\t(gr_line\n\t\t(start ${num(a[0])} ${num(a[1])})\n\t\t(end ${num(b[0])} ${num(b[1])})\n\t\t(stroke (width 0.05) (type default))\n\t\t(layer "Edge.Cuts")\n\t\t(uuid ${q(uuid())})\n\t)`);
   }
-  L.push(`\t(zone\n\t\t(net ${nets.GND[0]})\n\t\t(net_name "GND")\n\t\t(layer "B.Cu")\n\t\t(uuid ${q(uuid())})\n\t\t(hatch edge 0.5)\n\t\t(connect_pads yes\n\t\t\t(clearance ${num(clearance)})\n\t\t)\n\t\t(min_thickness 0.25)\n\t\t(filled_areas_thickness no)\n\t\t(fill yes\n\t\t\t(thermal_gap 0.5)\n\t\t\t(thermal_bridge_width 0.5)\n\t\t)\n\t\t(polygon\n\t\t\t(pts\n\t\t\t\t${xy(o)}\n\t\t\t)\n\t\t)\n\t)`);
+  // fab note under the board
+  const note = [`${lib.name}  (comb-over)`, `${sub.name}: dielectric ${num(d.h * 1e3)} mm, er ${d.er}; copper ${num(t * 1e3)} um, finish ENIG`, 'controlled-dielectric RF board: do not substitute material or thickness'];
+  note.forEach((tx, i) => L.push(`\t(gr_text ${q(tx)}\n\t\t(at ${num(bx0)} ${num(by1 + 2 + i * 1.6)} 0)\n\t\t(layer "Cmts.User")\n\t\t(uuid ${q(uuid())})\n\t\t(effects\n\t\t\t(font (size 1 1) (thickness 0.15))\n\t\t\t(justify left bottom)\n\t\t)\n\t)`));
+  const zone = (layer, clr) => `\t(zone\n\t\t(net ${nets.GND[0]})\n\t\t(net_name "GND")\n\t\t(layer ${q(layer)})\n\t\t(uuid ${q(uuid())})\n\t\t(name ${q(`GND ${layer}`)})\n\t\t(hatch edge 0.5)\n\t\t(connect_pads yes\n\t\t\t(clearance ${num(clr)})\n\t\t)\n\t\t(min_thickness 0.25)\n\t\t(filled_areas_thickness no)\n\t\t(fill yes\n\t\t\t(thermal_gap 0.5)\n\t\t\t(thermal_bridge_width 0.5)\n\t\t)\n\t\t(polygon\n\t\t\t(pts\n\t\t\t\t${xy(o)}\n\t\t\t)\n\t\t)\n\t)`;
+  L.push(zone('B.Cu', clearance));
+  if (topPour) L.push(zone('F.Cu', topClr));
   L.push('\t(embedded_fonts no)');
   L.push(')');
-  const pro = projectFile(lib.name, { clearance, minTrack: Math.max(0.1, (fab.minTrace ?? 0.1) * 1e3), minDrill: (fab.minDrill ?? 0.3) * 1e3, edgeClr });
-  return { ...lib, board: L.join('\n') + '\n', project: pro };
+  const board = L.join('\n') + '\n';
+  const name = lib.lib;
+  files[`${name}.kicad_pcb`] = board;
+  files[`${name}.kicad_pro`] = projectFile(name, { clearance, minTrack, minDrill: (fab.minDrill ?? 0.3) * 1e3, edgeClr });
+  files[`${name}-asbuilt.cir`] = layout.netlist;
+  files['README.txt'] += [
+    '',
+    'Board (KiCad project)',
+    `  ${name}.kicad_pro / .kicad_pcb   open the .kicad_pro in KiCad 9`,
+    `  ${name}-asbuilt.cir              the whole board as laid out (part + feeds), for comb-over`,
+    `  - ${layout.feeds.length} ports J1..J${layout.feeds.length}: placeholder pads at the board edge for edge-launch connectors (issue #8)`,
+    `  - feeds are ${[...new Set(layout.feeds.map(f => num(f.width)))].join('/')} mm tracks (port impedance)`,
+    `  - GND pours on B.Cu${topPour ? ` and F.Cu (F.Cu kept ${num(topClr)} mm clear of the RF copper)` : ''}; ${vias.length} stitching/fence vias, ${num(drill)} mm drill, pitch ${num(pitch)} mm`,
+    '  - stack-up and the fab design rules are set in the board and project files',
+    '  - zones are saved unfilled: press B (Edit → Fill All Zones) after opening',
+    '',
+  ].join('\n');
+  return { lib: lib.lib, name: lib.name, hash: lib.hash, files, board, vias, footprint: lib.footprint, symbol: lib.symbol, project: files[`${name}.kicad_pro`] };
 }
+const dist2 = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+export const checkBoard = boardProject;   // the CI check uses the real board
 
 // Minimal .kicad_pro carrying the design rules kicad-cli uses for DRC.
 export function projectFile(name, { clearance, minTrack, minDrill, edgeClr }) {

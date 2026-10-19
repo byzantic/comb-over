@@ -8,7 +8,7 @@ import pcbnew
 
 d = sys.argv[1]
 pretty = glob.glob(os.path.join(d, '*.pretty'))[0]
-name = os.path.splitext(os.path.basename(glob.glob(os.path.join(pretty, '*.kicad_mod'))[0]))[0]
+name = os.path.basename(pretty)[:-len('.pretty')]   # the part has the library's name
 ours = open(os.path.join(pretty, name + '.kicad_mod')).read()
 fp = pcbnew.FootprintLoad(pretty, name)
 print(f'{name}: {len(fp.Pads())} pads, {len(fp.Zones())} zone(s)')
@@ -50,7 +50,7 @@ print(f'structural diff (uuids, generator and item order ignored): {len(only_our
 for x in only_ours[:12]: print('  ours :', x[:400])
 for x in only_kicad[:12]: print('  kicad:', x[:400])
 strict_fail = bool(only_ours or only_kicad)
-b = pcbnew.LoadBoard(glob.glob(os.path.join(d, 'check', '*.kicad_pcb'))[0])
+b = pcbnew.LoadBoard(glob.glob(os.path.join(d, '*.kicad_pcb'))[0])
 bfp = [f for f in b.GetFootprints() if f.GetFPID().GetLibItemName() == name][0]
 print('board copy at', pcbnew.ToMM(bfp.GetPosition().x), pcbnew.ToMM(bfp.GetPosition().y), 'pads with nets:', [(p.GetNumber(), p.GetNetname()) for p in bfp.Pads()])
 if strict_fail:
