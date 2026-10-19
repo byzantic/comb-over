@@ -1,5 +1,6 @@
 // Goal-driven optimisation of "tune" parameters (Nelder–Mead on a box-normalised space).
 import { parseNetlist } from './netlist.js';
+import { attachData } from './data.js';
 import { solve, frequencies } from './solver.js';
 import { evalTrace } from './expr.js';
 
@@ -18,8 +19,8 @@ function goalFreqs(d, perGoal = 121) {
 }
 
 // Cost of a solved design. Each goal contributes w·(mean(v²) + max(v)²) where v is the violation.
-export function goalCost(d, res) {
-  const ctx = { n: res.freq.length, freq: res.freq, S: (i, j) => res.S(i, j), scope: d.scope };
+export function goalCost(d, res, data = null) {
+  const ctx = { n: res.freq.length, freq: res.freq, S: (i, j) => res.S(i, j), scope: d.scope, data };
   let cost = 0;
   const report = [];
   for (const g of d.goals) {
@@ -41,7 +42,7 @@ export function goalCost(d, res) {
 }
 
 // Generator: yields {iter, cost, best:{name:value}} periodically; returns final.
-export function* optimise(text, { maxiter } = {}) {
+export function* optimise(text, { maxiter, files = null } = {}) {
   const base = parseNetlist(text);
   const tuned = base.params.filter(p => p.tune);
   if (!tuned.length) throw new Error('no ".param … tune lo hi" parameters to optimise');
@@ -49,6 +50,7 @@ export function* optimise(text, { maxiter } = {}) {
   maxiter = maxiter ?? base.opt.maxiter ?? 400;
   const freqs = goalFreqs(base);
   if (!freqs.length) throw new Error('no sweep points fall inside the goal frequency ranges');
+  const data = attachData(base, freqs, files).data;          // imported S-parameters on the goal points (#17)
   const n = tuned.length;
   // normalised coordinate u ∈ [0,1]; log mapping when range spans > 1 decade with lo > 0
   const map = tuned.map(p => ({ name: p.name, lo: p.tune.lo, hi: p.tune.hi, log: p.tune.lo > 0 && p.tune.hi / p.tune.lo > 10 }));
@@ -63,7 +65,7 @@ export function* optimise(text, { maxiter } = {}) {
     let pen = 0; for (const x of u) { if (x < 0) pen += x * x * 1e3; if (x > 1) pen += (x - 1) ** 2 * 1e3; }
     try {
       const d = parseNetlist(text, toVal(u));
-      return goalCost(d, solve(d, freqs)).cost + pen;
+      return goalCost(d, solve(d, freqs), data).cost + pen;
     } catch { return 1e12; }
   };
   const start = toU(Object.fromEntries(tuned.map(p => [p.name, p.value]))).map(x => Math.min(1, Math.max(0, x)));

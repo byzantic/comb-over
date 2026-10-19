@@ -54,6 +54,7 @@ npm test                           # engine + synthesis tests
 | **Synthesise…** | Filter synthesis dialog (§7). |
 | **Optimise** | Runs the goal optimiser (§6). The button becomes **Stop** while it runs. |
 | **Open… / Save .cir** | Load or save the netlist text. |
+| **Data…** | Loads Touchstone files as `.data` sets, for overlay and fitting (§5.1). |
 | **RI / MA / DB + Export .sNp** | Touchstone export of the full S-matrix (§8). |
 | **Link** | Copies a URL with the netlist embedded. |
 | **Syntax** | Quick reference, with links into this manual. |
@@ -124,6 +125,7 @@ Values anywhere in the netlist are expressions:
 | `.opt maxiter=N` | Optimiser iteration limit (default 400). |
 | `.layout TEMPLATE SECTION… [key=value …]` | Board layout preview from a template (§8.1). At most one per netlist. |
 | `.substrate ID [key=value …]` | PCB technology (§3.6). At most one per netlist. Required by lines given by dimensions. |
+| `.data NAME FILE [overlay] [z=Z]` | Measured or EM-simulated S-parameters from a Touchstone file, as traces `NAME.S21` (§5.1). |
 
 Unknown directives are ignored with a warning.
 
@@ -382,6 +384,7 @@ A trace is an expression evaluated at every sweep point. It is complex unless it
 |---|---|
 | `S21`, `S11`, … | S-parameters with single-digit port numbers. Sᵢⱼ is the wave out of port i for a wave into port j. |
 | `S_10_3`, `S(i,j)` | Any port numbers. |
+| `NAME.S21`, `NAME.S_10_3` | S-parameters of a `.data` set (§5.1). |
 | `f` or `freq` | Frequency in Hz. |
 | `j` | Imaginary unit. |
 | constants and `.param` names | As in §3.3. |
@@ -411,6 +414,28 @@ Useful combinations:
 - `ang(S21/S43)`: phase difference between two networks in one netlist.
 
 A rectangular plot shows the real part of each trace. A Smith chart plots the complex value; the small square marks the first sweep point.
+
+### 5.1 Measured data
+
+```
+.data meas board.s4p overlay
+.data em   sonnet.s2p z=50
+.plot db(S21) db(meas.S21)
+.goal db(S31)-db(meas.S31) = 0 1G 2G
+```
+
+`.data NAME FILE` reads a Touchstone file (`.sNp`, version 1.1 or 2.0; S-parameters only) and makes its S-matrix available as `NAME.Sij` in plots, Smith charts and goals. In the browser, **Data…** loads one or more files and adds a `.data measK FILE overlay` line for each file that is not already named. Loaded files are kept in the browser's local storage, matched by file name. The command-line tools read `FILE` relative to the netlist.
+
+| Option | Effect |
+|---|---|
+| `overlay` | Every trace of S-parameters in a `.plot` or `.smith` gets a dotted twin from the data, in the same colour: `db(S21)` is drawn again as `db(NAME.S21)`. |
+| `z=Z` | Renormalises the data to Z (one value for all ports) through Z = √z (I+S)(I−S)⁻¹ √z. |
+
+The data are interpolated onto the sweep: magnitude and unwrapped phase, each linear in frequency. Sweep points outside the file's frequency range are blank, and the status line says how many there are. The status also warns when the file is not loaded, when its port count differs from the netlist's, or when its reference impedances differ from the netlist's ports (add `z=` to renormalise). Noise data in 2-port files is ignored.
+
+A `.goal` against data fits the model to a measurement. For example, with `.param` values marked `tune` for a launch's series L and shunt C, `.goal mag(S11-meas.S11) < 0.001` recovers them from a measured S11.
+
+A Touchstone file exported by comb-over reads back to the same S-matrix (to the 10 significant digits written), so an export can be used as a reference for later changes.
 
 ---
 
@@ -842,7 +867,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | Command | Purpose |
 |---|---|
 | `node tools/summary.mjs FILE.cir 11 21 …` | Text table of dB/angle for the given S-parameters, plus section lengths and ε<sub>eff</sub>. |
-| `node tools/opt.mjs FILE.cir [iters] [rounds]` | Runs the optimiser headless and writes tuned values back into the file. |
+| `node tools/opt.mjs FILE.cir [iters] [rounds]` | Runs the optimiser headless and writes tuned values back into the file. `.data` files are read relative to the netlist. |
 | `tools/measure.mjs` | Helper module (`load`, `at`, `band`, `extreme`) used to compute the numbers quoted in the worked examples. |
 | `node tools/mscalc.mjs --sub ID (--z0 Z \| --ze Ze --zo Zo \| --w W [--s S]) [--f F]` | Microstrip calculator: width for Z0, W/S for even/odd impedances, or analysis of a geometry, including losses (§4.6). `--list` shows the substrate presets. |
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |

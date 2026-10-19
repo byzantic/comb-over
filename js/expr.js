@@ -41,7 +41,7 @@ function tokenize(src) {
       toks.push({ t: 'num', v, isDeg });
       i += num[0].length; continue;
     }
-    const id = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i));
+    const id = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?/.exec(src.slice(i));   // dotted: dataset.S21
     if (id) { toks.push({ t: 'id', v: id[0] }); i += id[0].length; continue; }
     if ('+-*/^(),'.includes(ch)) { toks.push({ t: 'op', v: ch }); i++; continue; }
     throw new Error(`unexpected character "${ch}" in "${src}"`);
@@ -204,6 +204,14 @@ export function evalTrace(ast, ctx) {
   const n = ctx.n;
   if ('num' in ast) return cconst(n, ast.num);
   if ('id' in ast) {
+    const dot = ast.id.indexOf('.');
+    if (dot > 0) {                                    // imported data: NAME.S21 / NAME.S_10_3 (issue #17)
+      const name = ast.id.slice(0, dot), v = ast.id.slice(dot + 1), ds = ctx.data?.[name];
+      if (!ds) throw new Error(`unknown data set "${name}" (load it with .data ${name} FILE)`);
+      const m = /^S(\d)(\d)$/.exec(v) || /^S_(\d+)_(\d+)$/.exec(v);
+      if (!m) throw new Error(`${ast.id}: use ${name}.S21 or ${name}.S_10_3`);
+      return ds.S(+m[1], +m[2]);
+    }
     const m = /^S(\d)(\d)$/.exec(ast.id) || /^S_(\d+)_(\d+)$/.exec(ast.id);
     if (m) return ctx.S(+m[1], +m[2]);
     if (ast.id === 'f' || ast.id === 'freq') return { re: ctx.freq, im: new Float64Array(n) };
