@@ -103,3 +103,4 @@ table.modes caption .geo { font-weight: 400; color: var(--muted); }
 .layout-ctl select { max-width: 17em; }
 .layout-card button.primary, .layout-ctl button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .legend .sw.dash { background: none !important; height: 0; border-top: 2px dashed; width: 14px; }
+.legend .sw.dot { border-top-style: dotted; width: 16px; }

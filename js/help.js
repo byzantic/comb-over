@@ -48,6 +48,11 @@ end</pre>
 <p>Traces are complex expressions of <code>S21</code>, <code>S_12_3</code>, <code>S(i,j)</code>, <code>f</code>, <code>j</code>, with
 <code>db mag ang angu(unwrapped) gd(group delay) re im vswr conj sqrt</code>. Example: <code>ang(S31/S21)</code>, <code>db(S31/S41)</code> (directivity).</p>
 
+<h4>Measured data</h4>
+<pre>.data NAME FILE.sNp [overlay] [z=Z]</pre>
+<p>Touchstone 1.1/2.0 S-parameters as traces <code>NAME.S21</code>, usable in plots and goals; <b>Data…</b> loads files. <code>overlay</code> draws a dotted
+data twin of every S trace; <code>z=</code> renormalises. Interpolated in magnitude and unwrapped phase; blank outside the file's range (manual §5.1).</p>
+
 <h4>Layout and KiCad</h4>
 <pre>.layout coupler K | schiffman CS TREF | marchand S1 S2  [pitch=..] [feed=..] [margin=..] [connector=..] [launch=matched|library]</pre>
 <p>Sections must be physical (<code>geom=msl W= S=</code>, <code>T… W=</code>). The layout panel above the plots offers a layout when the topology fits,

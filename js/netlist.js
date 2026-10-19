@@ -177,6 +177,18 @@ export function parseNetlist(text, overrides = {}) {
       d.goals.push({ src: exprS, ast, op: op[0], value: ev(valS, ln), f1: f1S ? ev(f1S, ln) : -Infinity, f2: f2S ? ev(f2S, ln) : Infinity, w, line: ln + 1 });
       return;
     }
+    // .data NAME FILE [overlay] [z=Z]: measured or EM S-parameters (issue #17); the caller attaches the
+    // file's contents (js/data.js), traces use NAME.S21
+    if (kwl === '.data') {
+      if (toks.length < 3) fail(ln, '.data NAME FILE [overlay] [z=Z]');
+      const name = toks[1];
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) fail(ln, `.data: "${name}" is not a valid name`);
+      if ((d.data ?? []).some(x => x.name === name)) fail(ln, `.data ${name} is defined twice`);
+      const e = { name, file: toks[2], overlay: false, z: null, line: ln + 1 };
+      for (const x of toks.slice(3)) { const k = kv(x); if (x.toLowerCase() === 'overlay') e.overlay = true; else if (k && k[0].toLowerCase() === 'z') e.z = ev(k[1], ln); else fail(ln, `unknown .data option "${x}"`); }
+      (d.data ??= []).push(e);
+      return;
+    }
     if (kwl === '.layout') {
       if (d.layout) fail(ln, 'only one .layout statement is allowed');
       const t = toks.slice(1), names = [], opts = {};

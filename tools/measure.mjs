@@ -4,13 +4,15 @@ import { readFileSync } from 'node:fs';
 import { parseNetlist } from '../js/netlist.js';
 import { solve } from '../js/solver.js';
 import { parseExpr, evalTrace } from '../js/expr.js';
+import { attachData } from '../js/data.js';
+import { dataFiles } from './files.mjs';
 
 export function load(file, overrides = {}, freqOverride) {
   let text = readFileSync(file, 'utf8');
   if (freqOverride) text = text.replace(/^\.freq .*$/m, `.freq ${freqOverride}`);
   const d = parseNetlist(text, overrides);
   const r = solve(d);
-  const ctx = { n: r.freq.length, freq: r.freq, S: (i, j) => r.S(i, j), scope: d.scope };
+  const ctx = { n: r.freq.length, freq: r.freq, S: (i, j) => r.S(i, j), scope: d.scope, data: attachData(d, r.freq, dataFiles(file, text)).data };
   const tr = (src) => evalTrace(parseExpr(src), ctx).re;
   return { d, r, tr, F: r.freq };
 }

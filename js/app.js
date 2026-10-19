@@ -3,6 +3,7 @@ import { solve } from './solver.js';
 import { evalTrace, parseExpr } from './expr.js';
 import { drawRect, drawSmith, rectIndexAt, palette } from './plot.js';
 import { touchstone } from './touchstone.js';
+import { attachData } from './data.js';
 import { optimise, writeBack, fmtSI, goalCost } from './optimize.js';
 import { HELP_HTML } from './help.js';
 import { design, returnLossDb } from './synth.js';
@@ -19,7 +20,11 @@ const $ = (id) => document.getElementById(id);
 const editor = $('editor'), gutter = $('gutter'), status = $('status');
 const STORE = 'comb-over:netlist';
 
-let state = { d: null, res: null, overrides: {}, hoverK: null, plots: [], paramSig: '', optRunning: false };
+let state = { d: null, res: null, overrides: {}, hoverK: null, plots: [], paramSig: null, optRunning: false };
+// imported S-parameter files (issue #17): { name → text }, kept in this browser
+const DATA_KEY = 'comb-over:data';
+state.files = (() => { try { return JSON.parse(localStorage.getItem(DATA_KEY) || '{}'); } catch { return {}; } })();
+const saveFiles = () => { try { localStorage.setItem(DATA_KEY, JSON.stringify(state.files)); } catch { /* too big for storage: kept for this session only */ } };
 
 // ---------- editor ----------
 function updateGutter(errLine) {
@@ -59,11 +64,14 @@ function run() {
   }
   updateGutter();
   state.d = d; state.res = res;
+  const att = attachData(d, res.freq, state.files);
+  state.data = att.data; state.dataSets = att.sets;
+  att.warnings.forEach(w => d.warnings.push(w));
   const ms = (performance.now() - t0).toFixed(0);
   let msg = `${d.ports.length} ports · ${res.nodeCount} nodes · ${d.sections.length} line section(s) · ${res.freq.length} pts · ${ms} ms`;
   if (res.failures) msg += `\n${res.failures} frequency point(s) singular (shown as gaps)`;
   if (d.goals.length) {
-    const { cost, report } = goalCost(d, res);
+    const { cost, report } = goalCost(d, res, state.data);
     msg += `\ngoals: cost ${cost.toExponential(2)}` + report.map(r => `\n  ${r.goal.src} ${r.goal.op} ${r.goal.value}: worst violation ${r.maxViolation.toPrecision(3)}`).join('');
   }
   d.warnings.forEach(w => msg += `\n${w}`);
@@ -88,7 +96,7 @@ function applyText(text, what) {
 function applyTextNow(text, what) {
   const prev = editor.value;
   if (text === prev) return;
-  editor.value = text; state.overrides = {}; state.paramSig = '';
+  editor.value = text; state.overrides = {}; state.paramSig = null;
   updateGutter(); run();
   if (what) offerRestore(prev, what);
 }
@@ -235,8 +243,8 @@ function renderTune(d) {
     });
     box.appendChild(row);
   }
-  $('btn-apply').onclick = () => { editor.value = writeBack(editor.value, state.overrides); state.overrides = {}; state.paramSig = ''; run(); };
-  $('btn-reset').onclick = () => { state.overrides = {}; state.paramSig = ''; run(); };
+  $('btn-apply').onclick = () => { editor.value = writeBack(editor.value, state.overrides); state.overrides = {}; state.paramSig = null; run(); };
+  $('btn-reset').onclick = () => { state.overrides = {}; state.paramSig = null; run(); };
 }
 
 // ---------- section info ----------
@@ -266,8 +274,11 @@ function substrateHTML(sub) {
 function renderInfo(d) {
   const box = $('info');
   const secs = d.sections.filter(s => s.N > 1 || d.sections.length <= 4);
-  if (!secs.length && !d.substrate) { box.innerHTML = ''; return; }
+  if (!secs.length && !d.substrate && !state.dataSets?.length) { box.innerHTML = ''; return; }
   let h = d.substrate ? substrateHTML(d.substrate) : '';
+  if (state.dataSets?.length) {
+    h += `<h3>Data</h3><table class="modes sub">${state.dataSets.map(s => `<tr><th>${esc(s.name)}</th><td>${esc(s.file)} · ${s.P} port${s.P > 1 ? 's' : ''} · ${s.n} pts · ${(s.range[0] / 1e9).toPrecision(4)}–${(s.range[1] / 1e9).toPrecision(4)} GHz · ${s.z.join('/')} Ω${s.overlay ? ' · overlaid' : ''}</td></tr>`).join('')}</table>`;
+  }
   if (secs.length) h += '<h3>Line sections</h3>';
   for (const s of secs) {
     const modes = s.modalInfo();
@@ -295,7 +306,7 @@ function defaultPlots(d) {
 function renderPlots(d, res) {
   const box = $('plots');
   const specs = d.plots.length ? d.plots : defaultPlots(d);
-  const ctx = { n: res.freq.length, freq: res.freq, S: (i, j) => res.S(i, j), scope: d.scope };
+  const ctx = { n: res.freq.length, freq: res.freq, S: (i, j) => res.S(i, j), scope: d.scope, data: state.data };
   const sig = specs.map(p => p.kind + p.traces.map(t => t.src).join(',')).join('|');
   if (sig !== box.dataset.sig) {
     box.dataset.sig = sig; box.innerHTML = '';
@@ -323,6 +334,16 @@ function renderPlots(d, res) {
     catch (e) { return { label: t.src + ' — ' + e.message, x: c.freq, y: new Float64Array(c.freq.length).fill(NaN), re: [], im: [], err: true, ...extra, ci: j }; }
   }));
   state.plotData = evalAll(ctx);
+  // imported data with `overlay`: each S-parameter trace gets a dotted twin from the data set
+  for (const ds of (state.dataSets || []).filter(x => x.overlay)) {
+    const twins = specs.map(p => p.traces.map((t, j) => {
+      const src = t.src.replace(/\b(S\d\d|S_\d+_\d+)\b/g, `${ds.name}.$1`);
+      if (src === t.src) return null;
+      try { const v = evalTrace(parseExpr(src), ctx); return { label: `${t.src} (${ds.name})`, x: res.freq, y: v.re, re: v.re, im: v.im, unit: v.unit, dash: [2, 3], ci: j, data: true }; }
+      catch { return null; }
+    }).filter(Boolean));
+    state.plotData = state.plotData.map((ts, i) => [...ts, ...twins[i]]);
+  }
   // physical view: the same traces from the as-built netlist, dashed in the same colours
   const ab = state.physical && state.asBuilt;
   if (ab) {
@@ -347,7 +368,7 @@ function drawAll() {
       const v = t.y[k];
       return t.unit === 's' ? fmtSI(v, 4) + 's' : (+v.toPrecision(5)) + (t.unit || '');
     };
-    el.querySelector('.legend').innerHTML = data.map((t, j) => `<span><span class="sw${t.dash ? ' dash' : ''}" style="${t.dash ? 'border-top-color' : 'background'}:${pal[(t.ci ?? j) % pal.length]}"></span>${t.label}<span class="v">${fmtV(t)}</span></span>`).join('');
+    el.querySelector('.legend').innerHTML = data.map((t, j) => `<span><span class="sw${t.dash ? (t.dash[0] <= 2 ? ' dash dot' : ' dash') : ''}" style="${t.dash ? 'border-top-color' : 'background'}:${pal[(t.ci ?? j) % pal.length]}"></span>${t.label}<span class="v">${fmtV(t)}</span></span>`).join('');
     el.querySelector('.readout').textContent = k != null ? fmtSI(state.res.freq[k], 6) + 'Hz' : '';
   });
 }
@@ -360,7 +381,7 @@ $('btn-opt').onclick = async () => {
   if (state.optRunning) { state.optRunning = false; return; }
   let text = writeBack(editor.value, state.overrides);
   let gen;
-  try { gen = optimise(text); } catch (e) { setStatus(e.message, 'err'); return; }
+  try { gen = optimise(text, { files: state.files }); } catch (e) { setStatus(e.message, 'err'); return; }
   state.optRunning = true; btn.textContent = 'Stop'; btn.classList.add('running');
   let last = null, lastDraw = 0;
   try {
@@ -379,7 +400,7 @@ $('btn-opt').onclick = async () => {
     }
   } catch (e) { setStatus(e.message, 'err'); }
   state.optRunning = false; btn.textContent = 'Optimise'; btn.classList.remove('running');
-  if (last) { editor.value = writeBack(editor.value, last.best); state.overrides = {}; state.paramSig = ''; run(); }
+  if (last) { editor.value = writeBack(editor.value, last.best); state.overrides = {}; state.paramSig = null; run(); }
 };
 
 // ---------- synthesis ----------
@@ -420,7 +441,7 @@ $('btn-opt').onclick = async () => {
     } catch (err) { msg.textContent = err.message; msg.className = 'status err'; return; }
     try { localStorage.setItem(SKEY, JSON.stringify(Object.fromEntries([...form.elements].filter(x => x.name).map(x => [x.name, x.type === 'checkbox' ? x.checked : x.value])))); } catch {}
     dlg.close();
-    editor.value = r.netlist; state.overrides = {}; state.paramSig = ''; state.hoverK = null; run();
+    editor.value = r.netlist; state.overrides = {}; state.paramSig = null; state.hoverK = null; run();
     if (F.polish.checked && r.spec.type === 'chebyshev') $('btn-opt').click();
   };
 }
@@ -435,6 +456,23 @@ function download(name, text, type = 'text/plain') {
 const baseName = () => (state.d?.title || 'network').replace(/[^\w.-]+/g, '_').slice(0, 40);
 $('btn-save').onclick = () => download(baseName() + '.cir', editor.value);
 $('btn-open').onclick = () => $('file-in').click();
+// Data…: load .sNp files; each gets a `.data NAME FILE overlay` line unless the netlist already names it
+$('btn-data').onclick = () => $('data-in').click();
+$('data-in').onchange = async (e) => {
+  const lines = [];
+  for (const f of e.target.files) {
+    state.files[f.name] = await f.text();
+    const d = state.d;
+    if (d?.data?.some(x => x.file.split(/[\\/]/).pop() === f.name)) continue;
+    const used = new Set([...(d?.data ?? []).map(x => x.name), ...lines.map(l => l.split(' ')[1])]);
+    let k = 1; while (used.has(`meas${k}`)) k++;
+    lines.push(`.data meas${k} ${f.name} overlay`);
+  }
+  saveFiles();
+  e.target.value = '';
+  if (lines.length) { editor.value = editor.value.replace(/\s*$/, '\n') + lines.join('\n') + '\n'; updateGutter(); }
+  run();
+};
 $('file-in').onchange = async (e) => { const f = e.target.files[0]; if (f) { editor.value = await f.text(); state.overrides = {}; run(); } };
 $('btn-ts').onclick = () => {
   if (!state.res) return;
@@ -458,7 +496,7 @@ async function loadPresets() {
   sel.onchange = async () => {
     if (!sel.value) return;
     const t = await (await fetch('examples/' + sel.value)).text();
-    editor.value = t; state.overrides = {}; state.paramSig = ''; state.hoverK = null; run();
+    editor.value = t; state.overrides = {}; state.paramSig = null; state.hoverK = null; run();
     sel.value = '';
   };
   return list;
@@ -472,7 +510,7 @@ function offerRestore(prev, what) {
   try { localStorage.setItem(STORE + ':previous', prev); } catch {}
   box.innerHTML = `<span>Loaded ${what}. Your previous netlist was kept.</span> <button id="btn-restore">Restore it</button> <button id="btn-dismiss" title="Dismiss">×</button>`;
   box.hidden = false;
-  $('btn-restore').onclick = () => { editor.value = prev; state.overrides = {}; state.paramSig = ''; box.hidden = true; run(); };
+  $('btn-restore').onclick = () => { editor.value = prev; state.overrides = {}; state.paramSig = null; box.hidden = true; run(); };
   $('btn-dismiss').onclick = () => { box.hidden = true; };
 }
 

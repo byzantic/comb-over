@@ -100,6 +100,10 @@
 <td>Load or save the netlist text.</td>
 </tr>
 <tr>
+<td><strong>Data…</strong></td>
+<td>Loads Touchstone files as <code>.data</code> sets, for overlay and fitting (§5.1).</td>
+</tr>
+<tr>
 <td><strong>RI / MA / DB + Export .sNp</strong></td>
 <td>Touchstone export of the full S-matrix (§8).</td>
 </tr>
@@ -241,6 +245,10 @@
 <tr>
 <td><code>.substrate ID [key=value …]</code></td>
 <td>PCB technology (§3.6). At most one per netlist. Required by lines given by dimensions.</td>
+</tr>
+<tr>
+<td><code>.data NAME FILE [overlay] [z=Z]</code></td>
+<td>Measured or EM-simulated S-parameters from a Touchstone file, as traces <code>NAME.S21</code> (§5.1).</td>
 </tr>
 </tbody></table></div>
 <p>Unknown directives are ignored with a warning.</p>
@@ -678,6 +686,10 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <td>Any port numbers.</td>
 </tr>
 <tr>
+<td><code>NAME.S21</code>, <code>NAME.S_10_3</code></td>
+<td>S-parameters of a <code>.data</code> set (§5.1).</td>
+</tr>
+<tr>
 <td><code>f</code> or <code>freq</code></td>
 <td>Frequency in Hz.</td>
 </tr>
@@ -752,6 +764,32 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <li><code>ang(S21/S43)</code>: phase difference between two networks in one netlist.</li>
 </ul>
 <p>A rectangular plot shows the real part of each trace. A Smith chart plots the complex value; the small square marks the first sweep point.</p>
+<h3 id="51-measured-data"><a class="anchor" href="#51-measured-data" aria-hidden="true">#</a>5.1 Measured data</h3>
+<pre><code>.data meas board.s4p overlay
+.data em   sonnet.s2p z=50
+.plot db(S21) db(meas.S21)
+.goal db(S31)-db(meas.S31) = 0 1G 2G
+</code></pre>
+<p><code>.data NAME FILE</code> reads a Touchstone file (<code>.sNp</code>, version 1.1 or 2.0; S-parameters only) and makes its S-matrix available as <code>NAME.Sij</code> in plots, Smith charts and goals. In the browser, <strong>Data…</strong> loads one or more files and adds a <code>.data measK FILE overlay</code> line for each file that is not already named. Loaded files are kept in the browser&#39;s local storage, matched by file name. The command-line tools read <code>FILE</code> relative to the netlist.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>overlay</code></td>
+<td>Every trace of S-parameters in a <code>.plot</code> or <code>.smith</code> gets a dotted twin from the data, in the same colour: <code>db(S21)</code> is drawn again as <code>db(NAME.S21)</code>.</td>
+</tr>
+<tr>
+<td><code>z=Z</code></td>
+<td>Renormalises the data to Z (one value for all ports) through Z = √z (I+S)(I−S)⁻¹ √z.</td>
+</tr>
+</tbody></table></div>
+<p>The data are interpolated onto the sweep: magnitude and unwrapped phase, each linear in frequency. Sweep points outside the file&#39;s frequency range are blank, and the status line says how many there are. The status also warns when the file is not loaded, when its port count differs from the netlist&#39;s, or when its reference impedances differ from the netlist&#39;s ports (add <code>z=</code> to renormalise). Noise data in 2-port files is ignored.</p>
+<p>A <code>.goal</code> against data fits the model to a measurement. For example, with <code>.param</code> values marked <code>tune</code> for a launch&#39;s series L and shunt C, <code>.goal mag(S11-meas.S11) &lt; 0.001</code> recovers them from a measured S11.</p>
+<p>A Touchstone file exported by comb-over reads back to the same S-matrix (to the 10 significant digits written), so an export can be used as a reference for later changes.</p>
 <hr>
 <h2 id="6-tuning-and-optimisation"><a class="anchor" href="#6-tuning-and-optimisation" aria-hidden="true">#</a>6. Tuning and optimisation</h2>
 <p><strong>Tuning.</strong> <code>.param x = 2.3p tune 1p 5p</code> creates a slider from 1 to 5 pF. The slider is logarithmic when LO &gt; 0 and HI/LO &gt; 10, linear otherwise. Dragging it re-solves immediately.</p>
@@ -1361,7 +1399,7 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 </tr>
 <tr>
 <td><code>node tools/opt.mjs FILE.cir [iters] [rounds]</code></td>
-<td>Runs the optimiser headless and writes tuned values back into the file.</td>
+<td>Runs the optimiser headless and writes tuned values back into the file. <code>.data</code> files are read relative to the netlist.</td>
 </tr>
 <tr>
 <td><code>tools/measure.mjs</code></td>
