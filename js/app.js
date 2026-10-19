@@ -415,11 +415,9 @@ $('btn-opt').onclick = async () => {
     dlg.classList.toggle('hide-comb', form.elements.structure.value !== 'comb');
     const phys = !!form.elements.phys.value;
     dlg.classList.toggle('hide-phys', !phys);
-    // the capacitor realisation (#14) works on the homogeneous netlist's cl1/cl; with a physical
-    // geometry each resonator has its own (ideal) capacitor
-    form.elements.captype.disabled = phys; if (phys) form.elements.captype.value = 'ideal';
+
     form.elements.er.disabled = phys;
-    dlg.classList.toggle('hide-capopt', form.elements.captype.value === 'ideal');
+    dlg.classList.toggle('hide-capopt', phys || form.elements.captype.value === 'ideal');   // physical: the parts sit on the chosen substrate, nominal values exact
     const cheb = form.elements.type.value === 'chebyshev';
     form.elements.ripple.disabled = !cheb;
     const r = parseFloat(form.elements.ripple.value);
@@ -455,7 +453,8 @@ $('btn-opt').onclick = async () => {
           editor.value = m.netlist; state.overrides = {}; state.paramSig = null; state.hoverK = null; run();
         };
         w.onerror = (ev) => { w.terminate(); $('synth-go').disabled = false; msg.textContent = `synthesis failed: ${ev.message}`; msg.className = 'status err'; };
-        w.postMessage({ spec, substrate: F.phys.value, via });
+        const ct = F.captype.value, [ctype, cpkg] = ct.split('-');
+        w.postMessage({ spec, substrate: F.phys.value, via, cap: { type: ctype, pkg: cpkg } });
         return;
       }
       r = design(spec);

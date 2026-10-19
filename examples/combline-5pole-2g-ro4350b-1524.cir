@@ -1,0 +1,77 @@
+.title Comb-line chebyshev n=5 0.1dB, f0 = 2 GHz, FBW = 10 % on jlc-ro4350b-1.524 (synthesised geometry)
+# substrate jlc-ro4350b-1.524: h 1.524 mm, εr 3.66, copper 34.79 µm; field-solved array
+# widths 3.146 2.637 2.89 2.637 3.146 mm; gaps 1.492 3.645 3.645 1.492 mm
+# line length 10.903 mm (43.601° at f0, mean modal velocity); tap 3.0981 mm from the shorted end
+# shorted ends: 2 × 0.3 mm vias (252.1 pH); open ends: KJK Δl as a capacitance
+# realised (lossless): centre 1.9945 GHz, −3 dB FBW 11.08 % (ideal 11.35 %), worst return loss over the central 80 % of the ripple band 16.43 dB (ideal 16.43 dB)
+# insertion loss at f0 1.48 dB with the substrate's conductor and dielectric loss (modal Q 214, 219, 221, 217, 218), and the capacitors' Q (300, the default for C0G parts)
+# tap junctions: Hammerstad tee (as Qucs); the board layout (.layout) adds the feed lines and edge connectors
+# capacitor self-resonance (ESL + vias) 4.94–5.5 GHz, under 3 f0: modelled, but above it the capacitors are inductive, so the upper stopband differs from an ideal-capacitor design
+.freq 1.2G 2.8G 801
+.ref 2G
+.substrate jlc-ro4350b-1.524
+.layout comb
+.param th0 = 43.6013739 tune 42.2933 44.9094
+.param tt = 12.38892 tune 8.672 16.11
+.param wf = 3.28963mm   # tap feed width (50 ohm)
+.param hw = 6.57672165   # half the feed width in degrees at f0 (the tap junction spans tt ± hw)
+.param w1 = 3.14642mm tune 2.67445mm 3.61838mm
+.param w2 = 2.6369mm tune 2.24136mm 3.03243mm
+.param w3 = 2.89031mm tune 2.45677mm 3.32386mm
+.param s12 = 1.49193mm tune 1.19354mm 1.86491mm
+.param s23 = 3.64546mm tune 2.91636mm 4.55682mm
+.param cl1 = 1.21962p tune 1.03667p 1.40256p
+.param cl2 = 0.981476p tune 0.834255p 1.1287p
+.param cl3 = 1.00449p tune 0.853813p 1.15516p
+
+port t1 50
+port t5 50
+
+cline S1
+  geom msl
+  W [w1 w2 w3 w2 w1]
+  S [s12 s23 s23 s12]
+  len (tt-hw)*1deg
+  A g1 g2 g3 g4 g5
+  B ta1 x2_1 x3_1 x4_1 ta5
+end
+cline S2
+  geom msl
+  W [w1 w2 w3 w2 w1]
+  S [s12 s23 s23 s12]
+  len (2*hw)*1deg
+  A - x2_1 x3_1 x4_1 -
+  B - x2_2 x3_2 x4_2 -
+end
+cline S3
+  geom msl
+  W [w1 w2 w3 w2 w1]
+  S [s12 s23 s23 s12]
+  len (th0-tt-hw)*1deg
+  A tb1 x2_2 x3_2 x4_2 tb5
+  B r1 r2 r3 r4 r5
+end
+tee TJ1 ta1 tb1 t1 Wa=w1 Wb=w1 W2=wf
+tee TJ5 ta5 tb5 t5 Wa=w1 Wb=w1 W2=wf
+via V1 g1 d=0.3mm n=2
+via V2 g2 d=0.3mm n=2
+via V3 g3 d=0.3mm n=2
+via V4 g4 d=0.3mm n=2
+via V5 g5 d=0.3mm n=2
+cap C1 r1 C=cl1 type=smd pkg=0603 d=0.3mm n=2
+Coe1 r1 0 0.0622515p   # open-end fringing (Δl of a 3.146 mm line)
+cap C2 r2 C=cl2 type=smd pkg=0603 d=0.3mm n=2
+Coe2 r2 0 0.0614679p   # open-end fringing (Δl of a 2.637 mm line)
+cap C3 r3 C=cl3 type=smd pkg=0603 d=0.3mm n=2
+Coe3 r3 0 0.0619889p   # open-end fringing (Δl of a 2.89 mm line)
+cap C4 r4 C=cl2 type=smd pkg=0603 d=0.3mm n=2
+Coe4 r4 0 0.0614679p   # open-end fringing (Δl of a 2.637 mm line)
+cap C5 r5 C=cl1 type=smd pkg=0603 d=0.3mm n=2
+Coe5 r5 0 0.0622515p   # open-end fringing (Δl of a 3.146 mm line)
+
+.goal db(S11) < -16.43 1906498400 2098498400
+.goal db(S21) < -3 1200000000 1886340400   # −3 dB band at most 3 % wider than ideal
+.goal db(S21) < -3 2120092300 2800000000
+.plot ylim=-70,0 db(S11) db(S21) db(cheby(5,0.1,2000000000,0.1))
+.plot gd(S21)
+.smith S11

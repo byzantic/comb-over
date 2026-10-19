@@ -9,6 +9,7 @@ import { rSymFunc } from './linalg.js';
 import { makeSubstrate, scopeOf, KEYS as SUB_KEYS } from './substrates.js';
 import { msline, mscoupled, mslineLoss, mscoupledLoss, fromSubstrate, fabCheck } from './microstrip.js';
 import { fieldLines } from './fieldlines.js';
+import { teeY } from './tee.js';
 
 export const GROUND = new Set(['0', 'gnd', 'GND', 'ground']);
 export const OPEN = new Set(['-', 'open', 'OPEN', 'nc', 'NC']);
@@ -58,7 +59,7 @@ export function parseNetlist(text, overrides = {}) {
   const lines = text.split(/\r?\n/);
   const d = {
     freq: null, fref: null, params: [], scope: {}, ports: [], elements: [], sections: [], wires: [],
-    plots: [], goals: [], opt: { maxiter: 400 }, warnings: [],
+    plots: [], goals: [], opt: { maxiter: 400 }, warnings: [], text,
   };
   const fail = (ln, msg) => { const e = new Error(`line ${ln + 1}: ${msg}`); e.line = ln + 1; throw e; };
   const ev = (s, ln) => {
@@ -203,7 +204,7 @@ export function parseNetlist(text, overrides = {}) {
       if (d.layout) fail(ln, 'only one .layout statement is allowed');
       const t = toks.slice(1), names = [], opts = {};
       if (!t.length) fail(ln, '.layout TEMPLATE SECTION… [pitch=..] [feed=..] [margin=..]');
-      const LEN = new Set(['pitch', 'feed', 'margin', 'gap', 'drill']), RAW = new Set(['vias']), STR = new Set(['connector', 'launch']);
+      const LEN = new Set(['pitch', 'feed', 'margin', 'gap', 'drill', 'stub']), RAW = new Set(['vias']), STR = new Set(['connector', 'launch', 'cap']);
       for (const x of t.slice(1)) {
         const k = kv(x);
         if (!k) { names.push(x); continue; }
@@ -239,7 +240,7 @@ export function parseNetlist(text, overrides = {}) {
       for (const x of toks.slice(2)) { const k = kv(x); if (k) o[k[0].toLowerCase()] = k[1]; else nodes.push(x); }
       const exp = expandCap({ name: toks[1], nodes, o, ev: (x) => ev(x, ln), sub: d.substrate, f: d.fref ?? (d.freq ? (d.freq.start + d.freq.stop) / 2 : null), fail: (m) => fail(ln, m) });
       exp.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
-      (d.caps ??= []).push({ name: toks[1], line: ln + 1, ...exp.info });
+      (d.caps ??= []).push({ name: toks[1], line: ln + 1, node: nodes[0], node2: nodes[1] ?? '0', ...exp.info });
       exp.lines.forEach(l => handleLine(l, ln));
       return;
     }
@@ -258,6 +259,22 @@ export function parseNetlist(text, overrides = {}) {
       v.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
       d.elements.push({ type: 'L', name: toks[1], a: nodes[0], b: nodes[1] ?? '0', value: v.L, Q: o.q ?? Infinity, line: ln + 1, via: { d: o.d, h, n, L1: v.L1 } });
       elemCount++;
+      return;
+    }
+
+    // tee NAME A B SIDE Wa=.. Wb=.. W2=..: microstrip T-junction on the .substrate (Hammerstad, as in
+    // Qucs; js/tee.js). A and B are the main arms, SIDE the side arm; reference planes at the edges of
+    // the crossing strips.
+    if (kwl === 'tee') {
+      if (toks.length < 5) fail(ln, 'tee NAME A B SIDE Wa=.. Wb=.. W2=..');
+      const nodes = [], o = {};
+      for (const x of toks.slice(2)) { const k = kv(x); if (k) o[k[0].toLowerCase()] = ev(k[1], ln); else nodes.push(x); }
+      if (nodes.length !== 3) fail(ln, 'tee: three nodes (main arm A, main arm B, side arm)');
+      for (const key of Object.keys(o)) if (!['wa', 'wb', 'w2'].includes(key)) fail(ln, `unknown tee option ${key}`);
+      if (!(o.wa > 0) || !(o.wb > 0) || !(o.w2 > 0)) fail(ln, 'tee: Wa, Wb and W2 (> 0) are required');
+      if (!d.substrate) fail(ln, 'tee: needs a .substrate');
+      const geo = { Wa: o.wa, Wb: o.wb, W2: o.w2, h: d.substrate.dielectric.h, er: d.substrate.dielectric.er, t: d.substrate.copper.t };
+      (d.blocks ??= []).push({ type: 'tee', name: toks[1], nodes: [...nodes, `__tee_${toks[1]}`], geo, y: (f) => teeY(geo, f), line: ln + 1 });
       return;
     }
 

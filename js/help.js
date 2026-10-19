@@ -20,7 +20,8 @@ R|C|L&lt;name&gt; N1 N2 VALUE [Q=..]   # e.g.  C1 r1 0 2.2p Q=400
 T&lt;name&gt; N1 N2 Z0=.. len=.. [er=..] [Q=..] [f0=..]   # single uncoupled line, both ends vs ground
 wire N1 N2 [N3 …]         # join nodes (zero-ohm)
 via &lt;name&gt; N1 [N2] d=.. [n=..] [h=..]   # n plated vias to ground (Goldfarb–Pucel L; h from .substrate)
-cap &lt;name&gt; N1 [N2] C=.. type=ideal|smd|printed|trimmer [pkg=0603] [series=E24] [esl=..] [Q=..]   # loading capacitor with parasitics</pre>
+cap &lt;name&gt; N1 [N2] C=.. type=ideal|smd|printed|trimmer [pkg=0603] [series=E24] [esl=..] [Q=..]   # loading capacitor with parasitics
+tee &lt;name&gt; A B SIDE Wa=.. Wb=.. W2=..   # microstrip T-junction (Hammerstad, as Qucs); A–B the main line, needs .substrate</pre>
 <p>Ground: <code>0 gnd</code>. Open (unconnected) terminal: <code>- open nc</code>.</p>
 
 <h4>Coupled-line section</h4>
@@ -56,7 +57,8 @@ end</pre>
 data twin of every S trace; <code>z=</code> renormalises. Interpolated in magnitude and unwrapped phase; blank outside the file's range (manual §5.1).</p>
 
 <h4>Layout and KiCad</h4>
-<pre>.layout coupler K | schiffman CS TREF | marchand S1 S2  [pitch=..] [feed=..] [margin=..] [connector=..] [launch=matched|library]</pre>
+<pre>.layout coupler K | schiffman CS TREF | marchand S1 S2  [pitch=..] [feed=..] [margin=..] [connector=..] [launch=matched|library]
+.layout comb [cap=smd-0603] [stub=1mm] | interdigital      # tapped resonator arrays from "Realise in microstrip"</pre>
 <p>Sections must be physical (<code>geom=msl W= S=</code>, <code>T… W=</code>). The layout panel above the plots offers a layout when the topology fits,
 converts impedance-defined sections to microstrip, edits these lines for you and exports KiCad 9 (manual §8).</p>
 

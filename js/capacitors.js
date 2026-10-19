@@ -151,13 +151,13 @@ export function capGeometry({ type, pkg = '0603', a, via = { d: 0.3, n: 2 } }) {
     const { x, l, w } = fp.pads;
     // hot pad starts at the line end (x = 0); the part's pads are 2x apart; beyond the cold pad a
     // ground land carries the vias
-    const hx = l / 2, cx = hx + 2 * x, vp = via.d + 0.3, gap = 0.15;
+    const hx = l / 2, cx = hx + 2 * x, vp = via.d + 0.3, gap = 0.15, ov = 0.05;   // ov: copper overlap, so pads join
     const landL = via.n * vp + (via.n - 1) * gap + 0.3, landW = Math.max(w, vp + 0.3), lx0 = cx + l / 2;
     const vias = Array.from({ length: via.n }, (_, i) => ({ x: lx0 + 0.15 + vp / 2 + i * (vp + gap), y: 0, drill: via.d, pad: vp }));
     const x1 = lx0 + landL, yc = Math.max(fp.crt[1], landW / 2 + 0.25);
     return {
-      hot: [rectC(hx, 0, l, w)],
-      cold: [rectC(cx, 0, l, w), [[lx0, -landW / 2], [x1, -landW / 2], [x1, landW / 2], [lx0, landW / 2]]],
+      hot: [[[-ov, -w / 2], [l, -w / 2], [l, w / 2], [-ov, w / 2]]],
+      cold: [rectC(cx, 0, l, w), [[lx0 - ov, -landW / 2], [x1, -landW / 2], [x1, landW / 2], [lx0 - ov, landW / 2]]],
       vias, part: { x: hx + x, kicad: fp.kicad },
       crt: [[-0.25, -yc], [x1 + 0.25, -yc], [x1 + 0.25, yc], [-0.25, yc]],
     };
@@ -209,7 +209,7 @@ export function expandCap({ name, nodes, o, ev, sub, f, fail }) {
     if (m.srf < 3 * f) warnings.push(`self-resonance with ESL + via ${(m.srf / 1e9).toPrecision(3)} GHz is under 3 × f (${(f / 1e9).toPrecision(3)} GHz)`);
     if (m.Cpad > 0) lines.push(`C${name}_pad ${n1} 0 ${num(m.Cpad)}`);
     lines.push(`L${name}_esl ${n1} ${name}_x ${num(esl)}`, `C${name}_c ${name}_x ${name}_y ${num(C)} Q=${num(Q)}`, coldToGround(`${name}_y`));
-    return { lines, warnings, info: { type, pkg, C, Q, esl, Cpad: m.Cpad, Lvia: gnd ? m.Lvia : 0, Ceff: m.Ceff, srf: m.srf } };
+    return { lines, warnings, info: { type, pkg, C, Q, esl, Cpad: m.Cpad, Lvia: gnd ? m.Lvia : 0, Ceff: m.Ceff, srf: m.srf, via } };
   }
   if (type === 'printed') {
     needSub(); needF();
@@ -240,7 +240,7 @@ export function expandCap({ name, nodes, o, ev, sub, f, fail }) {
     const Cp = padC({ W: TRIMMER_FOOTPRINT.pads.w, L: TRIMMER_FOOTPRINT.pads.l, sub });
     lines.push(`C${name}_pad ${n1} 0 ${num(Cp)}`, `L${name}_esl ${n1} ${name}_x ${num(esl)}`, `C${name}_c ${name}_x ${name}_y ${num(C)} Q=${num(Q)}`, coldToGround(`${name}_y`));
     const m = smdModel({ pkg: '0603', C, Q, esl, sub, via, f });
-    return { lines, warnings, info: { type, mpn: t?.mpn, range: t && !t.why ? [t.Cmin, t.Cmax] : null, C, Q, esl, Cpad: Cp, Ceff: Cp + C / (1 - (2 * Math.PI * f) ** 2 * (esl + (gnd ? m.Lvia : 0)) * C) } };
+    return { lines, warnings, info: { type, mpn: t?.mpn, range: t && !t.why ? [t.Cmin, t.Cmax] : null, C, Q, esl, Cpad: Cp, Ceff: Cp + C / (1 - (2 * Math.PI * f) ** 2 * (esl + (gnd ? m.Lvia : 0)) * C), via } };
   }
   fail(`unknown cap type ${type} (ideal, smd, printed, trimmer)`);
 }

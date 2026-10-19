@@ -4,10 +4,10 @@ import { design } from './synth.js';
 import { realise } from './synth-geom.js';
 
 self.onmessage = (e) => {
-  const { spec, substrate, via } = e.data;
+  const { spec, substrate, via, cap } = e.data;
   try {
     const r = design(spec);
-    const g = realise(r, { substrate, via, progress: (line) => self.postMessage({ progress: line }) });
+    const g = realise(r, { substrate, via, cap, progress: (line) => self.postMessage({ progress: line }) });
     self.postMessage({ done: true, netlist: g.netlist, warnings: g.warnings, report: g.report });
   } catch (err) {
     self.postMessage({ error: err.message });

@@ -26,6 +26,7 @@ const EXAMPLES = [
   ['06-schiffman', 'Schiffman phase shifter'],
   ['07-three-line-CL', 'Three-line section from C, L'],
   ['08-coupler-to-board', 'From a coupler netlist to a KiCad board'],
+  ['09-combline-to-gerbers', 'Comb-line: spec to Gerbers'],
 ];
 const PAGES = [
   { src: 'docs/manual.md', out: 'docs/manual.html', title: 'Manual', kind: 'manual' },

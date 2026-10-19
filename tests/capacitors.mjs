@@ -105,7 +105,7 @@ check('unknown series rejected', throws(() => snapE(1e-12, 'E6'), /E12, E24/));
     check(`${f.name}: ${want} pads, balanced parentheses`, pads === want && [...f.text].reduce((a, c) => a + (c === '(') - (c === ')'), 0) === 0, pads);
   }
   const g = capGeometry({ type: 'smd', pkg: '0603' });
-  check('SMD geometry: hot pad starts on the line end; vias lie on the ground land', near(Math.min(...g.hot[0].map(p => p[0])), 0, 1e-12) && g.vias.every(v => v.x > Math.min(...g.cold[1].map(p => p[0])) && v.x < Math.max(...g.cold[1].map(p => p[0]))));
+  check('SMD geometry: hot pad overlaps the line end by 0.05 mm (so KiCad sees the joint); vias lie on the ground land', near(Math.min(...g.hot[0].map(p => p[0])), -0.05, 1e-12) && g.vias.every(v => v.x > Math.min(...g.cold[1].map(p => p[0])) && v.x < Math.max(...g.cold[1].map(p => p[0]))));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

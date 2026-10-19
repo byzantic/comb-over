@@ -17,7 +17,8 @@ The documentation is published as web pages next to the designer: `docs/manual.h
   5. Marchand balun;
   6. Schiffman;
   7. a three-line section from field-solver C/L matrices;
-  8. from a coupler netlist to a KiCad board.
+  8. from a coupler netlist to a KiCad board;
+  9. a comb-line filter from specification to Gerbers.
 
 ## Run it
 
@@ -112,7 +113,7 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 - **Loss (optional):** a constant unloaded Q per section, with αᵢ = βᵢ/2Q. Characteristic admittances stay real, so this is a low-loss approximation.
 - **Singular points:** exact half-wave frequencies of lossless lines are evaluated 1 ppb away, which gives the limiting value.
 
-**Not modelled** by the line model itself: end and junction parasitics, and bond wires. Microstrip sections given by W and S do include dispersion and frequency-dependent loss (manual §4.6). Open ends, grounding vias (`via` element) and connector launches are added by the layout templates (manual §4.7); anything else can be added as lumped elements or extra line sections.
+**Not modelled** by the line model itself: end and junction parasitics, and bond wires. Microstrip sections given by W and S do include dispersion and frequency-dependent loss (manual §4.6). Open ends, grounding vias (`via` element), microstrip T-junctions (`tee` element) and connector launches are added by the synthesis and the layout templates (manual §4.7); anything else can be added as lumped elements or extra line sections.
 
 ### Line-constant inputs
 
@@ -138,12 +139,13 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 
 ## Tools
 
-- `node tools/layout.mjs FILE.cir --svg out.svg`: build the `.layout` of a netlist (coupler, Schiffman or Marchand template), check it against the fab rules, and write the SVG preview or the as-built netlist.
+- `node tools/layout.mjs FILE.cir --svg out.svg`: build the `.layout` of a netlist (coupler, Schiffman, Marchand, comb-line or interdigital template), check it against the fab rules, and write the SVG preview or the as-built netlist.
 
 - `node tools/kicad.mjs FILE.cir --out DIR [--board]`: export the layout's core as a self-contained KiCad 9 library (footprint with net-tied custom pads, symbol, library tables, core netlist), or with `--board` a complete KiCad 9 project (feeds, GND pours, stitching vias, stack-up).
 
 - `node tools/mscalc.mjs --sub ID --z0 50 [--f F]`: microstrip calculator. It gives the width for a target Z0, W and S for even/odd impedances (`--ze`/`--zo`), or analyses a geometry (`--w`, `--s`), including losses.
 
+- `node tools/synth.mjs SPEC.json --substrate ID [--cap smd-0603] --out filter.cir`: filter synthesis headless, including the physical geometry in microstrip (manual §7.6).
 - `node tools/opt.mjs file.cir [iters] [rounds]`: run the optimiser headless and write the tuned values back to the file.
 - `node tools/summary.mjs file.cir 11 21`: print a text table of the response.
 
@@ -151,7 +153,6 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 
 - Synthesis:
   - Matthaei-style input/output-line coupling as an alternative to taps;
-  - cross-coupled (transmission-zero) comb-line designs;
-  - an inhomogeneous (microstrip) comb-line variant.
-- Geometry → C/L via a 2-D field solver (stripline / coax-bar first, then microstrip).
+  - cross-coupled (transmission-zero) comb-line designs.
+- Full-wave (openEMS) check of the generated boards (#16).
 - Varactor tuning sweeps, Monte-Carlo tolerances.

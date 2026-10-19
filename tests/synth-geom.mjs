@@ -60,8 +60,9 @@ const accept = (name, spec, sub, lim) => {
   check(`${name}: −3 dB bandwidth within −2 % … +${lim} % of the ideal`, a.bw3 / a.bw3ideal > 0.98 && a.bw3 / a.bw3ideal < 1 + lim / 100, a.bw3 / a.bw3ideal);
   check(`${name}: no warnings`, g.warnings.length === 0, g.warnings);
   const d = parseNetlist(g.netlist);
-  check(`${name}: netlist is physical — field-solved sections, a via at every shorted end, open-end fringing`,
-    d.sections.every(s => s.geom?.kind === 'mslN' && s.geom.model === 'field') && d.elements.filter(e => e.via).length === spec.n && (g.netlist.match(/^Coe\d/mg) || []).length === spec.n && d.substrate.id === sub);
+  check(`${name}: netlist is physical — field-solved arrays, a via at every shorted end, open-end fringing, a tee at each tap, .layout`,
+    d.sections.filter(s => s.N > 1).every(s => s.geom?.kind === 'mslN' && s.geom.model === 'field') && d.elements.filter(e => e.via).length === spec.n && (g.netlist.match(/^Coe\d/mg) || []).length === spec.n
+      && (d.blocks ?? []).filter(b => b.type === 'tee').length === 2 && d.layout?.type === spec.structure && d.substrate.id === sub);
   const res = solve(parseNetlist(g.netlist.replace(/^\.freq .*$/m, `.freq ${T.f0} ${T.f0} 1`))), s21 = res.S(2, 1);
   const il = -20 * Math.log10(Math.hypot(s21.re[0], s21.im[0]));
   check(`${name}: with the substrate's loss, insertion loss at f0 is finite and as reported (${il.toFixed(2)} dB)`, il > 0.1 && il < 6 && g.report.some(x => x.includes(`insertion loss at f0 ${+il.toPrecision(3)} dB`)), il);
