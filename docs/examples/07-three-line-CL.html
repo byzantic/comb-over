@@ -28,13 +28,13 @@
     <h1>Example 7: Three-line section from C and L matrices</h1>
 <p><strong>Netlist:</strong> <a href="../../index.html?example=three-line-CL.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/three-line-CL.cir</code></a></p>
 <p><strong>Goal:</strong> use the general <code>C</code>/<code>L</code> input, which is what a 2-D field solver gives you, for an inhomogeneous three-conductor section. Then read the modal analysis and build a symmetric coupler with the centre line as input.</p>
-<blockquote>
-<p>The matrices here are <strong>illustrative</strong>: they have the structure and magnitudes of three coupled microstrip lines, but they are not the solution for a specific geometry.</p>
-</blockquote>
+<p>The matrices come from comb-over&#39;s field solver (manual §4.3) for three 0.8 mm microstrip lines with 0.15 mm gaps on 0.508 mm RO4350B (ε<sub>r</sub> 3.66). The solver treats the strips as having zero thickness:</p>
+<pre><code>node solver/cli.mjs --W 0.8,0.8,0.8 --S 0.15 --h 0.508 --er 3.66
+</code></pre>
 <h2 id="input"><a class="anchor" href="#input" aria-hidden="true">#</a>Input</h2>
 <pre><code>cline TL3
-  C [110p -28p -4p; -28p 125p -28p; -4p -28p 110p]      # F/m (Maxwell matrix)
-  L [420n 140n 70n; 140n 400n 140n; 70n 140n 420n]      # H/m
+  C [99.963515p -22.514675p -0.98824339p; -22.514675p 108.15812p -22.514675p; -0.98824339p -22.514675p 99.963515p]   # F/m (Maxwell matrix)
+  L [324.41278n 98.501397n 39.164757n; 98.501397n 313.76951n 98.501397n; 39.164757n 98.501397n 324.41278n]   # H/m
   len 90deg
   A l_cpl c_in  r_cpl
   B l_iso c_out r_iso
@@ -60,21 +60,21 @@ end
 </thead>
 <tbody><tr>
 <td>1</td>
-<td>4.3558</td>
-<td>93.07</td>
-<td>[0.548 0.633 0.548]</td>
+<td>3.0834</td>
+<td>81.89</td>
+<td>[0.555 0.620 0.555]</td>
 </tr>
 <tr>
 <td>2</td>
-<td>3.5860</td>
-<td>55.41</td>
+<td>2.5881</td>
+<td>53.16</td>
 <td>[−0.707 0 0.707]</td>
 </tr>
 <tr>
 <td>3</td>
-<td>3.3969</td>
-<td>39.38</td>
-<td>[−0.457 0.763 −0.457]</td>
+<td>2.4036</td>
+<td>38.23</td>
+<td>[−0.416 0.809 −0.416]</td>
 </tr>
 </tbody></table></div>
 <p>How to read it:</p>
@@ -84,13 +84,13 @@ end
 <li><strong>Mode 2</strong> is the antisymmetric outer-line mode. The centre line carries no voltage, because by symmetry it cannot couple to this mode.</li>
 <li><strong>Mode 3</strong> drives the centre line against the outer lines.</li>
 </ul>
-<p><code>len 90deg</code> is referenced to the mean of √ε<sub>eff</sub> over the three modes, which gives 12.87 mm at 3 GHz. Each mode therefore sees a slightly different electrical length.</p>
+<p><code>len 90deg</code> is referenced to the mean of √ε<sub>eff</sub> over the three modes, which gives 15.25 mm at 3 GHz. Each mode therefore sees a slightly different electrical length.</p>
 <p>The characteristic admittance matrix Y<sub>c</sub> = W diag(v) Wᵀ (§9 of the manual) is, in mS,</p>
-<pre><code>[ 17.231  −5.051  −0.817 ]
-[ −5.051  19.737  −5.051 ]
-[ −0.817  −5.051  17.231 ]
+<pre><code>[ 18.445  −4.899  −0.368 ]
+[ −4.899  20.354  −4.899 ]
+[ −0.368  −4.899  18.445 ]
 </code></pre>
-<p>Note the small but non-zero coupling between the outer lines (−0.817 mS). The <code>Cg</code>/<code>Cm</code> nearest-neighbour model in the filter examples ignores this kind of term unless you add it with <code>Cm(1,3)</code>.</p>
+<p>Note the small but non-zero coupling between the outer lines (−0.368 mS). The <code>Cg</code>/<code>Cm</code> nearest-neighbour model in the filter examples ignores this kind of term unless you add it with <code>Cm(1,3)</code>.</p>
 <h2 id="the-coupler"><a class="anchor" href="#the-coupler" aria-hidden="true">#</a>The coupler</h2>
 <p>Port 1 drives the centre line at end A. Port 2 is the centre line&#39;s other end. Ports 3/5 are the outer lines at the input end (coupled), and ports 4/6 are the outer lines at the far end (isolated).</p>
 <p><figure><img src="../img/three-line-1.png" alt="Three-line coupler" loading="lazy"><figcaption>Three-line coupler</figcaption></figure></p>
@@ -107,36 +107,50 @@ end
 </thead>
 <tbody><tr>
 <td>1.5</td>
-<td>−22.38</td>
-<td>−0.46</td>
-<td>−13.64</td>
-<td>−23.82</td>
-<td>−10.63 dB</td>
+<td>−26.58</td>
+<td>−0.35</td>
+<td>−14.50</td>
+<td>−26.26</td>
+<td>−11.49 dB</td>
 </tr>
 <tr>
 <td>3.0</td>
-<td>−22.44</td>
-<td>−0.76</td>
-<td>−11.40</td>
-<td>−22.80</td>
-<td>−8.39 dB</td>
+<td>−26.34</td>
+<td>−0.63</td>
+<td>−12.03</td>
+<td>−24.03</td>
+<td>−9.02 dB</td>
 </tr>
 <tr>
 <td>4.5</td>
-<td>−29.00</td>
-<td>−0.37</td>
-<td>−14.66</td>
-<td>−22.40</td>
-<td>−11.65 dB</td>
+<td>−30.34</td>
+<td>−0.34</td>
+<td>−15.26</td>
+<td>−21.47</td>
+<td>−12.25 dB</td>
 </tr>
 </tbody></table></div>
 <ul>
 <li><strong>Symmetry.</strong> <code>db(S31/S51)</code> is zero to 2e−13 dB, because the structure is symmetric and the centre line feeds both outer lines equally.</li>
-<li><strong>Directivity.</strong> It is only about 11 dB at f0, the same inhomogeneous-medium problem as in Example 2. Lumped compensation capacitors between the lines at each end would improve it.</li>
-<li><strong>Match.</strong> The input is not matched to 50 Ω (S11 ≈ −22 dB). These matrices were not designed for a particular impedance; scaling C up and L down by the same factor lowers all impedances while leaving the velocities unchanged.</li>
+<li><strong>Directivity.</strong> It is only about 12 dB at f0, the same inhomogeneous-medium problem as in Example 2. Lumped compensation capacitors between the lines at each end would improve it.</li>
+<li><strong>Match.</strong> S11 ≈ −26 dB at f0. The widths were picked from a coarse search for a match better than −20 dB with about −9 dB total coupling; they were not optimised.</li>
 </ul>
+<h2 id="the-same-section-from-its-geometry"><a class="anchor" href="#the-same-section-from-its-geometry" aria-hidden="true">#</a>The same section from its geometry</h2>
+<p>The section can also be given by its geometry. The field solver then runs inside comb-over:</p>
+<pre><code>.substrate jlc-ro4350b-0.508
+cline TL3
+  geom msl
+  W [0.8mm 0.8mm 0.8mm]
+  S 0.15mm
+  len 90deg
+  A l_cpl c_in  r_cpl
+  B l_iso c_out r_iso
+end
+</code></pre>
+<p>This gives the same matrices. The geometry form also adds conductor and dielectric loss: the modal Q is about 175 at 3 GHz, and S21 goes from −0.63 dB to −0.67 dB. The status line also warns that the solver uses zero-thickness strips: the substrate&#39;s 35 µm copper would lower the impedances by about 5 % at this gap.</p>
 <h2 id="try"><a class="anchor" href="#try" aria-hidden="true">#</a>Try</h2>
 <ul>
+<li>Change the widths in the geometry form, for example <code>W [0.8mm 1.0mm 0.8mm]</code>, and watch the match and the coupling change. The centre-line width sets the input impedance.</li>
 <li>Multiply every entry of C by 1.2 and divide every entry of L by 1.2. The ε<sub>eff</sub> values are unchanged and every Z<sub>mode</sub> drops by 1.2. Watch S11 change.</li>
 <li>Set L = μ0ε0·C0⁻¹ for some air-filled C0 to make your own physically consistent pair. A field solver gives you C and C0 (C with the dielectric removed), and L follows exactly that way.</li>
 <li>Replace the end connections to make a three-line comb or interdigital resonator array. For example, <code>A 0 0 0</code> and <code>B r1 r2 r3</code> with loading capacitors gives an inhomogeneous comb-line, which the synthesiser does not yet cover.</li>

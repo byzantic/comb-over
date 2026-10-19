@@ -454,7 +454,7 @@ end
 <tr>
 <td><code>geom msl</code> + <code>W …</code> + <code>S …</code></td>
 <td><code>.substrate</code></td>
-<td>Coupled microstrip pair given by strip width and gap. Two lines only; N-line geometry needs the field solver (issue #12). Also accepted inline: <code>cline K geom=msl W=0.88mm S=0.1mm</code>.</td>
+<td>Coupled microstrip given by strip widths and gaps (§4.6). A symmetric pair (scalar W and S) uses the closed-form model; lists <code>W [w1 w2 …]</code>, <code>S [s12 s23 …]</code> (or one S for all gaps) give N lines through the field solver. Also accepted inline: <code>cline K geom=msl W=0.88mm S=0.1mm</code>, <code>W=[0.8mm 1mm 0.8mm]</code>.</td>
 </tr>
 </tbody></table></div>
 <p>Matrices are written <code>[a b c; d e f; g h i]</code>, with rows separated by <code>;</code> and entries by spaces or commas. They must be square and symmetric, and C must be positive definite.</p>
@@ -512,6 +512,61 @@ end
 <li><strong>Tuning.</strong> W and S are ordinary expressions, so <code>tune</code> parameters let the sliders and the optimiser adjust the actual copper dimensions.</li>
 <li><strong>Warnings.</strong> Model-range and fab-rule warnings (e.g. a gap below JLC&#39;s 0.1 mm) appear in the status line. The Line sections panel shows the resulting Z or Ze/Zo and the Q values.</li>
 </ul>
+<p><strong>N lines: the field solver.</strong> Give the widths and gaps as lists:</p>
+<pre><code>cline R geom=msl W=[0.8mm 1.2mm 1.2mm 0.8mm] S=[0.3mm 0.4mm 0.3mm]
+  len 90deg
+  A 0  0  0  0
+  B r1 r2 r3 r4
+end
+</code></pre>
+<p>C and L come from the 2-D field solver (<code>solver/</code>, method and validation in <code>solver/README.md</code>). They include the couplings between non-adjacent lines and the unequal modal velocities. <code>model=field</code> also sends a symmetric pair through the solver; <code>model=closed</code> (the default for a pair) keeps Kirschning–Jansen.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>field solver</th>
+<th>closed-form pair</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>lines</td>
+<td>any N, unequal widths and gaps</td>
+<td>2, symmetric</td>
+</tr>
+<tr>
+<td>accuracy</td>
+<td>about 1e-6 for the zero-thickness quasi-static problem</td>
+<td>about 1 % (published)</td>
+</tr>
+<tr>
+<td>strip thickness</td>
+<td><strong>not modelled</strong> (t = 0)</td>
+<td>Jansen&#39;s effective widths</td>
+</tr>
+<tr>
+<td>dispersion</td>
+<td>none (quasi-static)</td>
+<td>even/odd εeff</td>
+</tr>
+<tr>
+<td>loss</td>
+<td>Wheeler&#39;s rule as a matrix (receded geometry solved again); dielectric filling factor per mode</td>
+<td>Wheeler per mode; filling factor</td>
+</tr>
+<tr>
+<td>cost</td>
+<td>one to three solves per new geometry, cached (a few ms to tens of ms each)</td>
+<td>microseconds</td>
+</tr>
+</tbody></table></div>
+<p>The two agree for a symmetric pair with t = 0 to within Kirschning–Jansen&#39;s accuracy: for W 1.1 mm and S 0.2 mm on 0.508 mm RO4350B, Ze differs by 0.3 %, εe by 0.2 %, Zo by 0.1 % and εo by less than 0.01 % (the closed form includes dispersion at 2 GHz).</p>
+<p><strong>Strip thickness.</strong> The solver&#39;s strips have zero thickness. On thin substrates real copper lowers the impedances noticeably. 35 µm copper lowers Ze by 2–4 % and Zo by 4–6 % for gaps of 0.1–0.2 mm on 0.25–0.5 mm boards (closed-form estimate); even well-separated lines drop by 1–3 % because thickness makes each strip effectively wider. The status line gives the closed-form estimate for the tightest pair whenever it is over 1 %. Finite thickness in the solver is a follow-up.</p>
+<p><strong>Loss with the field solver.</strong> Each mode&#39;s Q comes from two terms:</p>
+<ul>
+<li><strong>Conductor loss.</strong> The conductor-loss matrix is R = K<sub>r</sub>·ω·(L(receded) − L). The receded geometry has widths −δ, gaps +δ and h + δ, with δ the skin depth at f0. For a mode with voltage vector v, Q<sub>c</sub> = vᵀL⁻¹v / (K<sub>r</sub>·vᵀL⁻¹ΔL L⁻¹v).</li>
+<li><strong>Dielectric loss.</strong> The single-line filling-factor formula, with the mode&#39;s own εeff.</li>
+</ul>
+<p>For a symmetric pair, the even and odd Q agree with the closed-form path to 0.1 %.</p>
 <p>You can also use the models directly, through the command-line calculator or from JavaScript:</p>
 <pre><code class="language-sh">node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --z0 50 --f 2G          # width for 50 Ω
 node tools/mscalc.mjs --sub jlc-ro4350b-0.508 --ze 69.4 --zo 36 --f 5G  # W and S for a 10 dB coupler
@@ -610,7 +665,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <p><strong>Known limitations.</strong></p>
 <ul>
 <li><strong>Coupled impedance dispersion.</strong> Even/odd <em>impedance</em> dispersion is not included: Z_e and Z_o are quasi-static at every frequency, and only εeff disperses. The published Kirschning–Jansen impedance-dispersion equations could not be confirmed from two independent sources, and the one available implementation shows inconsistencies. At typical PCB frequencies (f·h of a few GHz·mm) the effect is around 1 %.</li>
-<li><strong>Conductor-loss models disagree for narrow lines.</strong> The two models differ by up to about 3× near W/h = 0.1, and Hammerstad&#39;s is the higher. The Wheeler result agrees within 3 % with the Pucel–Massé–Hartwig narrow-strip formula (four substrates at W/h = 0.1), so it is the default. A field-solver check (issue #11) or a measurement should settle which is right.</li>
+<li><strong>Conductor-loss models disagree for narrow lines.</strong> The two models differ by up to about 3× near W/h = 0.1, and Hammerstad&#39;s is the higher. The Wheeler result agrees within 3 % with the Pucel–Massé–Hartwig narrow-strip formula (four substrates at W/h = 0.1), so it is the default. A measurement, or a field solver with finite thickness, should settle which is right.</li>
 <li><strong>Thickness correction for tight gaps.</strong> For gaps below about 20 t, the coupled-line thickness correction is approximate. A field-solver check can settle this too.</li>
 </ul>
 <hr>
