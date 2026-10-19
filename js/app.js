@@ -286,7 +286,8 @@ function renderInfo(d) {
     const mm = (x) => +(x * 1e3).toPrecision(4);
     let geo = '';
     if (s.geom?.kind === 'msl1') geo = `<br><span class="geo">microstrip W ${mm(s.geom.W)} mm → Z0 ${s.geom.Z0.toFixed(2)} Ω, ε<sub>eff</sub> ${s.geom.epsEff.toFixed(3)} at ${+(s.geom.f0 / 1e9).toPrecision(4)} GHz</span>`;
-    if (s.geom?.kind === 'msl2') geo = `<br><span class="geo">coupled microstrip W ${mm(s.geom.W)} mm, S ${mm(s.geom.S)} mm → Z<sub>e</sub> ${s.geom.Ze.toFixed(2)} Ω, Z<sub>o</sub> ${s.geom.Zo.toFixed(2)} Ω at ${+(s.geom.f0 / 1e9).toPrecision(4)} GHz</span>`;
+    if (s.geom?.kind === 'msl2') geo = `<br><span class="geo">coupled microstrip W ${mm(s.geom.W)} mm, S ${mm(s.geom.S)} mm → Z<sub>e</sub> ${s.geom.Ze.toFixed(2)} Ω, Z<sub>o</sub> ${s.geom.Zo.toFixed(2)} Ω ${s.geom.model === 'field' ? '(field solver, quasi-static)' : `at ${+(s.geom.f0 / 1e9).toPrecision(4)} GHz`}</span>`;
+    if (s.geom?.kind === 'mslN') geo = `<br><span class="geo">${s.geom.W.length} coupled microstrip lines, field solver: W ${s.geom.W.map(mm).join(' ')} mm, S ${s.geom.S.map(mm).join(' ')} mm</span>`;
     h += `<table class="modes"><caption>${s.name} · ${s.N} line${s.N > 1 ? 's' : ''} · ℓ = ${(s.len * 1e3).toPrecision(5)} mm${qs.length ? ` · Q ${qs.join(' / ')}` : ''}${geo}</caption>
       <tr><th>mode</th><th>ε<sub>eff</sub></th><th>v/c</th><th>Z<sub>mode</sub> Ω</th><th style="text-align:left;padding-left:12px">voltage vector</th></tr>`;
     modes.forEach((m, i) => {

@@ -8,6 +8,7 @@ import { Section, fromY0, fromCnorm, fromEvenOdd, maxwellFromGroundMutual, C0 } 
 import { rSymFunc } from './linalg.js';
 import { makeSubstrate, scopeOf, KEYS as SUB_KEYS } from './substrates.js';
 import { msline, mscoupled, mslineLoss, mscoupledLoss, fromSubstrate, fabCheck } from './microstrip.js';
+import { fieldLines } from './fieldlines.js';
 
 export const GROUND = new Set(['0', 'gnd', 'GND', 'ground']);
 export const OPEN = new Set(['-', 'open', 'OPEN', 'nc', 'NC']);
@@ -62,6 +63,14 @@ export function parseNetlist(text, overrides = {}) {
   const fail = (ln, msg) => { const e = new Error(`line ${ln + 1}: ${msg}`); e.line = ln + 1; throw e; };
   const ev = (s, ln) => {
     try { return evalReal(parseExpr(s), d.scope); } catch (e) { fail(ln, e.message); }
+  };
+  // a number, or a list "[a b c]" / "a b c" → array (W and S of N-line geometry)
+  const evList = (strs, ln) => {
+    const joined = strs.join(' ').trim();
+    let items;
+    try { items = joined.startsWith('[') ? matrixStrings(joined).flat() : strs; } catch (e) { fail(ln, e.message); }
+    const v = items.map(x => ev(x, ln));
+    return joined.startsWith('[') || v.length > 1 ? v : v[0];
   };
 
   // ---- pass 1: params and .substrate, in file order (later ones may use earlier ones) ----
@@ -119,8 +128,9 @@ export function parseNetlist(text, overrides = {}) {
         case 'f0': block.f0 = ev(args[0], ln); break;
         case 'q': block.Q = ev(args[0], ln); block.Qset = true; break;
         case 'geom': block.geom = String(args[0] || '').toLowerCase(); break;
-        case 'w': block.W = ev(args[0], ln); break;
-        case 's': block.S = ev(args[0], ln); break;
+        case 'w': block.W = evList(args, ln); break;
+        case 's': block.S = evList(args, ln); break;
+        case 'model': block.model = String(args[0] || '').toLowerCase(); break;
         case 'a': block.A = args; block.Aline = ln; break;
         case 'b': block.B = args; block.Bline = ln; break;
         case 'zeo': {
@@ -213,7 +223,7 @@ export function parseNetlist(text, overrides = {}) {
       if (!toks[1]) fail(ln, 'cline needs a name');
       block = { name: toks[1], line: ln, er: 1, Q: Infinity };
       // allow inline key=value on the cline line
-      for (const x of toks.slice(2)) { const k = kv(x); if (!k) fail(ln, `unexpected "${x}"`); const key = k[0].toLowerCase(); if (key === 'len') { block.lenStr = k[1]; block.lenLine = ln; } else if (key === 'er') block.er = ev(k[1], ln); else if (key === 'q') { block.Q = ev(k[1], ln); block.Qset = true; } else if (key === 'f0') block.f0 = ev(k[1], ln); else if (key === 'geom') block.geom = k[1].toLowerCase(); else if (key === 'w') block.W = ev(k[1], ln); else if (key === 's') block.S = ev(k[1], ln); else fail(ln, `unknown cline option ${k[0]}`); }
+      for (const x of toks.slice(2)) { const k = kv(x); if (!k) fail(ln, `unexpected "${x}"`); const key = k[0].toLowerCase(); if (key === 'len') { block.lenStr = k[1]; block.lenLine = ln; } else if (key === 'er') block.er = ev(k[1], ln); else if (key === 'q') { block.Q = ev(k[1], ln); block.Qset = true; } else if (key === 'f0') block.f0 = ev(k[1], ln); else if (key === 'geom') block.geom = k[1].toLowerCase(); else if (key === 'w') block.W = evList([k[1]], ln); else if (key === 's') block.S = evList([k[1]], ln); else if (key === 'model') block.model = k[1].toLowerCase(); else fail(ln, `unknown cline option ${k[0]}`); }
       return;
     }
     if (kwl === 'port') {
@@ -299,11 +309,34 @@ export function parseNetlist(text, overrides = {}) {
     if (b.W != null && b.spec?.kind !== 'msl1') {
       if (b.spec) fail(ln, `${b.name}: give either a geometry (W, S) or electrical line constants, not both`);
       if (b.geom && b.geom !== 'msl') fail(ln, `${b.name}: geometry "${b.geom}" not supported (only msl, coupled microstrip)`);
-      b.spec = { kind: 'msl2' };
+      if (b.model && !['closed', 'field'].includes(b.model)) fail(ln, `${b.name}: model is closed (closed-form pair) or field (field solver)`);
+      const vec = Array.isArray(b.W) || Array.isArray(b.S);
+      if (b.model === 'closed' && vec) fail(ln, `${b.name}: the closed-form model is for a symmetric pair (scalar W and S); use model=field for W=[…] S=[…]`);
+      b.spec = { kind: vec || b.model === 'field' ? 'mslN' : 'msl2' };
     } else if (b.geom && b.W == null) fail(ln, `${b.name}: geom ${b.geom} needs W and S`);
+    if (b.model && b.W == null) fail(ln, `${b.name}: model= applies to a geometry (W and S)`);
     if (!b.spec) fail(ln, `${b.name}: no line parameters (Zeo, Y0, Z0, Cn, Cg/Cm, C+L, or W and S)`);
     const f0 = b.f0 ?? fref;
     let CL, geom = null;
+    if (b.spec.kind === 'mslN') {
+      if (!d.substrate) fail(ln, `${b.name}: a physical geometry (W=) needs a .substrate statement`);
+      let W = b.W, S = b.S;
+      if (S == null) S = [];
+      if (!Array.isArray(W)) W = Array(Array.isArray(S) ? S.length + 1 : 2).fill(W);
+      if (!Array.isArray(S)) S = Array(W.length - 1).fill(S);
+      if (S.length !== W.length - 1) fail(ln, `${b.name}: ${W.length} strips need ${W.length - 1} gaps in S, got ${S.length}`);
+      let fl;
+      try { fl = fieldLines({ W, S, sub: d.substrate, f0 }); } catch (e) { fail(ln, `${b.name}: ${e.message}`); }
+      CL = { C: fl.C, L: fl.L };
+      for (const w of fl.warnings) { const m = `${b.name}: ${w}`; if (!d.warnings.includes(m)) d.warnings.push(m); }
+      for (const w of fabCheck({ W: Math.min(...W), S: S.length ? Math.min(...S) : null }, d.substrate)) { const m = `${b.name}: ${w}`; if (!d.warnings.includes(m)) d.warnings.push(m); }
+      if (!b.Qset) b.Q = fl.Q;
+      if (W.length === 2 && W[0] === W[1]) {
+        // a symmetric pair keeps the msl2 shape (layout templates use it)
+        const Ce = fl.C[0][0] + fl.C[0][1], Co = fl.C[0][0] - fl.C[0][1], C0e = fl.C0[0][0] + fl.C0[0][1], C0o = fl.C0[0][0] - fl.C0[0][1];
+        geom = { kind: 'msl2', model: 'field', W: W[0], S: S[0], Ze: 1 / (C0 * Math.sqrt(Ce * C0e)), Zo: 1 / (C0 * Math.sqrt(Co * C0o)), epse: Ce / C0e, epso: Co / C0o, f0 };
+      } else geom = { kind: 'mslN', model: 'field', W, S, epsEff: fl.epsEff, f0 };
+    }
     if (b.spec.kind === 'msl1' || b.spec.kind === 'msl2') {
       if (!d.substrate) fail(ln, `${b.name}: a physical geometry (W=) needs a .substrate statement`);
       const g = fromSubstrate(d.substrate);

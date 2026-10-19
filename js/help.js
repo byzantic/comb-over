@@ -37,6 +37,8 @@ cap &lt;name&gt; N1 [N2] C=.. type=ideal|smd|printed|trimmer [pkg=0603] [series=
   Cm m12 m23 …                         # … plus adjacent mutuals (N−1 values)
   Cm(i,j) m                            # … plus any non-adjacent mutual
   C [ … ]  and  L [ … ]                # per-unit-length F/m and H/m (general, inhomogeneous)
+  geom msl  W w  S s                   # microstrip pair on the .substrate (closed form; model=field for the solver)
+  geom msl  W [w1 … wN]  S [s12 …]     # N microstrip lines, C and L by the 2-D field solver (t = 0)
   A n1 n2 … nN            # nodes at end A (z = 0) of lines 1..N
   B n1 n2 … nN            # nodes at end B (z = ℓ)
 end</pre>
