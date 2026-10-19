@@ -144,6 +144,12 @@ export function drc(layout, { edgeClearance = 0.3 } = {}) {
     if (minDrill != null && v.drill < minDrill - 1e-9) errors.push({ rule: 'drill', value: v.drill, limit: minDrill, msg: `via drill ${v.drill} mm is below the minimum ${minDrill} mm` });
     if (v.pad <= v.drill) errors.push({ rule: 'annular', value: v.pad, limit: v.drill, msg: `via pad ${v.pad} mm is not larger than its drill ${v.drill} mm` });
   }
+  // component courtyards must not overlap (touching is fine); they are axis-aligned rectangles
+  const cys = layout.items.filter(i => i.type === 'courtyard').map(c => ({ ...c, b: bbox([c.pts]) }));
+  for (let i = 0; i < cys.length; i++) for (let j = i + 1; j < cys.length; j++) {
+    const a = cys[i].b, b = cys[j].b, ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    if (ox > 1e-6 && oy > 1e-6) errors.push({ rule: 'courtyard', value: Math.min(ox, oy), msg: `courtyards of ${cys[i].name} and ${cys[j].name} overlap by ${Math.min(ox, oy).toFixed(2)} mm (increase pitch=)` });
+  }
   // copper to board edge, ignoring the copper that runs into a port on the edge
   const ports = layout.items.filter(i => i.type === 'port');
   const edge = layout.outline;

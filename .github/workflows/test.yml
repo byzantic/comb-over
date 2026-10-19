@@ -15,9 +15,15 @@ jobs:
       - run: npm ci
       - run: npm test
 
-  # Generated KiCad parts must load and pass DRC in KiCad 9 (issues #22, #9).
+  # Generated KiCad projects must load and pass DRC in KiCad (issues #22, #7, #9).
+  # 9.0.8 is the target and gates merges; the newest KiCad 10 is checked too but only reports.
   kicad:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kicad: ['9.0.8', '10.0.7']
+    continue-on-error: ${{ !startsWith(matrix.kicad, '9.') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,10 +36,20 @@ jobs:
           done
           # worked example 8: impedance-defined coupler → microstrip → board, as the layout panel does it
           node tools/kicad.mjs examples/coupler-10dB-microstrip.cir --make jlc-ro4350b-1.524 --out kicad-out/example8-1524 --board --date 2026-01-01
-      - name: kicad-cli (KiCad 9)
-        run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:9.0 bash tools/kicad-check.sh kicad-out
+          # deliberately broken 1: coupled-line gap 0.06 mm, below JLC's 0.1 mm. The gap is inside the
+          # part, a net-tie footprint, where KiCad does not check clearance (verified on 9.0.8 and 10.0.7),
+          # so comb-over's own DRC must refuse the export.
+          sed 's/^\.param s = 0\.1025mm.*/.param s = 0.06mm/' examples/coupler-10dB-ro4350b.cir > /tmp/broken-gap.cir
+          grep -q '^.param s = 0.06mm' /tmp/broken-gap.cir
+          if node tools/kicad.mjs /tmp/broken-gap.cir --out /tmp/broken-gap --board; then echo "::error title=broken-gap::export of a sub-minimum gap was not refused"; exit 1; fi
+          # deliberately broken 2: connectors on an 8 mm pitch, their 11.16 mm courtyards overlap. Exported
+          # anyway; KiCad's DRC must catch it on the board.
+          sed 's/^\.layout coupler K.*/.layout coupler K pitch=8mm/' examples/coupler-10dB-ro4350b.cir > /tmp/broken-pitch.cir
+          node tools/kicad.mjs /tmp/broken-pitch.cir --out kicad-out/broken-pitch --board --date 2026-01-01 --force
+      - name: KiCad ${{ matrix.kicad }}
+        run: docker run --rm -u root -v "$PWD:/w" -w /w kicad/kicad:${{ matrix.kicad }} bash tools/kicad-check.sh kicad-out
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: kicad-out
+          name: kicad-out-${{ matrix.kicad }}
           path: kicad-out

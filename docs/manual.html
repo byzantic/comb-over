@@ -1016,7 +1016,8 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </ul>
 <p><strong>Checks.</strong> The layout is checked against the substrate&#39;s fabrication limits:</p>
 <ul>
-<li>copper-to-copper spacing between different nets (and shorts);</li>
+<li>copper-to-copper spacing between different nets (and shorts), and gaps below the minimum space within one net;</li>
+<li>overlapping connector courtyards;</li>
 <li>trace width and via drill;</li>
 <li>copper too close to the board edge or outside it.</li>
 </ul>
@@ -1069,7 +1070,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <ul>
 <li><strong>Reference planes.</strong> The part ends where the feeds change to the port-impedance width: the split points of §8.1 on coupled lines, and the ends of the reference line&#39;s matched feeds (Schiffman). They are drawn dashed on F.Fab. Attach each feed at its pad end.</li>
 <li><strong>Pads.</strong> Every conductor is a custom-shape SMD pad on F.Cu, so the copper has a net and DRC treats it as such. A conductor that carries two ports, like a coupler&#39;s through line, is cut at mid-length into two abutting pads.</li>
-<li><strong>Net ties.</strong> Those pad pairs are declared in <code>net_tie_pad_groups</code>, so KiCad accepts the DC path between two different nets. On the Marchand the two outputs and GND form one group, since both secondaries are grounded.</li>
+<li><strong>Net ties.</strong> Those pad pairs are declared in <code>net_tie_pad_groups</code>, so KiCad accepts the DC path between two different nets. A side effect: KiCad then skips clearance checks between all pads of the footprint (§8.3, Validation). The part&#39;s internal gaps are checked by comb-over&#39;s DRC, which refuses to export when they fail. On the Marchand the two outputs and GND form one group, since both secondaries are grounded.</li>
 <li><strong>Grounding vias</strong> (Marchand) are thru-hole pads on the GND pad number, with solid zone connection.</li>
 <li><strong>Keepout.</strong> A rule area named &quot;RF keepout&quot; forbids copper pour on F.Cu within max(3h, 1 mm) of the copper. Tracks, vias and pads are still allowed in it, so feeds can enter.</li>
 <li><strong>Solder mask</strong> is opened over the conductors, which matches the model (no mask dielectric). The paste layer is not used.</li>
@@ -1124,8 +1125,21 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <li><strong>Notes.</strong> The title block and a note on User.Comments record the substrate, f0, the part name and the netlist hash, and warn the fab not to substitute material or thickness.</li>
 </ul>
 <p>The F.Cu pour can be switched off from the command line (<code>--no-top-pour</code>). On thick substrates the 3h clearance leaves little room for it anyway. The 1.524 mm Marchand and Schiffman demos get only a few vias, while the 0.508 mm coupler gets a full fence.</p>
-<p><strong>Validation.</strong> CI generates the three demo projects and checks them with KiCad 9&#39;s own <code>kicad-cli</code> and <code>pcbnew</code>: parse, zone fill, DRC and Gerber export. There are no DRC errors.</p>
-<p>The coupler and Schiffman boards have no DRC violations at all.</p>
+<p><strong>Validation.</strong> Every pull request generates KiCad projects and checks them with KiCad&#39;s own tools in the official <code>kicad/kicad</code> containers (<code>tools/kicad-check.sh</code>). The projects are the three demos, worked example 8 (converted to microstrip as the layout panel does it) and a deliberately broken board. The checks are:</p>
+<ul>
+<li>the footprint and symbol libraries parse;</li>
+<li>every footprint re-saves identically with KiCad&#39;s writer;</li>
+<li>the board loads and its zones fill;</li>
+<li>DRC;</li>
+<li>Gerber and drill export.</li>
+</ul>
+<p>DRC is judged against <code>tools/kicad-expected.json</code>: any violation type not listed for a design fails the build, warnings included. Allowed today: &quot;isolated copper&quot; on the 1.524 mm Marchand and the example 8 board, where the 3h keepout leaves only small top-pour islands.</p>
+<p>Two deliberate faults check that faults are caught:</p>
+<ul>
+<li><strong>A 0.06 mm coupled gap</strong>, below JLC&#39;s 0.1 mm. comb-over&#39;s own DRC must refuse the export. KiCad cannot catch this one: declaring net ties turns off KiCad&#39;s clearance checks between <em>all</em> pads of that footprint, not only those tied together. This was verified on 9.0.8 and 10.0.7: without the declaration the same board shows four clearance violations. So the gaps inside a part are checked by comb-over, and everything around the part (connectors, feeds, vias, pours) by both.</li>
+<li><strong>Connectors on an 8 mm pitch</strong>, so their 11.16 mm courtyards overlap. The board is exported with <code>--force</code>, and KiCad&#39;s DRC must report <code>courtyards_overlap</code>.</li>
+</ul>
+<p><strong>KiCad 9.0.8</strong> is the target and gates merges. <strong>KiCad 10.0.7</strong> runs the same checks but only reports, so format changes show up early. Under KiCad 10 the footprint re-save comparison is informational, because KiCad 10 converts files to its own format on save.</p>
 <p>The Marchand board has two &quot;isolated copper&quot; warnings. On 1.524 mm material the 3h keepout around the part, a rectangle, leaves only small top-pour islands, each touching a single connector ground pad. A keepout that follows the conductors instead of their bounding box would fix this.</p>
 <pre><code class="language-sh">node tools/kicad.mjs examples/coupler-10dB-ro4350b.cir --out board/ --board [--zip] [--no-top-pour] [--via-pitch MM]
 </code></pre>

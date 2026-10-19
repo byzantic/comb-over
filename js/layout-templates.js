@@ -367,6 +367,9 @@ function addConnectors(d, L, conn, mode) {
     p.connector = conn.id; p.launch = lc;
     lc.sig.forEach(pts => L.items.push({ type: 'poly', layer: 'F.Cu', net: p.net, pts, width: lc.pw, label: `${conn.mpn} ${p.name} signal`, role: 'connector', edgeOk: true }));
     lc.gnd.forEach(pts => L.items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts, width: conn.ground.w, label: `${conn.mpn} ${p.name} ground`, role: 'connector', edgeOk: true }));
+    // courtyard (connector-local x0..x1 × ±y, +x out of the board), for the overlap check
+    const cy = conn.courtyard, [ux, uy] = p.dir, P = (x, y) => [p.x + ux * x - uy * y, p.y + uy * x + ux * y];
+    L.items.push({ type: 'courtyard', name: `${conn.mpn} ${p.name}`, pts: [P(cy.x0 - lc.Lt, -cy.y), P(cy.x1, -cy.y), P(cy.x1, cy.y), P(cy.x0 - lc.Lt, cy.y)] });
     const re = new RegExp(`^T${p.name}_f (\\S+) (\\S+) W=([\\d.]+)mm len=([\\d.]+)mm`);
     const i = lines.findIndex(l => re.test(l));
     if (i < 0) throw new Error(`.layout: no feed line for port ${p.name}`);

@@ -2,7 +2,8 @@
 #   python3 tools/kicad_check.py DESIGN_DIR
 # 1. load the library footprint and re-save it with KiCad's writer, and report how KiCad's
 #    output differs from ours (normalisation, dropped or unknown tokens);
-# 2. load the check board and list the embedded part's pads and nets.
+# 2. load the board and list the embedded part's pads and nets.
+# The re-save must be identical under KiCad 9 (our target format); under later versions it is reported.
 import glob, os, re, sys, tempfile
 import pcbnew
 
@@ -57,6 +58,14 @@ for modfile in sorted(glob.glob(os.path.join(pretty, '*.kicad_mod'))):
 b = pcbnew.LoadBoard(glob.glob(os.path.join(d, '*.kicad_pcb'))[0])
 bfp = [f for f in b.GetFootprints() if f.GetFPID().GetLibItemName() == name][0]
 print('board copy at', pcbnew.ToMM(bfp.GetPosition().x), pcbnew.ToMM(bfp.GetPosition().y), 'pads with nets:', [(p.GetNumber(), p.GetNetname()) for p in bfp.Pads()])
-if strict_fail:
+# The writer targets KiCad 9's file format, so the re-save must match exactly only under KiCad 9;
+# a later KiCad converts on save (the board must still load, and DRC is judged separately).
+try: kver = pcbnew.Version()
+except Exception: kver = pcbnew.GetBuildVersion()
+major = int(re.match(r'\D*(\d+)', str(kver)).group(1)) if re.match(r'\D*(\d+)', str(kver)) else 0
+print('KiCad', kver)
+if strict_fail and major == 9:
     print('FAIL: KiCad re-saves the footprint differently from what we wrote')
     sys.exit(1)
+if strict_fail:
+    print(f'note: KiCad {kver} re-saves in its own format; differences reported above are not failures')
