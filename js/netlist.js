@@ -1,6 +1,7 @@
 // Netlist parser. See README.md for the language. Produces a plain "design" object
 // whose numeric values are already evaluated (with optional parameter overrides).
 
+import { viaL } from './discontinuities.js';
 import { parseExpr, evalReal, astHasDeg } from './expr.js';
 import { Section, fromY0, fromCnorm, fromEvenOdd, maxwellFromGroundMutual, C0 } from './section.js';
 import { rSymFunc } from './linalg.js';
@@ -208,6 +209,23 @@ export function parseNetlist(text, overrides = {}) {
       return;
     }
     if (kwl === 'wire') { for (let i = 2; i < toks.length; i++) d.wires.push([toks[1], toks[i]]); return; }
+    // via NAME NODE [NODE2] d=.. [n=..] [h=..] [Q=..]: plated via(s) to ground (or to NODE2), as the
+    // Goldfarb–Pucel inductance (issue #5); h defaults to the .substrate height
+    if (kwl === 'via') {
+      if (toks.length < 3) fail(ln, 'via NAME NODE [NODE2] d=.. [n=..] [h=..]');
+      const nodes = [], o = {};
+      for (const x of toks.slice(2)) { const k = kv(x); if (k) o[k[0].toLowerCase()] = ev(k[1], ln); else nodes.push(x); }
+      for (const key of Object.keys(o)) if (!['d', 'n', 'h', 'q'].includes(key)) fail(ln, `unknown via option ${key}`);
+      if (!(o.d > 0)) fail(ln, 'via: d= (drill diameter) is required');
+      const h = o.h ?? d.scope.sub_h;
+      if (!(h > 0)) fail(ln, 'via: give h= or a .substrate');
+      const n = Math.max(1, Math.round(o.n ?? 1));
+      const v = viaL({ d: o.d, h, n });
+      v.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
+      d.elements.push({ type: 'L', name: toks[1], a: nodes[0], b: nodes[1] ?? '0', value: v.L, Q: o.q ?? Infinity, line: ln + 1, via: { d: o.d, h, n, L1: v.L1 } });
+      elemCount++;
+      return;
+    }
 
     // Elements: R*, C*, L*, T*
     const type = kw[0].toUpperCase();

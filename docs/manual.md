@@ -142,6 +142,7 @@ Unknown directives are ignored with a warning.
 | `T<name> N1 N2 Z0=.. len=.. [er=..] [Q=..] [f0=..]` | Single uncoupled line, both ends referenced to ground. |
 | `T<name> N1 N2 W=.. len=.. [Q=..] [f0=..]` | Single microstrip line of width W on the `.substrate` (§4.6). |
 | `wire N1 N2 [N3 …]` | Joins nodes (a zero-ohm short). Use this instead of a 0 Ω resistor. |
+| `via <name> N1 [N2] d=.. [n=..] [h=..] [Q=..]` | `n` plated vias of drill `d` from N1 to ground (or to N2), as the Goldfarb–Pucel inductance (§4.7). `h` defaults to the `.substrate` height. |
 | `cline NAME … end` | Coupled multiconductor section (§4). |
 
 Element names follow SPICE: the first letter selects the type (`C1`, `Cload`, `Lchoke`, `T5`).
@@ -345,6 +346,30 @@ Some results on JLC's 0.508 mm RO4350B:
 - **Thickness correction for tight gaps.** For gaps below about 20 t, the coupled-line thickness correction is approximate. A field-solver check can settle this too.
 
 ---
+
+
+### 4.7 Discontinuities
+
+The line model is pure TEM, so it has no parasitics of its own (§9.3). The layout templates add the most important ones automatically, and a `via` element is available for netlists written by hand. The models live in `js/discontinuities.js`.
+
+| discontinuity | model | where it is used |
+|---|---|---|
+| **Open end** | Equivalent length extension Δl of the open-circuited line (Kirschning, Jansen & Koster, *Electronics Letters* 1981; stated accuracy about 2.5 % for 0.01 ≤ W/h ≤ 100, εr ≤ 128). | Marchand main line: a `Tmain_oe … len=Δl` stub on the open end in the as-built and core netlists. |
+| **Via to ground** | L = (μ0/2π)[h ln((h + √(r² + h²))/r) + 1.5(r − √(r² + h²))], r = d/2 (Goldfarb & Pucel, *IEEE MGWL* 1991). n vias in parallel give L/n, with mutual coupling neglected, which is optimistic for closely spaced vias. | `via` element; Marchand grounded ends (a stub to the via-pad centre plus `via … n=2`). |
+| **Edge-connector launch** | Placeholder series L / shunt C at each port, with parameters `sma_l` and `sma_c`. | Every connector port (§8.4). |
+| **T-junction** | Not yet. | Needed only by tapped comb-line and interdigital layouts (issue #15). |
+
+**Typical values:**
+
+| | 0.508 mm RO4350B | 1.524 mm RO4350B |
+|---|---|---|
+| Open end Δl (50 Ω line) | 0.22 mm (Δl/h 0.42) | 0.65 mm (Δl/h 0.43) |
+| One 0.3 mm via | 83 pH | 0.50 nH |
+
+**Effect on the Marchand demo.** On 1.524 mm RO4350B, the 2 × 0.3 mm vias at each grounded end (0.25 nH, j1.6 Ω at 1 GHz) and the 0.52 mm open-end extension move the outputs by less than 0.1 dB at f0.
+
+**Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.
+
 
 ## 5. Plots and trace expressions
 
@@ -561,7 +586,9 @@ For the 10 dB coupler at 5 GHz the as-built coupling is −10.25 dB, against −
 - bends;
 - coupling between the diverging feed sections;
 - the Schiffman bridge;
-- grounding-via inductance (issue #5).
+- T-junctions (not used by these templates).
+
+It does model the discontinuities of §4.7: grounding vias (Marchand), the open end of the Marchand main line, and a tunable placeholder for each connector launch.
 
 **SVG** downloads the preview. From the command line:
 
@@ -663,7 +690,7 @@ The generated footprint (`SMA_Amphenol_132289_EdgeMount_W<feed width>`) has its 
 
 On 0.508 mm RO4350B the stock 1.5 mm pad is a 41 Ω, 5 mm section, about 50° at 5 GHz, at every port. It moves the 10 dB coupler's coupling from −10.07 dB to −11.29 dB. With `launch=matched` it stays at −10.25 dB.
 
-The as-built netlist models the pad and any taper as line sections. The connector itself, its pin and the launch transition are not modelled (issue #5).
+The as-built netlist models the pad and any taper as line sections. The transition into the connector is a placeholder (§4.7): a series L (`sma_l`) and shunt C (`sma_c`) at every port. They are effectively zero by default, with tune ranges of 1 pH–2 nH and 1 fF–1 pF, so they can be fitted to EM or measured data.
 
 **Board thickness.** The connector's ground legs straddle the board. The layout card warns when the board (core + 2 × copper) is more than ±0.15 mm from the connector's 1.57 mm, which is the case for the 0.508 mm coupler demo. Either choose a variant of the connector made for the actual thickness, or use a 1.57 mm stack-up. The 1.524 mm RO4350B demos (1.594 mm with copper) fit.
 
@@ -709,7 +736,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 
 - Dispersion; the quasi-TEM ε<sub>eff</sub> is constant.
 - Higher-order modes and radiation.
-- Open-end fringing capacitance, short-circuit inductance, tap and junction discontinuities, and bond wires. Add these explicitly as lumped elements or short line sections.
+- Open-end fringing, via inductance and connector launches, except where you add them: the `via` element, the layout templates (§4.7), or explicit lumped elements and short line sections. Tap and junction discontinuities and bond wires are not modelled.
 - Frequency-dependent conductor loss, apart from the constant-Q approximation.
 - Mutual coupling between sections that do not share a `cline` block.
 
