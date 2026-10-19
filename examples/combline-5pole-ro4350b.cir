@@ -1,0 +1,63 @@
+.title Comb-line chebyshev n=5 0.1dB, f0 = 2 GHz, FBW = 5 % on jlc-ro4350b-0.762 (synthesised geometry)
+# substrate jlc-ro4350b-0.762: h 0.762 mm, εr 3.66, copper 34.79 µm; field-solved array
+# widths 1.147 1.186 1.183 1.186 1.147 mm; gaps 2.861 3.676 3.676 2.861 mm
+# line length 11.258 mm (44.777° at f0, mean modal velocity); tap 2.0377 mm from the shorted end
+# shorted ends: 2 × 0.3 mm vias (83.4 pH); open ends: KJK Δl as a capacitance
+# realised (lossless): centre 1.9977 GHz, −3 dB FBW 5.668 % (ideal 5.674 %), worst return loss over the central 80 % of the ripple band 16.51 dB (ideal 16.43 dB)
+# insertion loss at f0 2.15 dB with the substrate's conductor and dielectric loss (modal Q 171, 172, 173, 174, 174)
+# not modelled: tap T-junction and feed lines (issue #15)
+.freq 1.6G 2.4G 801
+.ref 2G
+.substrate jlc-ro4350b-0.762
+.param th0 = 44.7766313 tune 43.4333 46.1199
+.param tt = 8.104423 tune 5.673 10.54
+.param w1 = 1.14732mm tune 0.975224mm 1.31942mm
+.param w2 = 1.18649mm tune 1.00851mm 1.36446mm
+.param w3 = 1.18336mm tune 1.00586mm 1.36087mm
+.param s12 = 2.86125mm tune 2.289mm 3.57656mm
+.param s23 = 3.67592mm tune 2.94074mm 4.5949mm
+.param cl1 = 1.25256p tune 1.06468p 1.44045p
+.param cl2 = 1.24561p tune 1.05877p 1.43245p
+.param cl3 = 1.24372p tune 1.05716p 1.43028p
+
+port t1 50
+port t5 50
+
+cline S1
+  geom msl
+  W [w1 w2 w3 w2 w1]
+  S [s12 s23 s23 s12]
+  len tt*1deg
+  A g1 g2 g3 g4 g5
+  B t1 x2_1 x3_1 x4_1 t5
+end
+cline S2
+  geom msl
+  W [w1 w2 w3 w2 w1]
+  S [s12 s23 s23 s12]
+  len (th0-tt)*1deg
+  A t1 x2_1 x3_1 x4_1 t5
+  B r1 r2 r3 r4 r5
+end
+via V1 g1 d=0.3mm n=2
+via V2 g2 d=0.3mm n=2
+via V3 g3 d=0.3mm n=2
+via V4 g4 d=0.3mm n=2
+via V5 g5 d=0.3mm n=2
+C1 r1 0 cl1
+Coe1 r1 0 0.0276669p   # open-end fringing (Δl of a 1.147 mm line)
+C2 r2 0 cl2
+Coe2 r2 0 0.0275835p   # open-end fringing (Δl of a 1.186 mm line)
+C3 r3 0 cl3
+Coe3 r3 0 0.0276381p   # open-end fringing (Δl of a 1.183 mm line)
+C4 r4 0 cl2
+Coe4 r4 0 0.0275835p   # open-end fringing (Δl of a 1.186 mm line)
+C5 r5 0 cl1
+Coe5 r5 0 0.0276669p   # open-end fringing (Δl of a 1.147 mm line)
+
+.goal db(S11) < -16.43 1952624900 2048624900
+.goal db(S21) < -3 1600000000 1942366600   # −3 dB band at most 3 % wider than ideal
+.goal db(S21) < -3 2059242600 2400000000
+.plot ylim=-70,0 db(S11) db(S21) db(cheby(5,0.1,2000000000,0.05))
+.plot gd(S21)
+.smith S11

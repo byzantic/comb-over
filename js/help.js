@@ -74,6 +74,9 @@ interdigital b = πY<sub>a</sub>/4, J = Y<sub>m</sub>; tap sin θt = sin θ0 √
 Refinement: exact split-mode k for each pair, tap Q<sub>e</sub> and end-resonator frequency from the full multiconductor model (S11 group delay),
 then pre-distortion of f0 and FBW to land the realised centre and −3 dB bandwidth. The generated netlist carries tune ranges and a return-loss goal,
 so the optimiser can polish the remaining ripple error. The trace functions <code>cheby(n,ripple,f0,fbw)</code> and <code>butter(n,f0,fbw)</code> give the ideal |S21|.</p>
+<p><b>Realise in microstrip</b> (a substrate in the dialog) turns the design into widths, gaps, length, tap and vias: Y0 → W/S by Newton on the field solver,
+then synchronous tuning, split-mode k and tap Qe on the inhomogeneous model with vias and open-end fringing, then a goal polish (return loss, bandwidth)
+on a model linearised in W/S, re-solved each round. Non-adjacent (mostly inductive) couplings make the skirts asymmetric (manual §7.6).</p>
 
 <h4>Model</h4>
 <p>Each section is solved by modal decomposition of LC (M = C<sup>½</sup>LC<sup>½</sup> = PΛPᵀ, W = C<sup>½</sup>P):

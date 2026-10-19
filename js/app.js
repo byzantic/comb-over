@@ -409,9 +409,16 @@ $('btn-opt').onclick = async () => {
   const dlg = $('synth'), form = $('synth-form'), msg = $('synth-msg');
   const SKEY = 'comb-over:synth';
   form.elements.capsub.innerHTML = listPresets().map(p => `<option value="${p.id}"${p.id === 'jlc-ro4350b-0.508' ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+  form.elements.phys.innerHTML = '<option value="">no — ideal TEM lines</option>' + listPresets().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
   try { const saved = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (saved) for (const [k, v] of Object.entries(saved)) { const el = form.elements[k]; if (el) el.type === 'checkbox' ? (el.checked = v) : (el.value = v); } } catch {}
   const sync = () => {
     dlg.classList.toggle('hide-comb', form.elements.structure.value !== 'comb');
+    const phys = !!form.elements.phys.value;
+    dlg.classList.toggle('hide-phys', !phys);
+    // the capacitor realisation (#14) works on the homogeneous netlist's cl1/cl; with a physical
+    // geometry each resonator has its own (ideal) capacitor
+    form.elements.captype.disabled = phys; if (phys) form.elements.captype.value = 'ideal';
+    form.elements.er.disabled = phys;
     dlg.classList.toggle('hide-capopt', form.elements.captype.value === 'ideal');
     const cheb = form.elements.type.value === 'chebyshev';
     form.elements.ripple.disabled = !cheb;
@@ -419,6 +426,7 @@ $('btn-opt').onclick = async () => {
     form.querySelector('.rl').textContent = cheb && r > 0 ? `return loss ${returnLossDb(r).toFixed(2)} dB` : '';
   };
   form.addEventListener('input', sync);
+  const saveForm = () => { try { localStorage.setItem(SKEY, JSON.stringify(Object.fromEntries([...form.elements].filter(x => x.name).map(x => [x.name, x.type === 'checkbox' ? x.checked : x.value])))); } catch {} };
   $('btn-synth').onclick = () => { msg.textContent = ''; msg.className = 'status'; sync(); dlg.showModal(); };
   $('synth-go').onclick = (e) => {
     e.preventDefault();
@@ -431,6 +439,25 @@ $('btn-opt').onclick = async () => {
         f0: num('f0'), fbw: num('fbw') / 100, theta0Deg: num('theta0Deg'), Zr: num('Zr'), er: num('er'), R0: num('R0'), refine: F.refine.checked,
       };
       msg.textContent = 'synthesising…'; msg.className = 'status';
+      if (F.phys.value) {
+        // geometry synthesis: off the main thread, with progress
+        const via = { d: num('viad'), n: Math.max(1, Math.round(num('vian'))) };
+        const w = new Worker(new URL('./synth-worker.js', import.meta.url), { type: 'module' });
+        $('synth-go').disabled = true;
+        msg.textContent = 'synthesising the geometry (field solver and optimiser, a few seconds)…';
+        w.onmessage = (ev) => {
+          const m = ev.data;
+          if (m.progress) { msg.textContent = `synthesising the geometry… ${m.progress}`; return; }
+          w.terminate(); $('synth-go').disabled = false;
+          if (m.error) { msg.textContent = m.error; msg.className = 'status err'; return; }
+          saveForm();
+          dlg.close();
+          editor.value = m.netlist; state.overrides = {}; state.paramSig = null; state.hoverK = null; run();
+        };
+        w.onerror = (ev) => { w.terminate(); $('synth-go').disabled = false; msg.textContent = `synthesis failed: ${ev.message}`; msg.className = 'status err'; };
+        w.postMessage({ spec, substrate: F.phys.value, via });
+        return;
+      }
       r = design(spec);
       // loading capacitors (#14): realise the ideal end capacitors as SMD parts, trimmers or printed pads
       const ct = F.captype.value;
@@ -440,7 +467,7 @@ $('btn-opt').onclick = async () => {
         r.netlist = out.text; r.capWarnings = out.warnings;
       }
     } catch (err) { msg.textContent = err.message; msg.className = 'status err'; return; }
-    try { localStorage.setItem(SKEY, JSON.stringify(Object.fromEntries([...form.elements].filter(x => x.name).map(x => [x.name, x.type === 'checkbox' ? x.checked : x.value])))); } catch {}
+    saveForm();
     dlg.close();
     editor.value = r.netlist; state.overrides = {}; state.paramSig = null; state.hoverK = null; run();
     if (F.polish.checked && r.spec.type === 'chebyshev') $('btn-opt').click();
