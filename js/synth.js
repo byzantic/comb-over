@@ -202,7 +202,7 @@ export function designAt(s) {
 // ---------------- netlist generation ----------------
 // Line layout (1-based i): comb → shorted at A, open (capacitor) at B.
 // interdigital → odd lines shorted at A, even lines shorted at B.
-function geometry(structure, n, theta0, thetaT, { load = true, tapsOn = [1, n], portsOn = [1, n], groundOthers = false } = {}) {
+export function geometry(structure, n, theta0, thetaT, { load = true, tapsOn = [1, n], portsOn = [1, n], groundOthers = false } = {}) {
   const deg = (r) => +(r * 180 / Math.PI).toFixed(9);
   const shortAtA = (i) => structure === 'comb' || i % 2 === 1;
   // tap plane position (from A) for a given line

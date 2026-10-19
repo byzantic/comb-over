@@ -4,6 +4,10 @@
     "name": "Comb-line 5-pole, synthesised (Example 3)"
   },
   {
+    "file": "combline-5pole-ro4350b.cir",
+    "name": "Comb-line 5-pole on 0.762 mm RO4350B, synthesised geometry (manual §7.6)"
+  },
+  {
     "file": "combline-4pole.cir",
     "name": "Comb-line bandpass, 4 resonators (Matthaei-style I/O lines)"
   },
@@ -14,6 +18,10 @@
   {
     "file": "interdigital-synth-3pole.cir",
     "name": "Interdigital 3-pole, synthesised (Example 4)"
+  },
+  {
+    "file": "interdigital-3pole-fr4.cir",
+    "name": "Interdigital 3-pole on 1.6 mm FR-4, synthesised geometry (manual §7.6)"
   },
   {
     "file": "interdigital-4pole.cir",
@@ -53,7 +61,7 @@
   },
   {
     "file": "schiffman-90.cir",
-    "name": "Schiffman 90\u00b0 phase shifter (Example 6)"
+    "name": "Schiffman 90° phase shifter (Example 6)"
   },
   {
     "file": "three-line-CL.cir",

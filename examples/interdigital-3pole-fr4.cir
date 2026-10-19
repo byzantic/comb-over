@@ -1,0 +1,52 @@
+.title Interdigital chebyshev n=3 0.1dB, f0 = 1.5 GHz, FBW = 10 % on jlc-fr4-1.6 (synthesised geometry)
+# substrate jlc-fr4-1.6: h 1.53 mm, εr 4.5, copper 34.79 µm; field-solved array
+# widths 2.87 2.469 2.87 mm; gaps 2.623 2.623 mm
+# line length 25.697 mm (84.449° at f0, mean modal velocity); tap 4.5654 mm from the shorted end
+# shorted ends: 2 × 0.3 mm vias (253.7 pH); open ends: KJK Δl as a capacitance
+# realised (lossless): centre 1.4983 GHz, −3 dB FBW 14.36 % (ideal 13.89 %), worst return loss over the central 80 % of the ripple band 16.88 dB (ideal 16.43 dB)
+# insertion loss at f0 2.43 dB with the substrate's conductor and dielectric loss (modal Q 49.6, 51.6, 52.9)
+# not modelled: tap T-junction and feed lines (issue #15)
+.freq 0.9G 2.1G 801
+.ref 1.5G
+.substrate jlc-fr4-1.6
+.param th0 = 84.4485954 tune 81.9151 86.9821
+.param tt = 15.00352 tune 10.5 19.5
+.param w1 = 2.86999mm tune 2.43949mm 3.30048mm
+.param w2 = 2.46914mm tune 2.09877mm 2.83951mm
+.param s12 = 2.62349mm tune 2.09879mm 3.27936mm
+.param cl1 = 0.0592863p tune 0.0177859p 0.168573p   # end-resonator trim (tap-loading compensation)
+
+port t1 50
+port t3 50
+
+cline S1
+  geom msl
+  W [w1 w2 w1]
+  S [s12 s12]
+  len tt*1deg
+  A g1 r2 g3
+  B t1 x2_1 t3
+end
+cline S2
+  geom msl
+  W [w1 w2 w1]
+  S [s12 s12]
+  len (th0-tt)*1deg
+  A t1 x2_1 t3
+  B r1 g2 r3
+end
+via V1 g1 d=0.3mm n=2
+via V2 g2 d=0.3mm n=2
+via V3 g3 d=0.3mm n=2
+C1 r1 0 cl1
+Coe1 r1 0 0.0738494p   # open-end fringing (Δl of a 2.87 mm line)
+Coe2 r2 0 0.0730978p   # open-end fringing (Δl of a 2.469 mm line)
+C3 r3 0 cl1
+Coe3 r3 0 0.0738494p   # open-end fringing (Δl of a 2.87 mm line)
+
+.goal db(S11) < -16.43 1429873800 1573873800
+.goal db(S21) < -3 900000000 1396313200   # −3 dB band at most 3 % wider than ideal
+.goal db(S21) < -3 1610912900 2100000000
+.plot ylim=-70,0 db(S11) db(S21) db(cheby(3,0.1,1500000000,0.1))
+.plot gd(S21)
+.smith S11

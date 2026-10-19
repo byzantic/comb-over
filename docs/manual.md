@@ -532,6 +532,8 @@ Optimisation is local. Start from a sensible design (§7) and give realistic ran
 | ε<sub>r</sub>, R0 | Dielectric (homogeneous) and port impedance. |
 | Refine numerically | Corrections using the full model (below). |
 | Polish | Runs the optimiser on the result. |
+| Realise in microstrip | A substrate preset: synthesise the physical geometry (widths, gaps, length, tap, vias) on it instead of ideal TEM lines (§7.6). |
+| Ground vias | Drill diameter and number of vias at each shorted end (physical geometry only). |
 
 ### 7.1 Closed form
 
@@ -636,6 +638,41 @@ The designer warns, in the netlist comments and the status line, when an option 
 - more than 1 dB of loss from capacitor Q.
 
 **Footprints.** `capFootprint()` in `js/kicad.js` gives each option's KiCad footprint: pad 1 on the resonator end, pad 2 and its via land to ground. The comb-line layouts of issue #15 place them. `node tools/kicad.mjs --caps SUBSTRATE --out DIR` writes them as a library, and CI checks that library in KiCad.
+
+### 7.6 Physical geometry in microstrip
+
+With **Realise in microstrip** set to a substrate, the dialog goes on from the homogeneous design to a buildable geometry. It produces a netlist whose array is given by its strip widths and gaps (`geom msl W [...] S [...]`, solved by the field solver with the substrate's copper thickness, §4.6). The netlist also has a `via` at every shorted end and the open-end fringing at every open end. The computation takes from a few seconds to about 20 s, and runs in the background. The steps:
+
+1. **Map the admittances.** Find widths and gaps (symmetric) whose field-solved characteristic admittance matrix Yc matches the design's Y0 on the diagonal and in the adjacent couplings. Newton's method in ln W and ln S does this, first with zero-thickness strips, then with the real copper. Widths and gaps below the substrate's fabrication limits are clamped, with a warning.
+2. **Coupled-resonator refinement on the physical model.** The model is the inhomogeneous multi-mode section, with via inductance (Goldfarb–Pucel) at each shorted end and the KJK open-end Δl as a capacitance at each open end. Throughout, the other resonators are shorted at their open ends, as in §7.2:
+   - each resonator is tuned to f0: its own loading capacitor for comb-line, the common length for interdigital;
+   - each gap is adjusted until the pair's split-mode coupling equals the prototype's;
+   - the tap and the end capacitor are set from the S11 group delay of the singly loaded first resonator.
+
+   The reduced susceptance comes directly from the section's admittance matrix: B = B<sub>OO</sub> − B<sub>OS</sub>(B<sub>SS</sub> − 1/ωL<sub>via</sub>)⁻¹B<sub>SO</sub> + ω(C<sub>oe</sub> + C<sub>l</sub>).
+3. **Polish on the actual spec.** The goal optimiser works on the netlist's goals: return loss across the ripple band, and the −3 dB band at most 3 % wider than ideal. It moves the gaps, widths, length, loading capacitors and tap. For speed, C and L are linearised in the widths and gaps around the last field solve. Each step is limited to ±15 % (a trust region), and the geometry is solved again exactly after each round until the exact model meets the goals.
+
+**Why step 3 is needed.** In microstrip, coupling between non-adjacent resonators is significant, because it is mostly inductive and falls off slowly. For the 5-pole comb below, k13/k12 ≈ 0.2. The nearest-neighbour design then gives only 6–10 dB return loss in these examples, and no choice of adjacent couplings can make the response exactly Chebyshev. The cross-couplings also put a transmission zero above the band (at 2.1 GHz for that comb), so the skirts come out asymmetric: steeper above and gentler below. The polish therefore aims at the return loss and the bandwidth, and leaves the skirt shapes to the physics.
+
+**Results** (also in `tests/synth-geom.mjs`; the netlists are `examples/combline-5pole-ro4350b.cir` and `examples/interdigital-3pole-fr4.cir`):
+
+| | 5-pole comb-line, 2 GHz, 5 %, 0.1 dB, θ0 45°, Zr 60 Ω on 0.762 mm RO4350B | 3-pole interdigital, 1.5 GHz, 10 %, 0.1 dB, Zr 50 Ω on 1.6 mm FR-4 |
+|---|---|---|
+| geometry | W 1.147 / 1.186 / 1.183 mm, S 2.861 / 3.676 mm, ℓ 11.26 mm, tap 2.04 mm | W 2.87 / 2.47 mm, S 2.62 mm, ℓ 25.70 mm, tap 4.57 mm |
+| return loss, central 80 % of the band | 16.51 dB (ideal 16.43) | 16.88 dB (ideal 16.43) |
+| centre | 1.9977 GHz | 1.4983 GHz |
+| −3 dB bandwidth | 5.668 % (ideal 5.674 %) | 14.36 % (ideal 13.89 %) |
+| insertion loss at f0 | 2.15 dB (modal Q ≈ 172) | 2.43 dB (modal Q ≈ 51, FR-4 tan δ 0.02) |
+
+These are judged on the lossless response, as for the homogeneous synthesis; the insertion loss is reported separately. A narrow comb-line on low-loss laminate still loses about 2 dB, because the copper limits Q to about 170 at 2 GHz on 0.762 mm.
+
+**Not modelled yet:**
+- **Feed.** The tap T-junction and the feed lines to the connectors are left to the layout (issue #15). For now, each tap port sits directly on the resonator.
+- **Loading capacitors.** The capacitor realisation of §7.5 (SMD, trimmer, printed pad) isn't combined with the physical geometry yet, so the capacitors stay ideal, one per resonator (`cl1`, `cl2`, …).
+
+The netlist keeps `tune` ranges on every geometric parameter, so it can be optimised further with the substrate's loss included.
+
+**When it falls short.** The report and the status line say so if the return loss stays more than 1 dB below the ideal, or the bandwidth is off by more than 5 %. Another θ0 or Zr, or running the optimiser on the result, usually helps.
 
 ## 8. Export and sharing
 
