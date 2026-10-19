@@ -11,6 +11,7 @@ import { buildLayout } from './layout-templates.js';
 import { toSVG } from './layout.js';
 import { componentLibrary, boardProject, zip } from './kicad.js';
 import { setSubstrate, setLayout, detectLayouts, toMicrostrip } from './netlist-edit.js';
+import { realiseCaps } from './synth-caps.js';
 import { listPresets, makeSubstrate } from './substrates.js';
 import { CONNECTORS, LAUNCH_MODES } from './connectors.js';
 
@@ -385,9 +386,11 @@ $('btn-opt').onclick = async () => {
 {
   const dlg = $('synth'), form = $('synth-form'), msg = $('synth-msg');
   const SKEY = 'comb-over:synth';
+  form.elements.capsub.innerHTML = listPresets().map(p => `<option value="${p.id}"${p.id === 'jlc-ro4350b-0.508' ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
   try { const saved = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (saved) for (const [k, v] of Object.entries(saved)) { const el = form.elements[k]; if (el) el.type === 'checkbox' ? (el.checked = v) : (el.value = v); } } catch {}
   const sync = () => {
     dlg.classList.toggle('hide-comb', form.elements.structure.value !== 'comb');
+    dlg.classList.toggle('hide-capopt', form.elements.captype.value === 'ideal');
     const cheb = form.elements.type.value === 'chebyshev';
     form.elements.ripple.disabled = !cheb;
     const r = parseFloat(form.elements.ripple.value);
@@ -407,6 +410,13 @@ $('btn-opt').onclick = async () => {
       };
       msg.textContent = 'synthesising…'; msg.className = 'status';
       r = design(spec);
+      // loading capacitors (#14): realise the ideal end capacitors as SMD parts, trimmers or printed pads
+      const ct = F.captype.value;
+      if (spec.structure === 'comb' && ct !== 'ideal') {
+        const [type, pkg] = ct.split('-');
+        const out = realiseCaps(r, r.netlist, { type, pkg, series: F.capseries.value, substrate: F.capsub.value });
+        r.netlist = out.text; r.capWarnings = out.warnings;
+      }
     } catch (err) { msg.textContent = err.message; msg.className = 'status err'; return; }
     try { localStorage.setItem(SKEY, JSON.stringify(Object.fromEntries([...form.elements].filter(x => x.name).map(x => [x.name, x.type === 'checkbox' ? x.checked : x.value])))); } catch {}
     dlg.close();

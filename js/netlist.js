@@ -2,6 +2,7 @@
 // whose numeric values are already evaluated (with optional parameter overrides).
 
 import { viaL } from './discontinuities.js';
+import { expandCap } from './capacitors.js';
 import { parseExpr, evalReal, astHasDeg } from './expr.js';
 import { Section, fromY0, fromCnorm, fromEvenOdd, maxwellFromGroundMutual, C0 } from './section.js';
 import { rSymFunc } from './linalg.js';
@@ -102,7 +103,7 @@ export function parseNetlist(text, overrides = {}) {
   let elemCount = 0;
   const pendingSections = [];
 
-  lines.forEach((raw, ln) => {
+  const handleLine = (raw, ln) => {
     const line = stripComment(raw);
     if (!line) return;
     const toks = splitTokens(line);
@@ -209,6 +210,17 @@ export function parseNetlist(text, overrides = {}) {
       return;
     }
     if (kwl === 'wire') { for (let i = 2; i < toks.length; i++) d.wires.push([toks[1], toks[i]]); return; }
+    // cap NAME N1 [N2] C=.. [type=ideal|smd|printed|trimmer] …: a loading capacitor with its parasitic
+    // model (js/capacitors.js, issue #14), expanded here into primitive elements and sections
+    if (kwl === 'cap') {
+      const nodes = [], o = {};
+      for (const x of toks.slice(2)) { const k = kv(x); if (k) o[k[0].toLowerCase()] = k[1]; else nodes.push(x); }
+      const exp = expandCap({ name: toks[1], nodes, o, ev: (x) => ev(x, ln), sub: d.substrate, f: d.fref ?? (d.freq ? (d.freq.start + d.freq.stop) / 2 : null), fail: (m) => fail(ln, m) });
+      exp.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
+      (d.caps ??= []).push({ name: toks[1], line: ln + 1, ...exp.info });
+      exp.lines.forEach(l => handleLine(l, ln));
+      return;
+    }
     // via NAME NODE [NODE2] d=.. [n=..] [h=..] [Q=..]: plated via(s) to ground (or to NODE2), as the
     // Goldfarb–Pucel inductance (issue #5); h defaults to the .substrate height
     if (kwl === 'via') {
@@ -260,7 +272,8 @@ export function parseNetlist(text, overrides = {}) {
       return;
     }
     fail(ln, `unrecognised statement "${kw}"`);
-  });
+  };
+  lines.forEach(handleLine);
   if (block) fail(block.line, `cline ${block.name} has no "end"`);
 
   if (!d.freq) fail(0, 'missing .freq START STOP POINTS');

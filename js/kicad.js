@@ -10,6 +10,7 @@
 // Geometry conventions follow js/layout.js: millimetres, y down (as in Pcbnew). Symbols use y up.
 
 import { launchTaper, padWidth } from './connectors.js';
+import { capGeometry, SMD_PACKAGES, TRIMMER_FOOTPRINT } from './capacitors.js';
 
 export const KICAD_BOARD_VERSION = 20241229;
 export const KICAD_SYMBOL_VERSION = 20241209;
@@ -539,4 +540,39 @@ export function zip(files, root = '') {
   const all = [...parts, ...central, end], out = new Uint8Array(all.reduce((a, b) => a + b.length, 0));
   let o = 0; for (const a of all) { out.set(a, o); o += a.length; }
   return out;
+}
+
+// ---------------------------------------------------------------- loading-capacitor footprints (#14)
+// One footprint per option, in the capacitor-local frame of js/capacitors.js (origin at the resonator
+// end, +x away from the line). Pad 1 = hot side (resonator), pad 2 = ground (with its vias).
+export function capFootprint({ type, pkg = '0603', a, via = { d: 0.3, n: 2 }, name }) {
+  const g = capGeometry({ type, pkg, a, via });
+  const nm = name || (type === 'smd' ? `CAP_${pkg}_GND${via.n}V` : type === 'trimmer' ? `CAP_TZC3_GND${via.n}V` : `CAP_PRINTED_${num(a).replace('.', 'p')}mm`);
+  const uuid = uuidFactory(`cap:${nm}`);
+  const L = [`(footprint ${q(nm)}`, `\t(version ${KICAD_BOARD_VERSION})\n\t(generator ${q(GENERATOR)})\n\t(generator_version "9.0")`, '\t(layer "F.Cu")'];
+  const src = type === 'smd' ? `pads from KiCad Capacitor_SMD:${SMD_PACKAGES[pkg].kicad}` : type === 'trimmer' ? `pads from KiCad Capacitor_SMD:${TRIMMER_FOOTPRINT.kicad} (Murata TZC3)` : 'square pad to the ground plane';
+  const desc = `comb-over loading capacitor (${type}${type === 'smd' ? ' ' + pkg : ''}): pad 1 on the resonator end, pad 2 to ground${g.vias.length ? ` through ${g.vias.length} vias` : ''}; ${src}`;
+  L.push(`\t(descr ${q(desc)})`, '\t(tags "comb-over capacitor RF")');
+  const bb = { x0: Math.min(...g.crt.map(p => p[0])), x1: Math.max(...g.crt.map(p => p[0])), y0: Math.min(...g.crt.map(p => p[1])), y1: Math.max(...g.crt.map(p => p[1])) };
+  L.push(textProp('Reference', 'C**', [(bb.x0 + bb.x1) / 2, bb.y0 - 1], 'F.Fab', uuid()));
+  L.push(textProp('Value', nm, [(bb.x0 + bb.x1) / 2, bb.y1 + 1], 'F.Fab', uuid(), { hide: true }));
+  L.push(textProp('Datasheet', '', [0, 0], 'F.Fab', uuid(), { hide: true }));
+  L.push(textProp('Description', desc, [0, 0], 'F.Fab', uuid(), { hide: true }));
+  L.push(`\t(attr ${type === 'printed' ? 'smd exclude_from_pos_files exclude_from_bom' : 'smd'})`);
+  const box = [[bb.x0, bb.y0, bb.x1, bb.y0], [bb.x1, bb.y0, bb.x1, bb.y1], [bb.x1, bb.y1, bb.x0, bb.y1], [bb.x0, bb.y1, bb.x0, bb.y0]];
+  for (const [x0, y0, x1, y1] of box) L.push(`\t(fp_line\n\t\t(start ${num(x0)} ${num(y0)})\n\t\t(end ${num(x1)} ${num(y1)})\n\t\t(stroke (width 0.05) (type solid))\n\t\t(layer "F.CrtYd")\n\t\t(uuid ${q(uuid())})\n\t)`);
+  const rectPad = (n, poly, layers, round) => {
+    const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    return `\t(pad ${q(n)} smd ${round ? 'roundrect' : 'rect'}\n\t\t(at ${num(cx)} ${num(cy)})\n\t\t(size ${num(Math.max(...xs) - Math.min(...xs))} ${num(Math.max(...ys) - Math.min(...ys))})\n\t\t(layers ${layers})${round ? '\n\t\t(roundrect_rratio 0.25)' : ''}\n\t\t(uuid ${q(uuid())})\n\t)`;
+  };
+  const round = type === 'smd';                                  // KiCad's chip-capacitor pads are roundrects
+  const part = '"F.Cu" "F.Mask" "F.Paste"';
+  if (type === 'printed') L.push(rectPad('1', g.hot[0], '"F.Cu" "F.Mask"', false));
+  else {
+    L.push(rectPad('1', g.hot[0], part, round), rectPad('2', g.cold[0], part, round), rectPad('2', g.cold[1], '"F.Cu" "F.Mask"', false));
+    for (const v of g.vias) L.push(`\t(pad "2" thru_hole circle\n\t\t(at ${num(v.x)} ${num(v.y)})\n\t\t(size ${num(v.pad)} ${num(v.pad)})\n\t\t(drill ${num(v.drill)})\n\t\t(layers "*.Cu")\n\t\t(remove_unused_layers no)\n\t\t(zone_connect 2)\n\t\t(uuid ${q(uuid())})\n\t)`);
+  }
+  L.push('\t(embedded_fonts no)', ')');
+  return { name: nm, text: L.join('\n') + '\n', geometry: g };
 }

@@ -56,6 +56,9 @@
       <label><span>Resonator Z<sub>r</sub> (Ω)</span> <input name="Zr" value="70"> <small>line impedance with neighbours grounded</small></label>
       <label><span>ε<sub>r</sub></span> <input name="er" value="1"></label>
       <label><span>Port R0 (Ω)</span> <input name="R0" value="50"></label>
+      <label class="comb-only"><span>Loading capacitors</span> <select name="captype"><option value="ideal">ideal</option><option value="smd-0402">SMD 0402</option><option value="smd-0603">SMD 0603</option><option value="smd-0805">SMD 0805</option><option value="trimmer">trimmer (Murata TZC3)</option><option value="printed">printed pad</option></select> <small>with pads, ESL and ground vias (manual §7.5)</small></label>
+      <label class="comb-only cap-opt"><span>E-series (SMD)</span> <select name="capseries"><option>E24</option><option>E12</option></select></label>
+      <label class="comb-only cap-opt"><span>Capacitor substrate</span> <select name="capsub"></select> <small>pads and vias only; the lines keep ε<sub>r</sub></small></label>
     </div>
     <label class="check"><input type="checkbox" name="refine" checked> Refine numerically (pair k, tap Qe, centre and bandwidth)</label>
     <label class="check"><input type="checkbox" name="polish" checked> Polish with the optimiser afterwards</label>
