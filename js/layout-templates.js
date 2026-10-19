@@ -13,6 +13,8 @@ import { rect, pathPolygon, pathLength, bbox, drc, cutPath, unit } from './layou
 import { synthMsline, fromSubstrate } from './microstrip.js';
 import { toDirective } from './substrates.js';
 import { GROUND, OPEN } from './netlist.js';
+import { openEnd, viaL } from './discontinuities.js';
+const viaLpH = (drillMm, h, n) => viaL({ d: drillMm / 1e3, h, n }).L * 1e12;
 import { getConnector, launchCopper, minFeed, thicknessWarning, LAUNCH_MODES } from './connectors.js';
 
 const mm = (x) => x * 1e3;
@@ -335,14 +337,23 @@ function marchand(d, [n1, n2], o) {
   core.nl.unshift(...taperNl(inNode, inNode, `${inNode}_s`, wfi, W, ti.Lt), `T${inNode}_d ${inNode}_s ${inNode}_k W=${r4(W)}mm len=${r4(dist(si, [0, 0]))}mm`, `Tgap m1 m2 W=${r4(W)}mm len=${r4(gap)}mm`);
   core.ties.push([portNum(d, op.node), portNum(d, on.node), G]);
   const A1 = [], B1 = [], A2 = [], B2 = [];
-  A1[m] = `${inNode}_k`; A1[s] = '0'; B1[m] = 'm1'; B1[s] = `${op.node}_k`;
-  A2[m] = 'm2'; A2[s] = `${on.node}_k`; B2[m] = '-'; B2[s] = '0';
+  A1[m] = `${inNode}_k`; A1[s] = 'g1'; B1[m] = 'm1'; B1[s] = `${op.node}_k`;
+  A2[m] = 'm2'; A2[s] = `${on.node}_k`; B2[m] = 'moe'; B2[s] = 'g2';
+  // discontinuities (#5): grounded ends = via-pad stub + vias (Goldfarb–Pucel); open end = Δl (KJK)
+  const sub = d.substrate, oe = openEnd({ W: W / 1e3, h: sub.dielectric.h, er: sub.dielectric.er, t: sub.copper.t });
+  const disc = [
+    `T${n1}_gs g1 g1v W=${r4(W)}mm len=${r4(padLen / 2)}mm     # secondary to the via centre`,
+    `via V${n1} g1v d=${r4(drill)}mm n=${nv}`,
+    `T${n2}_gs g2 g2v W=${r4(W)}mm len=${r4(padLen / 2)}mm`,
+    `via V${n2} g2v d=${r4(drill)}mm n=${nv}`,
+    `Tmain_oe moe - W=${r4(W)}mm len=${r4(oe.dl * 1e3)}mm     # open-end extension Δl (Kirschning–Jansen–Koster)`,
+  ];
   const coupled = [`cline ${n1} geom=msl W=${r4(W)}mm S=${r4(Sg)}mm`, `  len ${r4(L1)}mm`, `  A ${A1.join(' ')}`, `  B ${B1.join(' ')}`, 'end',
     `cline ${n2} geom=msl W=${r4(W)}mm S=${r4(Sg)}mm`, `  len ${r4(L2)}mm`, `  A ${A2.join(' ')}`, `  B ${B2.join(' ')}`, 'end'];
   const netlist = [...header(d, 'Marchand'), ...d.ports.map(p => `port ${p.node} ${p.z}`), ...coupled,
-    ...nl, '# grounded ends: ideal shorts here; via inductance comes with issue #5', ...analysisLines(d)].join('\n') + '\n';
-  core.netlist = coreNetlist(d, 'Marchand', [...coupled, ...core.nl, '# grounded ends: ideal shorts here; via inductance comes with issue #5']);
-  return { outline, items, dims, netlist, core, notes: [`sections separated by ${r4(gap)} mm (uncoupled main line) to bring the two outputs out`, `${nv} via(s) of ${drill} mm drill at each grounded end; via inductance not yet modelled (issue #5)`, 'outputs are DC-grounded through the secondary lines (net GND)'] };
+    ...nl, ...disc, ...analysisLines(d)].join('\n') + '\n';
+  core.netlist = coreNetlist(d, 'Marchand', [...coupled, ...core.nl, ...disc]);
+  return { outline, items, dims, netlist, core, notes: [`sections separated by ${r4(gap)} mm (uncoupled main line) to bring the two outputs out`, `${nv} via(s) of ${drill} mm drill at each grounded end, modelled as ${viaLpH(drill, sub.dielectric.h, nv).toFixed(0)} pH (Goldfarb–Pucel); main-line open end Δl ${r4(oe.dl * 1e3)} mm (Kirschning–Jansen–Koster)`, 'outputs are DC-grounded through the secondary lines (net GND)'] };
 }
 
 // Edge-launch connectors at every port: launch copper in the layout, and the as-built netlist's
@@ -364,13 +375,17 @@ function addConnectors(d, L, conn, mode) {
     if (rest < 0) throw new Error(`.layout: the feed at ${p.name} is ${len} mm, shorter than the ${conn.mpn} pad + launch taper (${r4(conn.signal.l + lc.Lt)} mm); increase feed=`);
     const fwd = a === p.name;                               // port node first?
     const pc = `${p.name}_pc`, lt = `${p.name}_lc`;
-    const pad = `T${p.name}_pad ${fwd ? `${p.name} ${pc}` : `${pc} ${p.name}`} W=${r4(lc.pw)}mm len=${r4(conn.signal.l)}mm`;
+    const px = `${p.name}_x`;                              // behind the launch placeholder L/C
+    const pad = `T${p.name}_pad ${fwd ? `${px} ${pc}` : `${pc} ${px}`} W=${r4(lc.pw)}mm len=${r4(conn.signal.l)}mm`;
+    const launch = [`L${p.name}_sma ${p.name} ${px} sma_l`, `C${p.name}_sma ${p.name} 0 sma_c`];
     const tap = fwd ? taperNl(`${p.name}_l`, pc, lt, lc.pw, +w, lc.Lt) : taperNl(`${p.name}_l`, lt, pc, +w, lc.pw, lc.Lt);
     const feed = `T${p.name}_f ${fwd ? `${lt} ${b}` : `${a} ${lt}`} W=${w}mm len=${r4(rest)}mm`;
-    lines.splice(i, 1, ...(fwd ? [pad, ...tap, feed] : [feed, ...tap, pad]));
+    lines.splice(i, 1, ...(fwd ? [...launch, pad, ...tap, feed] : [feed, ...tap, pad, ...launch]));
   }
   const at = lines.findIndex(l => l.startsWith('.substrate'));
-  lines.splice(at + 1, 0, `# ports: ${conn.name}; its pad and launch taper are modelled as line sections, the connector itself is not (issue #5)`);
+  lines.splice(at + 1, 0, `# ports: ${conn.name}; its pad and launch taper are line sections. The connector transition is a`,
+    '# placeholder series L / shunt C per port (sma_l, sma_c): effectively zero by default; tune or fit them to EM or measured data',
+    '.param sma_l = 1p tune 1p 2n', '.param sma_c = 1f tune 1f 1p');
   L.netlist = lines.join('\n');
   const Lts = [...new Set(ports.map(p => r4(p.launch.Lt)))];
   L.notes.push(mode === 'library'

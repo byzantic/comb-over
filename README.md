@@ -110,7 +110,7 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 - **Loss (optional):** a constant unloaded Q per section, with αᵢ = βᵢ/2Q. Characteristic admittances stay real, so this is a low-loss approximation.
 - **Singular points:** exact half-wave frequencies of lossless lines are evaluated 1 ppb away, which gives the limiting value.
 
-**Not modelled:** dispersion, end/open-end effects, junction and bond-wire parasitics, and frequency-dependent conductor loss. Add these as lumped elements or extra line sections where they matter.
+**Not modelled** by the line model itself: end and junction parasitics, and bond wires. Microstrip sections given by W and S do include dispersion and frequency-dependent loss (manual §4.6). Open ends, grounding vias (`via` element) and connector launches are added by the layout templates (manual §4.7); anything else can be added as lumped elements or extra line sections.
 
 ### Line-constant inputs
 
