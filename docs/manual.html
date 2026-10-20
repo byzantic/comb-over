@@ -21,7 +21,7 @@
 </header>
 <div class="layout">
   <aside class="side"><nav><a class="current" href="manual.html">Manual</a>
-<ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
+<ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16">Not checked yet against EM simulation or measurement: the bend, step and resistor models (#16).</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
 <a class="" href="substrates.html">Substrate presets</a>
 <a class="" href="examples/index.html">Worked examples</a>
 <ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li></ol></nav></aside>
@@ -304,6 +304,18 @@
 <tr>
 <td><code>tee &lt;name&gt; A B SIDE Wa=.. Wb=.. W2=..</code></td>
 <td>Microstrip T-junction on the <code>.substrate</code> (§4.7): main line A–B (arm widths Wa, Wb), side arm SIDE of width W2. Its reference planes are the edges of the crossing strips.</td>
+</tr>
+<tr>
+<td><code>bend &lt;name&gt; A B W=.. [mitre=none|opt]</code></td>
+<td>90° microstrip bend on the <code>.substrate</code> (§4.7): square corner, or the optimum mitre. Reference planes at the edges of the crossing strip.</td>
+</tr>
+<tr>
+<td><code>step &lt;name&gt; A B W1=.. W2=..</code></td>
+<td>Step in width from W1 (at A) to W2 (§4.7): the junction parasitics only. The lines either side carry the impedance change.</td>
+</tr>
+<tr>
+<td><code>res &lt;name&gt; N1 [N2] R=.. [pkg=0402|0603|0805|ideal] [esl=..] [cp=..] [d=..] [n=..]</code></td>
+<td>Chip resistor with pads, ESL and body capacitance (§8.5): between N1 and N2, or a termination to ground through <code>n</code> vias when N2 is omitted. <code>pkg=ideal</code> is a plain R.</td>
 </tr>
 <tr>
 <td><code>cline NAME … end</code></td>
@@ -729,6 +741,16 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <td>Hammerstad&#39;s model as implemented in Qucs (<code>mstee</code>): a junction node with a shunt susceptance B<sub>T</sub>, reached from each main arm through a line of length W2/2 − d and an ideal transformer, and from the side arm through a line of length max(Wa, Wb)/2 − d2 (negative for a wide main line). Plane shifts, transformer ratios and B<sub>T</sub> follow the equivalent parallel-plate widths and the first higher-order-mode frequency f<sub>p</sub> = 0.4 Z/h (GHz, h in mm).</td>
 <td><code>tee</code> element; the tap of every synthesised comb-line or interdigital filter (§7.6), where the junction spans the feed width of the resonator.</td>
 </tr>
+<tr>
+<td><strong>90° bend</strong></td>
+<td>Series L / shunt C / series L (T network), as Qucs <code>mscorner</code> and <code>msmbend</code>. <strong>Square corner</strong>: C/W = (10.35εr + 2.5)W/h + (2.6εr + 5.64) pF/m, L/h = 220[1 − 1.35 e<sup>−0.18(W/h)^1.39</sup>] nH/m (Kirschning, Jansen &amp; Koster, MTT-S 1983; 0.2 ≤ W/h ≤ 6, 2.36 ≤ εr ≤ 10.4). <strong>Optimum mitre</strong>: C/W = (3.93εr + 0.62)W/h + (7.6εr + 3.80) pF/m, L/h = 440[1 − 1.062 e<sup>−0.177(W/h)^0.947</sup>] nH/m, mitre M = 52 + 65 e<sup>−1.35 W/h</sup> % of the corner diagonal (Douville &amp; James, <em>IEEE MTT</em> 1978; 0.2 ≤ W/h ≤ 6, 2.5 ≤ εr ≤ 25). Other angles are not modelled.</td>
+<td><code>bend</code> element; routed and meandered lines (§8.5).</td>
+</tr>
+<tr>
+<td><strong>Width step</strong></td>
+<td>L1 / shunt C / L2, as Qucs <code>msstep</code> (Gupta; Garg &amp; Bahl), with Wa ≥ Wb: C = √(Wa Wb)[(10.1 log εr + 2.33)Wa/Wb − 12.6 log εr − 3.17] pF/m (εr ≤ 10, 1.5 ≤ Wa/Wb ≤ 3.5), L = h[40.5(Wa/Wb − 1) − 75 log(Wa/Wb) + 0.2(Wa/Wb − 1)²] nH/m (Wa/Wb ≤ 5), split between the sides as Z√εeff. log is log10. C is clamped at 0 where the fit goes negative, near equal widths.</td>
+<td><code>step</code> element.</td>
+</tr>
 </tbody></table></div>
 <p><strong>Typical values:</strong></p>
 <div class="table-wrap"><table>
@@ -752,7 +774,8 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </tbody></table></div>
 <p><strong>Effect on the Marchand demo.</strong> On 1.524 mm RO4350B, the 2 × 0.3 mm vias at each grounded end (0.25 nH, j1.6 Ω at 1 GHz) and the 0.52 mm open-end extension move the outputs by less than 0.1 dB at f0.</p>
 <p><strong>The tee as a network.</strong> The transformers are folded into the main-arm lines (Y′ = TᵀY<sub>line</sub>T with T = diag(1, 1/T<sub>x</sub>)), so the junction is a 4-node admittance block over the three arms and the internal junction node, stamped like a line section. It is lossless; the arms&#39; conductor and dielectric loss over a few hundred micrometres is ignored. At low frequency it reduces to the ideal three-way junction (S11 = −1/3, S21 = 2/3).</p>
-<p><strong>Checks.</strong> The KJK Δl agrees with Hammerstad&#39;s older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee is checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (<code>tests/tee.mjs</code>); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (<code>tests/discontinuities.mjs</code>). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.</p>
+<p>Every model warns, on the netlist&#39;s line, when it is used outside its published range.</p>
+<p><strong>Checks.</strong> The KJK Δl agrees with Hammerstad&#39;s older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (<code>tests/tee.mjs</code>); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (<code>tests/discontinuities.mjs</code>). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.</p>
 <h2 id="5-plots-and-trace-expressions"><a class="anchor" href="#5-plots-and-trace-expressions" aria-hidden="true">#</a>5. Plots and trace expressions</h2>
 <p>A trace is an expression evaluated at every sweep point. It is complex unless it passes through a real function.</p>
 <p><strong>Variables</strong></p>
@@ -1497,7 +1520,38 @@ The as-built netlist renames each tee&#39;s side node and inserts the feed line 
 <p>On 0.508 mm RO4350B the stock 1.5 mm pad is a 41 Ω, 5 mm section, about 50° at 5 GHz, at every port. It moves the 10 dB coupler&#39;s coupling from −10.07 dB to −11.29 dB. With <code>launch=matched</code> it stays at −10.25 dB.</p>
 <p>The as-built netlist models the pad and any taper as line sections. The transition into the connector is a placeholder (§4.7): a series L (<code>sma_l</code>) and shunt C (<code>sma_c</code>) at every port. They are effectively zero by default, with tune ranges of 1 pH–2 nH and 1 fF–1 pF, so they can be fitted to EM or measured data.</p>
 <p><strong>Board thickness.</strong> The connector&#39;s ground legs straddle the board. The layout card warns when the board (core + 2 × copper) is more than ±0.15 mm from the connector&#39;s 1.57 mm, which is the case for the 0.508 mm coupler demo. Either choose a variant of the connector made for the actual thickness, or use a 1.57 mm stack-up. The 1.524 mm RO4350B demos (1.594 mm with copper) fit.</p>
-<hr>
+<h3 id="85-routing-meanders-and-chip-resistors"><a class="anchor" href="#85-routing-meanders-and-chip-resistors" aria-hidden="true">#</a>8.5 Routing, meanders and chip resistors</h3>
+<p>These are the building blocks for the folded and routed layouts that follow (hairpin filters, power dividers and hybrids; issues #38–#40). They are in <code>js/routing.js</code> and <code>js/resistors.js</code>, and no <code>.layout</code> template uses them yet.</p>
+<p><strong>Orthogonal routes.</strong> <code>routeOrtho(points, { W, mitre, sub })</code> takes a polyline with 90° turns, in mm, and returns two things:</p>
+<ul>
+<li>the copper: an outline with square corners, or corners cut at the optimum mitre (§4.7);</li>
+<li>the netlist that models it: <code>T</code> segments plus a <code>bend</code> at each corner.</li>
+</ul>
+<p>Each segment&#39;s modelled length is its centre-line length less W/2 at every bent end, because the bend&#39;s reference planes are the edges of the crossing strip. A segment too short for its bends is refused. 45° segments are refused too, since no 45° bend model is included.</p>
+<p><strong>Meanders.</strong> <code>meander({ W, theta, f0, sub, legs, gap })</code> builds a square-wave meander with an even number of legs, so it enters and leaves on one axis. It solves the leg height on its own netlist, bends included, until the electrical length at f0 is <code>theta</code>. The default leg gap is 3W.</p>
+<p>The coupling between neighbouring legs is <strong>not modelled</strong>. Each meander reports a coupling coefficient k = (Z0e − Z0o)/(Z0e + Z0o) from the coupled-microstrip impedances at its gap. It warns below a 2W gap. For a 3.3 mm line on 1.524 mm RO4350B at a 3W gap, k ≈ 0.01, about −40 dB.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>example (1.524 mm RO4350B, 2 GHz)</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>180°, 3.3 mm (50 Ω) line, 2 legs, gap 9.9 mm, mitred</td>
+<td>leg height 13.12 mm; footprint 26.4 × 16.4 mm; |S11| 4·10⁻⁴ at f0, &lt; 0.05 at ±20 %</td>
+</tr>
+</tbody></table></div>
+<p><strong>Chip resistors</strong> (<code>res</code>, §3.5), for Wilkinson isolation and terminations:</p>
+<ul>
+<li><strong>Land patterns:</strong> KiCad&#39;s <code>R_0402_1005Metric</code>, <code>R_0603_1608Metric</code> and <code>R_0805_2012Metric</code>.</li>
+<li><strong>Pads:</strong> each pad&#39;s capacitance to ground, as a short microstrip section with open-end fringing (as for the capacitors, §7.5).</li>
+<li><strong>ESL:</strong> 0.4 / 0.6 / 0.8 nH.</li>
+<li><strong>Body capacitance across the part:</strong> 0.03 pF.</li>
+</ul>
+<p>The ESL and body capacitance are typical values, not from a particular part; set <code>esl=</code> and <code>cp=</code> from your resistor&#39;s datasheet. A termination&#39;s pad 2 goes to ground through a land with <code>n</code> vias, as the loading capacitors&#39; does.</p>
+<p>The footprints are <code>RES_&lt;pkg&gt;</code> (series) and <code>RES_&lt;pkg&gt;_GND&lt;n&gt;V</code> (termination). <code>node tools/kicad.mjs --caps SUBSTRATE --out DIR</code> writes them with the capacitor footprints, and CI checks them in KiCad.</p>
+<h2 id="not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16"><a class="anchor" href="#not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16" aria-hidden="true">#</a><strong>Not checked yet</strong> against EM simulation or measurement: the bend, step and resistor models (#16).</h2>
 <h2 id="9-the-model-its-assumptions-and-limits"><a class="anchor" href="#9-the-model-its-assumptions-and-limits" aria-hidden="true">#</a>9. The model, its assumptions and limits</h2>
 <h3 id="91-section-admittance-matrix"><a class="anchor" href="#91-section-admittance-matrix" aria-hidden="true">#</a>9.1 Section admittance matrix</h3>
 <p>For per-unit-length Maxwell C and inductance L:</p>

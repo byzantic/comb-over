@@ -21,7 +21,10 @@ T&lt;name&gt; N1 N2 Z0=.. len=.. [er=..] [Q=..] [f0=..]   # single uncoupled lin
 wire N1 N2 [N3 …]         # join nodes (zero-ohm)
 via &lt;name&gt; N1 [N2] d=.. [n=..] [h=..]   # n plated vias to ground (Goldfarb–Pucel L; h from .substrate)
 cap &lt;name&gt; N1 [N2] C=.. type=ideal|smd|printed|trimmer [pkg=0603] [series=E24] [esl=..] [Q=..]   # loading capacitor with parasitics
-tee &lt;name&gt; A B SIDE Wa=.. Wb=.. W2=..   # microstrip T-junction (Hammerstad, as Qucs); A–B the main line, needs .substrate</pre>
+tee &lt;name&gt; A B SIDE Wa=.. Wb=.. W2=..   # microstrip T-junction (Hammerstad, as Qucs); A–B the main line, needs .substrate
+bend &lt;name&gt; A B W=.. [mitre=none|opt]   # 90° bend, square or optimally mitred; needs .substrate
+step &lt;name&gt; A B W1=.. W2=..           # width step parasitics; needs .substrate
+res &lt;name&gt; N1 [N2] R=.. [pkg=0603|ideal] [esl=..] [cp=..]   # chip resistor; to ground through vias without N2</pre>
 <p>Ground: <code>0 gnd</code>. Open (unconnected) terminal: <code>- open nc</code>.</p>
 
 <h4>Coupled-line section</h4>

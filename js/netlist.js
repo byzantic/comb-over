@@ -1,7 +1,8 @@
 // Netlist parser. See README.md for the language. Produces a plain "design" object
 // whose numeric values are already evaluated (with optional parameter overrides).
 
-import { viaL } from './discontinuities.js';
+import { viaL, bendLC, stepLC, tlcY } from './discontinuities.js';
+import { expandRes } from './resistors.js';
 import { expandCap } from './capacitors.js';
 import { parseExpr, evalReal, astHasDeg } from './expr.js';
 import { Section, fromY0, fromCnorm, fromEvenOdd, maxwellFromGroundMutual, C0 } from './section.js';
@@ -244,6 +245,17 @@ export function parseNetlist(text, overrides = {}) {
       exp.lines.forEach(l => handleLine(l, ln));
       return;
     }
+    // res NAME N1 [N2] R=.. [pkg=0402|0603|0805|ideal] [esl=..] [cp=..] [d=..] [n=..]: chip resistor with
+    // pads, ESL and body capacitance; to ground through vias when N2 is omitted (#37, js/resistors.js)
+    if (kwl === 'res') {
+      const nodes = [], o = {};
+      for (const x of toks.slice(2)) { const k = kv(x); if (k) o[k[0].toLowerCase()] = k[0].toLowerCase() === 'pkg' ? k[1].toLowerCase() : k[1]; else nodes.push(x); }
+      const exp = expandRes({ name: toks[1], nodes, o, ev: (x) => ev(x, ln), sub: d.substrate, fail: (m) => fail(ln, m) });
+      exp.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
+      (d.resistors ??= []).push({ name: toks[1], line: ln + 1, node: nodes[0], node2: nodes[1] ?? '0', ...exp.info });
+      exp.lines.forEach(l => handleLine(l, ln));
+      return;
+    }
     // via NAME NODE [NODE2] d=.. [n=..] [h=..] [Q=..]: plated via(s) to ground (or to NODE2), as the
     // Goldfarb–Pucel inductance (issue #5); h defaults to the .substrate height
     if (kwl === 'via') {
@@ -275,6 +287,29 @@ export function parseNetlist(text, overrides = {}) {
       if (!d.substrate) fail(ln, 'tee: needs a .substrate');
       const geo = { Wa: o.wa, Wb: o.wb, W2: o.w2, h: d.substrate.dielectric.h, er: d.substrate.dielectric.er, t: d.substrate.copper.t };
       (d.blocks ??= []).push({ type: 'tee', name: toks[1], nodes: [...nodes, `__tee_${toks[1]}`], geo, y: (f) => teeY(geo, f), line: ln + 1 });
+      return;
+    }
+
+    // bend NAME A B W=.. [mitre=none|opt]: 90° microstrip bend; step NAME A B W1=.. W2=..: width step
+    // (W1 at A). On the .substrate; T networks of js/discontinuities.js (#37).
+    if (kwl === 'bend' || kwl === 'step') {
+      const usage = kwl === 'bend' ? 'bend NAME A B W=.. [mitre=none|opt]' : 'step NAME A B W1=.. W2=..';
+      if (toks.length < 5) fail(ln, usage);
+      const nodes = [], o = {};
+      for (const x of toks.slice(2)) { const k = kv(x); if (k) o[k[0].toLowerCase()] = k[0].toLowerCase() === 'mitre' ? k[1].toLowerCase() : ev(k[1], ln); else nodes.push(x); }
+      if (nodes.length !== 2) fail(ln, `${kwl}: two nodes (${usage})`);
+      const keys = kwl === 'bend' ? ['w', 'mitre'] : ['w1', 'w2'];
+      for (const key of Object.keys(o)) if (!keys.includes(key)) fail(ln, `unknown ${kwl} option ${key}`);
+      if (!d.substrate) fail(ln, `${kwl}: needs a .substrate`);
+      const sub = d.substrate, h = sub.dielectric.h, er = sub.dielectric.er, t = sub.copper.t;
+      let m;
+      try {
+        if (kwl === 'bend') { if (!(o.w > 0)) throw new Error('bend: W (> 0) is required'); m = bendLC({ W: o.w, h, er, mitre: o.mitre ?? 'none' }); }
+        else { if (!(o.w1 > 0) || !(o.w2 > 0)) throw new Error('step: W1 and W2 (> 0) are required'); m = stepLC({ W1: o.w1, W2: o.w2, h, er, t, f: d.fref }); }
+      } catch (e) { fail(ln, e.message); }
+      m.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
+      const geo = kwl === 'bend' ? { W: o.w, mitre: o.mitre ?? 'none', M: m.mitre } : { W1: o.w1, W2: o.w2 };
+      (d.blocks ??= []).push({ type: kwl, name: toks[1], nodes: [...nodes, `__${kwl}_${toks[1]}`], geo, lc: { L1: m.L1, C: m.C, L2: m.L2 }, y: (f) => tlcY(m.L1, m.C, m.L2, f), line: ln + 1 });
       return;
     }
 

@@ -17,15 +17,16 @@ import { buildLayout } from '../js/layout-templates.js';
 import { componentLibrary, boardProject, zip } from '../js/kicad.js';
 import { setSubstrate, setLayout, detectLayouts, toMicrostrip } from '../js/netlist-edit.js';
 
-// --caps SUBSTRATE --out DIR: the loading-capacitor footprints (#14) as a library, for checking in KiCad
+// --caps SUBSTRATE --out DIR: the loading-capacitor (#14) and chip-resistor (#37) footprints as a library, for checking in KiCad
 if (process.argv[2] === '--caps') {
   const { makeSubstrate } = await import('../js/substrates.js');
-  const { capFootprint } = await import('../js/kicad.js');
+  const { capFootprint, resFootprint } = await import('../js/kicad.js');
   const { printedSize } = await import('../js/capacitors.js');
   const sub = makeSubstrate(process.argv[3]), outI = process.argv.indexOf('--out'), dir = process.argv[outI + 1];
   const d = Math.max(0.3, (sub.fab.minDrill ?? 0.3e-3) * 1e3);
   const fps = [...['0402', '0603', '0805'].map(pkg => capFootprint({ type: 'smd', pkg, via: { d, n: 2 } })), capFootprint({ type: 'trimmer', via: { d, n: 2 } }),
-    capFootprint({ type: 'printed', a: +printedSize({ C: 2.2e-12, sub, f: 1e9 }).a.toFixed(3) })];
+    capFootprint({ type: 'printed', a: +printedSize({ C: 2.2e-12, sub, f: 1e9 }).a.toFixed(3) }),
+    ...['0402', '0603', '0805'].flatMap(pkg => [resFootprint({ pkg }), resFootprint({ pkg, ground: true, via: { d, n: 2 } })])];   // chip resistors (#37)
   for (const f of fps) { const p = join(dir, 'comb-over-caps.pretty', `${f.name}.kicad_mod`); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.text); console.log(`wrote ${p}`); }
   process.exit(0);
 }
