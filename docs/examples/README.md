@@ -15,5 +15,6 @@ Every number quoted in these pages was computed with the engine itself, and most
 | 7 | [Three-line section from C and L matrices](07-three-line-CL.md) | General inhomogeneous input from a field solver, reading the modal analysis |
 | 8 | [From a coupler netlist to a KiCad board](08-coupler-to-board.md) | Layout panel, converting impedances to microstrip, physical view of the as-built board, substrate vs connector trade-off, KiCad export |
 | 9 | [Comb-line filter: from a specification to Gerbers](09-combline-to-gerbers.md) | Physical synthesis with SMD capacitors, tap T-junctions, comb-line layout, as-built vs design, KiCad board with capacitor footprints and via fence, Gerbers in CI |
+| 10 | [Hairpin and edge-coupled filters from one specification](10-hairpin-and-edge-coupled.md) | The folded and the straight form of the parallel-coupled filter: synthesis, the 2f0 spurious passband, layout, size and skirts as built |
 
 If you are new to the tool, do 1 → 2 → 4 → 3 in that order. Example 3 assumes you have seen how the closed form in Example 4 works.

@@ -68,8 +68,9 @@ function shape(text, f0, span) {
   const sb = shape(Ly.netlist, 2.4e9, 0.3);
   check('hairpin as built ≈ design (lossless): centre within 0.05 %, −3 dB width within 1 %', Math.abs(sb.fc / sh.fc - 1) < 5e-4 && Math.abs(sb.bw / sh.bw - 1) < 0.01, JSON.stringify([sh, sb]));
   check('hairpin layout errors: U bottoms not flipped between neighbours', throws(() => {
-    // swap hairpin 2's open and bend ends by renaming its bend nodes to the open ones
-    const t2 = text.replace(/\bu2a\b/g, 'TMPA').replace(/\bo3\b/g, 'u2a').replace(/\bTMPA\b/g, 'o3').replace(/\bu2b\b/g, 'TMPB').replace(/\bo4\b/g, 'u2b').replace(/\bTMPB\b/g, 'o4');
+    // hairpin 2 the same way round as hairpin 1: its arms' array ends swapped (open ↔ U bottom)
+    const t2 = text.replace(/^(  A u1a u1b) o3 o4 /m, '$1 u2a u2b ').replace(/^(  B .*) u2a u2b (.*)$/m, '$1 o3 o4 $2');
+    if (t2 === text) throw new Error('test construction failed');
     buildLayout(parseNetlist(t2));
   }, /flipped/));
   check('hairpin layout errors: a U bottom line that does not match the arm spacing', throws(() => buildLayout(parseNetlist(text.replace(/^(T1_u v1a v1b W=w1 len=)g1$/m, '$1g1*1.2'))), /arms are [\d.]+ mm apart/));

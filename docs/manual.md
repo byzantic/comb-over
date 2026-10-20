@@ -686,6 +686,39 @@ The netlist keeps `tune` ranges on every geometric parameter, so it can be optim
 
 **When it falls short.** The report and the status line say so if, in the lossless model, any goal is missed by more than 1 dB. Another θ0 or Zr, or running the optimiser on the result, usually helps.
 
+### 7.7 Edge-coupled and hairpin filters
+
+**Structure** in the synthesis dialog also offers two microstrip-only designs built from half-wave resonators, which need a substrate under **Realise in microstrip**. [Worked example 10](examples/10-hairpin-and-edge-coupled.md) designs both from one specification.
+
+**Edge-coupled** (parallel-coupled; Cohn 1958, Matthaei, Young & Jones §10.03). The design runs in four steps:
+1. **Inverters.** n + 1 admittance inverters from the low-pass prototype: J₀₁Z₀ = √(πΔ/2g₀g₁), J<sub>k,k+1</sub>Z₀ = πΔ/(2√(g<sub>k</sub>g<sub>k+1</sub>)), and J<sub>n,n+1</sub>Z₀ by symmetry.
+2. **Even/odd impedances.** Z0e/Z0o = Z₀[1 ± JZ₀ + (JZ₀)²].
+3. **Geometry.** Each section becomes a symmetric coupled-microstrip pair (Kirschning–Jansen) for its Z0e/Z0o, 90° long at the mean modal velocity.
+4. **Polish.** The netlist's goals, by Nelder–Mead on W, S and θ (symmetric), recover what the unequal mode velocities detune.
+
+The netlist models the open ends as KJK Δl capacitances, and each width step at a resonator's middle as a `step` element when the step is 1.5:1 or more (the step model's range). The `.layout edgecoupled` template draws the staircase (§8.1). Synthesis takes a few seconds.
+
+**Hairpin.** The edge-coupled filter folded. Each half-wave resonator becomes a U, and consecutive U's are flipped, so facing arms are open at opposite ends, as in the coupled sections they come from. Input and output are tapped on the outer arms with the Hammerstad tee. The model:
+- all 2n arms are one field-solved array, so each hairpin's own arm-to-arm coupling and the non-adjacent couplings are included;
+- each U bottom is two optimally mitred bends and a line, the inner gap long (§4.7);
+- open ends are KJK Δl capacitances.
+
+The design:
+1. **Arm width** from Zr (default R₀). Inner gap `selfGap` × W (2 by default).
+2. **Gaps between hairpins**, from the coupling coefficient (Z0e − Z0o)/(Z0e + Z0o) of the edge-coupled section each replaces, realised at the arm width.
+3. **Tap**, from the tapped half-wave resonator: Q<sub>e</sub> = (π/2)(R₀/Z<sub>r</sub>)/sin²θ, with θ measured from the U's midpoint.
+4. **Polish**, on C/L linearised in the widths and gaps around a field solve, as in §7.6. It moves the widths, both kinds of gap, the common arm length and the tap. Each resonator is trimmed by its own inner gap, which lengthens its U bottom; all arms share one length, so they stay one array.
+
+A 5-pole hairpin takes 1.5–2 minutes, most of it field solves of the 10-strip array.
+
+**The spurious passband near 2f0.** Both report it. In a homogeneous TEM medium every coupled section is λ/2 at 2f0 and transmits nothing. `tests/hairpin.mjs` checks that the same inverters as ideal TEM sections give below −100 dB at 2f0. Microstrip's unequal even/odd velocities remove that zero, and both filters pass at about 1.9–2.1 f0. The report gives the peak; nothing in the synthesis suppresses it.
+
+**Not modelled:**
+- coupling of the U bottoms to their neighbours;
+- radiation;
+- width steps under 1.5:1;
+- the one-sided drawing of the edge-coupled steps (the model's step is symmetric).
+
 ## 8. Export and sharing
 
 **Touchstone.** Exports the full S-matrix at all sweep points, with frequency in Hz, as RI (real/imaginary), MA (magnitude/angle°) or DB (dB/angle°).
