@@ -2,6 +2,7 @@
 // whose numeric values are already evaluated (with optional parameter overrides).
 
 import { viaL, bendLC, stepLC, tlcY } from './discontinuities.js';
+import { expandRes } from './resistors.js';
 import { expandCap } from './capacitors.js';
 import { parseExpr, evalReal, astHasDeg } from './expr.js';
 import { Section, fromY0, fromCnorm, fromEvenOdd, maxwellFromGroundMutual, C0 } from './section.js';
@@ -241,6 +242,17 @@ export function parseNetlist(text, overrides = {}) {
       const exp = expandCap({ name: toks[1], nodes, o, ev: (x) => ev(x, ln), sub: d.substrate, f: d.fref ?? (d.freq ? (d.freq.start + d.freq.stop) / 2 : null), fail: (m) => fail(ln, m) });
       exp.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
       (d.caps ??= []).push({ name: toks[1], line: ln + 1, node: nodes[0], node2: nodes[1] ?? '0', ...exp.info });
+      exp.lines.forEach(l => handleLine(l, ln));
+      return;
+    }
+    // res NAME N1 [N2] R=.. [pkg=0402|0603|0805|ideal] [esl=..] [cp=..] [d=..] [n=..]: chip resistor with
+    // pads, ESL and body capacitance; to ground through vias when N2 is omitted (#37, js/resistors.js)
+    if (kwl === 'res') {
+      const nodes = [], o = {};
+      for (const x of toks.slice(2)) { const k = kv(x); if (k) o[k[0].toLowerCase()] = k[0].toLowerCase() === 'pkg' ? k[1].toLowerCase() : k[1]; else nodes.push(x); }
+      const exp = expandRes({ name: toks[1], nodes, o, ev: (x) => ev(x, ln), sub: d.substrate, fail: (m) => fail(ln, m) });
+      exp.warnings.forEach(w => d.warnings.push(`line ${ln + 1}: ${toks[1]}: ${w}`));
+      (d.resistors ??= []).push({ name: toks[1], line: ln + 1, node: nodes[0], node2: nodes[1] ?? '0', ...exp.info });
       exp.lines.forEach(l => handleLine(l, ln));
       return;
     }
