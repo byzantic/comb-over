@@ -147,6 +147,9 @@ Unknown directives are ignored with a warning.
 | `cap <name> N1 [N2] C=.. [type=ideal\|smd\|printed\|trimmer] [pkg=0402\|0603\|0805] [Q=..] [esl=..] [d=..] [n=..] [a=..] [series=E12\|E24] [mpn=..]` | A loading capacitor with its parasitic model (§7.5): to ground unless N2 is given. |
 | `via <name> N1 [N2] d=.. [n=..] [h=..] [Q=..]` | `n` plated vias of drill `d` from N1 to ground (or to N2), as the Goldfarb–Pucel inductance (§4.7). `h` defaults to the `.substrate` height. |
 | `tee <name> A B SIDE Wa=.. Wb=.. W2=..` | Microstrip T-junction on the `.substrate` (§4.7): main line A–B (arm widths Wa, Wb), side arm SIDE of width W2. Its reference planes are the edges of the crossing strips. |
+| `bend <name> A B W=.. [mitre=none\|opt]` | 90° microstrip bend on the `.substrate` (§4.7): square corner, or the optimum mitre. Reference planes at the edges of the crossing strip. |
+| `step <name> A B W1=.. W2=..` | Step in width from W1 (at A) to W2 (§4.7): the junction parasitics only. The lines either side carry the impedance change. |
+| `res <name> N1 [N2] R=.. [pkg=0402\|0603\|0805\|ideal] [esl=..] [cp=..] [d=..] [n=..]` | Chip resistor with pads, ESL and body capacitance (§8.5): between N1 and N2, or a termination to ground through `n` vias when N2 is omitted. `pkg=ideal` is a plain R. |
 | `cline NAME … end` | Coupled multiconductor section (§4). |
 
 Element names follow SPICE: the first letter selects the type (`C1`, `Cload`, `Lchoke`, `T5`).
@@ -405,6 +408,8 @@ The line model is pure TEM, so it has no parasitics of its own (§9.3). The layo
 | **Via to ground** | L = (μ0/2π)[h ln((h + √(r² + h²))/r) + 1.5(r − √(r² + h²))], r = d/2 (Goldfarb & Pucel, *IEEE MGWL* 1991). n vias in parallel give L/n, with mutual coupling neglected, which is optimistic for closely spaced vias. | `via` element; Marchand grounded ends (a stub to the via-pad centre plus `via … n=2`). |
 | **Edge-connector launch** | Placeholder series L / shunt C at each port, with parameters `sma_l` and `sma_c`. | Every connector port (§8.4). |
 | **T-junction** | Hammerstad's model as implemented in Qucs (`mstee`): a junction node with a shunt susceptance B<sub>T</sub>, reached from each main arm through a line of length W2/2 − d and an ideal transformer, and from the side arm through a line of length max(Wa, Wb)/2 − d2 (negative for a wide main line). Plane shifts, transformer ratios and B<sub>T</sub> follow the equivalent parallel-plate widths and the first higher-order-mode frequency f<sub>p</sub> = 0.4 Z/h (GHz, h in mm). | `tee` element; the tap of every synthesised comb-line or interdigital filter (§7.6), where the junction spans the feed width of the resonator. |
+| **90° bend** | Series L / shunt C / series L (T network), as Qucs `mscorner` and `msmbend`. **Square corner**: C/W = (10.35εr + 2.5)W/h + (2.6εr + 5.64) pF/m, L/h = 220[1 − 1.35 e<sup>−0.18(W/h)^1.39</sup>] nH/m (Kirschning, Jansen & Koster, MTT-S 1983; 0.2 ≤ W/h ≤ 6, 2.36 ≤ εr ≤ 10.4). **Optimum mitre**: C/W = (3.93εr + 0.62)W/h + (7.6εr + 3.80) pF/m, L/h = 440[1 − 1.062 e<sup>−0.177(W/h)^0.947</sup>] nH/m, mitre M = 52 + 65 e<sup>−1.35 W/h</sup> % of the corner diagonal (Douville & James, *IEEE MTT* 1978; 0.2 ≤ W/h ≤ 6, 2.5 ≤ εr ≤ 25). Other angles are not modelled. | `bend` element; routed and meandered lines (§8.5). |
+| **Width step** | L1 / shunt C / L2, as Qucs `msstep` (Gupta; Garg & Bahl), with Wa ≥ Wb: C = √(Wa Wb)[(10.1 log εr + 2.33)Wa/Wb − 12.6 log εr − 3.17] pF/m (εr ≤ 10, 1.5 ≤ Wa/Wb ≤ 3.5), L = h[40.5(Wa/Wb − 1) − 75 log(Wa/Wb) + 0.2(Wa/Wb − 1)²] nH/m (Wa/Wb ≤ 5), split between the sides as Z√εeff. log is log10. C is clamped at 0 where the fit goes negative, near equal widths. | `step` element. |
 
 **Typical values:**
 
@@ -417,7 +422,9 @@ The line model is pure TEM, so it has no parasitics of its own (§9.3). The layo
 
 **The tee as a network.** The transformers are folded into the main-arm lines (Y′ = TᵀY<sub>line</sub>T with T = diag(1, 1/T<sub>x</sub>)), so the junction is a 4-node admittance block over the three arms and the internal junction node, stamped like a line section. It is lossless; the arms' conductor and dielectric loss over a few hundred micrometres is ignored. At low frequency it reduces to the ideal three-way junction (S11 = −1/3, S21 = 2/3).
 
-**Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee is checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (`tests/tee.mjs`); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.
+Every model warns, on the netlist's line, when it is used outside its published range.
+
+**Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (`tests/tee.mjs`); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.
 
 
 ## 5. Plots and trace expressions
@@ -897,6 +904,36 @@ The as-built netlist models the pad and any taper as line sections. The transiti
 
 **Board thickness.** The connector's ground legs straddle the board. The layout card warns when the board (core + 2 × copper) is more than ±0.15 mm from the connector's 1.57 mm, which is the case for the 0.508 mm coupler demo. Either choose a variant of the connector made for the actual thickness, or use a 1.57 mm stack-up. The 1.524 mm RO4350B demos (1.594 mm with copper) fit.
 
+
+### 8.5 Routing, meanders and chip resistors
+
+These are the building blocks for the folded and routed layouts that follow (hairpin filters, power dividers and hybrids; issues #38–#40). They are in `js/routing.js` and `js/resistors.js`, and no `.layout` template uses them yet.
+
+**Orthogonal routes.** `routeOrtho(points, { W, mitre, sub })` takes a polyline with 90° turns, in mm, and returns two things:
+- the copper: an outline with square corners, or corners cut at the optimum mitre (§4.7);
+- the netlist that models it: `T` segments plus a `bend` at each corner.
+
+Each segment's modelled length is its centre-line length less W/2 at every bent end, because the bend's reference planes are the edges of the crossing strip. A segment too short for its bends is refused. 45° segments are refused too, since no 45° bend model is included.
+
+**Meanders.** `meander({ W, theta, f0, sub, legs, gap })` builds a square-wave meander with an even number of legs, so it enters and leaves on one axis. It solves the leg height on its own netlist, bends included, until the electrical length at f0 is `theta`. The default leg gap is 3W.
+
+The coupling between neighbouring legs is **not modelled**. Each meander reports a coupling coefficient k = (Z0e − Z0o)/(Z0e + Z0o) from the coupled-microstrip impedances at its gap. It warns below a 2W gap. For a 3.3 mm line on 1.524 mm RO4350B at a 3W gap, k ≈ 0.01, about −40 dB.
+
+| example (1.524 mm RO4350B, 2 GHz) | result |
+|---|---|
+| 180°, 3.3 mm (50 Ω) line, 2 legs, gap 9.9 mm, mitred | leg height 13.12 mm; footprint 26.4 × 16.4 mm; \|S11\| 4·10⁻⁴ at f0, < 0.05 at ±20 % |
+
+**Chip resistors** (`res`, §3.5), for Wilkinson isolation and terminations:
+- **Land patterns:** KiCad's `R_0402_1005Metric`, `R_0603_1608Metric` and `R_0805_2012Metric`.
+- **Pads:** each pad's capacitance to ground, as a short microstrip section with open-end fringing (as for the capacitors, §7.5).
+- **ESL:** 0.4 / 0.6 / 0.8 nH.
+- **Body capacitance across the part:** 0.03 pF.
+
+The ESL and body capacitance are typical values, not from a particular part; set `esl=` and `cp=` from your resistor's datasheet. A termination's pad 2 goes to ground through a land with `n` vias, as the loading capacitors' does.
+
+The footprints are `RES_<pkg>` (series) and `RES_<pkg>_GND<n>V` (termination). `node tools/kicad.mjs --caps SUBSTRATE --out DIR` writes them with the capacitor footprints, and CI checks them in KiCad.
+
+**Not checked yet** against EM simulation or measurement: the bend, step and resistor models (#16).
 ---
 
 ## 9. The model, its assumptions and limits
