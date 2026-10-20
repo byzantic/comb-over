@@ -1,0 +1,82 @@
+.title Hairpin chebyshev n=5 0.1dB, f0 = 2.4 GHz, FBW = 10 % on jlc-ro4350b-1.524 (synthesised geometry)
+# substrate jlc-ro4350b-1.524: h 1.524 mm, εr 3.66, copper 34.79 µm; all 10 arms one field-solved array
+# arm widths 3.605 3.137 3.668 3.137 3.605 mm; inner gaps 6.064 6.819 6.183 6.819 6.064 mm; gaps between hairpins 0.7561 1.265 1.265 0.7561 mm
+# arm length 13.948 mm (67.286° at f0); tap 2.256 mm from the bend end of the outer arms
+# U bottoms: two optimally mitred bends and the inner-gap line; open ends: KJK Δl as a capacitance; taps: Hammerstad tee
+# realised (lossless): centre 2.39974 GHz, −3 dB FBW 11.68 % (ideal 11.35 %), worst return loss over the central 80 % of the ripple band 16.52 dB (ideal 16.43 dB)
+# insertion loss at f0 1.07 dB with the substrate's conductor and dielectric loss
+# spurious passband near 2f0: peak S21 -0.253 dB at 4.658 GHz (1.941 f0)
+.freq 1680000000 3120000000 801
+.ref 2400000000
+.substrate jlc-ro4350b-1.524
+.layout hairpin
+.param la = 67.2860764 tune 60.5575 74.0147   # arm length, degrees at f0 (mean modal velocity of the array)
+.param tt = 10.882548 tune 9.52628 15.2356   # tap from the bend end of the outer arms, degrees
+.param wf = 3.29115mm   # tap feed width (50 ohm)
+.param hw = 7.93856314   # half the feed width in degrees at f0
+.param w1 = 3.604563mm tune 3.06388mm 4.14525mm
+.param w2 = 3.137494mm tune 2.66687mm 3.60812mm
+.param w3 = 3.667521mm tune 3.11739mm 4.21765mm
+.param s12 = 0.7561063mm tune 0.453664mm 1.20977mm
+.param s23 = 1.265352mm tune 0.759211mm 2.02456mm
+.param g1 = 6.063613mm tune 3.03181mm 9.09542mm   # inner gap of hairpin 1
+.param g2 = 6.819326mm tune 3.40966mm 10.229mm   # inner gap of hairpin 2
+.param g3 = 6.182905mm tune 3.09145mm 9.27436mm   # inner gap of hairpin 3
+port t1 50
+port t5 50
+cline S1
+  geom msl
+  W [w1 w1 w2 w2 w3 w3 w2 w2 w1 w1]
+  S [g1 s12 g2 s23 g3 s23 g2 s12 g1]
+  len (tt-hw)*1deg
+  A u1a u1b o3 o4 u3a u3b o7 o8 u5a u5b
+  B ta1 x2_1 x3_1 x4_1 x5_1 x6_1 x7_1 x8_1 x9_1 ta5
+end
+cline S2
+  geom msl
+  W [w1 w1 w2 w2 w3 w3 w2 w2 w1 w1]
+  S [g1 s12 g2 s23 g3 s23 g2 s12 g1]
+  len (2*hw)*1deg
+  A - x2_1 x3_1 x4_1 x5_1 x6_1 x7_1 x8_1 x9_1 -
+  B - x2_2 x3_2 x4_2 x5_2 x6_2 x7_2 x8_2 x9_2 -
+end
+cline S3
+  geom msl
+  W [w1 w1 w2 w2 w3 w3 w2 w2 w1 w1]
+  S [g1 s12 g2 s23 g3 s23 g2 s12 g1]
+  len (la-tt-hw)*1deg
+  A tb1 x2_2 x3_2 x4_2 x5_2 x6_2 x7_2 x8_2 x9_2 tb5
+  B o1 o2 u2a u2b o5 o6 u4a u4b o9 o10
+end
+tee TJ1 ta1 tb1 t1 Wa=w1 Wb=w1 W2=wf
+tee TJ5 ta5 tb5 t5 Wa=w1 Wb=w1 W2=wf
+bend U1a u1a v1a W=w1 mitre=opt
+T1_u v1a v1b W=w1 len=g1
+bend U1b v1b u1b W=w1 mitre=opt
+bend U2a u2a v2a W=w2 mitre=opt
+T2_u v2a v2b W=w2 len=g2
+bend U2b v2b u2b W=w2 mitre=opt
+bend U3a u3a v3a W=w3 mitre=opt
+T3_u v3a v3b W=w3 len=g3
+bend U3b v3b u3b W=w3 mitre=opt
+bend U4a u4a v4a W=w2 mitre=opt
+T4_u v4a v4b W=w2 len=g2
+bend U4b v4b u4b W=w2 mitre=opt
+bend U5a u5a v5a W=w1 mitre=opt
+T5_u v5a v5b W=w1 len=g1
+bend U5b v5b u5b W=w1 mitre=opt
+Coe1 o1 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
+Coe2 o2 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
+Coe3 o3 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
+Coe4 o4 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
+Coe5 o5 0 0.0806025p   # open-end fringing (Δl 0.6672 mm)
+Coe6 o6 0 0.0806025p   # open-end fringing (Δl 0.6672 mm)
+Coe7 o7 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
+Coe8 o8 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
+Coe9 o9 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
+Coe10 o10 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
+.goal db(S11) < -16.43 2287798100 2518198100
+.goal db(S21) < -3 1680000000 2263608500   # −3 dB band at most 3 % wider than ideal
+.goal db(S21) < -3 2544110800 3120000000
+.plot ylim=-70,0 db(S11) db(S21) db(cheby(5,0.1,2400000000,0.1))
+.plot gd(S21)

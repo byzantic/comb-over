@@ -1,0 +1,10 @@
+{
+  "structure": "edgecoupled",
+  "type": "chebyshev",
+  "n": 5,
+  "ripple": 0.1,
+  "f0": 2.4e9,
+  "fbw": 0.1,
+  "Zr": 50,
+  "R0": 50
+}

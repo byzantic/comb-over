@@ -28,6 +28,14 @@
     "name": "Interdigital 3-pole on 1.6 mm FR-4, synthesised geometry (manual §7.6)"
   },
   {
+    "file": "hairpin-5pole-2g4-ro4350b-1524.cir",
+    "name": "Hairpin 5-pole, 2.4 GHz 10 %, on 1.524 mm RO4350B with layout (Example 10)"
+  },
+  {
+    "file": "edgecoupled-5pole-2g4-ro4350b-1524.cir",
+    "name": "Edge-coupled 5-pole, 2.4 GHz 10 %, on 1.524 mm RO4350B with layout (Example 10)"
+  },
+  {
     "file": "interdigital-4pole.cir",
     "name": "Interdigital bandpass, 4 resonators"
   },

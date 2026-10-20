@@ -420,12 +420,34 @@ function resonatorArray(d, kind, o) {
   const vias = d.elements.filter(e => e.via);
   const viaAt = (node) => vias.find(e => e.a === node);
   const endA = (i) => secs[0].ends.A[i], endB = (i) => secs.at(-1).ends.B[i];
-  const isShort = (node) => GROUND.has(node) || !!viaAt(node);
+  // hairpin (#38): the "special" end of a line is its U bottom (a bend element) instead of a via
+  const hairpin = kind === 'hairpin';
+  const bends = (d.blocks ?? []).filter(b => b.type === 'bend');
+  const bendAt = (node) => bends.find(b => b.nodes[0] === node || b.nodes[1] === node);
+  const isShort = (node) => (hairpin ? !!bendAt(node) : GROUND.has(node) || !!viaAt(node));
   const shortTop = Array.from({ length: N }, (_, i) => {
     const a = isShort(endA(i)), b = isShort(endB(i));
-    if (a === b) throw new Error(`.layout ${kind}: line ${i + 1} must be shorted (via) at exactly one end`);
+    if (a === b) throw new Error(hairpin ? `.layout hairpin: line ${i + 1} must end in a U bottom (bend) at exactly one end` : `.layout ${kind}: line ${i + 1} must be shorted (via) at exactly one end`);
     return a;
   });
+  // hairpin: U bottoms — bend, inner line, bend — joining lines 2k and 2k+1 at the same end
+  const ubots = [];
+  if (hairpin) {
+    if (N % 2) throw new Error('.layout hairpin: needs an even number of lines (two arms per hairpin)');
+    for (let k = 0; k < N / 2; k++) {
+      const i = 2 * k, j = i + 1, top = shortTop[i];
+      if (shortTop[j] !== top) throw new Error(`.layout hairpin: arms ${i + 1} and ${j + 1} must have their U bottom at the same end`);
+      if (k > 0 && top === shortTop[i - 1]) throw new Error('.layout hairpin: consecutive hairpins must be flipped (U bottoms at alternate ends)');
+      const ea = top ? endA(i) : endB(i), eb = top ? endA(j) : endB(j);
+      const b1 = bendAt(ea), b2 = bendAt(eb), va = b1.nodes[0] === ea ? b1.nodes[1] : b1.nodes[0], vb = b2.nodes[0] === eb ? b2.nodes[1] : b2.nodes[0];
+      const line = d.sections.find(sc => sc.geom?.kind === 'msl1' && ((sc.ends.A[0] === va && sc.ends.B[0] === vb) || (sc.ends.A[0] === vb && sc.ends.B[0] === va)));
+      if (!line) throw new Error(`.layout hairpin: no line joins the U bottom of arms ${i + 1} and ${j + 1} (bend ${b1.name} … bend ${b2.name})`);
+      const g = xs[j] - xs[i] - (W[i] + W[j]) / 2;
+      if (Math.abs(mm(line.len) - g) > 0.01) throw new Error(`.layout hairpin: U bottom line ${line.name} is ${r4(mm(line.len))} mm but the arms are ${r4(g)} mm apart`);
+      if (Math.abs(W[i] - W[j]) > 1e-6 || Math.abs(mm(line.geom.W) - W[i]) > 1e-6) throw new Error(`.layout hairpin: hairpin ${k + 1} must have one width for both arms and its bottom`);
+      ubots.push({ k, i, j, top, mitre: b1.geo.mitre, M: b1.geo.M });
+    }
+  }
   if (kind === 'comb' && shortTop.some(t => t !== shortTop[0])) throw new Error('.layout comb: all lines must be shorted at the same end (this netlist is interdigital: use .layout interdigital)');
   if (kind === 'interdigital' && shortTop.some((t, i) => i > 0 && t === shortTop[i - 1])) throw new Error('.layout interdigital: lines must be shorted at alternate ends');
   // taps: tee junctions on the outer lines
@@ -446,7 +468,7 @@ function resonatorArray(d, kind, o) {
   const openNode = (i) => (shortTop[i] ? endB(i) : endA(i));
   const capOpt = (o.cap ?? 'smd-0603').split('-');
   const caps = [];
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < N && !hairpin; i++) {
     const node = openNode(i);
     const part = (d.caps ?? []).find(c => c.node === node && c.type !== 'ideal');
     const ideal = d.elements.find(e => e.type === 'C' && e.a === node && GROUND.has(e.b) && !/^Coe/i.test(e.name) && !/_pad$|_c$/.test(e.name));
@@ -476,7 +498,7 @@ function resonatorArray(d, kind, o) {
     const x = xs[i], w = W[i], ysh = shortTop[i] ? 0 : Ltot;
     const polys = [rect(x - w / 2, 0, x + w / 2, Ltot)];
     items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: polys[0], width: w, label: `resonator ${i + 1}`, role: 'core' });
-    const v = viaAt(shortTop[i] ? endA(i) : endB(i));
+    const v = hairpin ? null : viaAt(shortTop[i] ? endA(i) : endB(i));
     if (v) {
       const dr = v.via.d * 1e3, nv = v.via.n, vp = dr + 0.3, gv = 0.2;
       const row = nv * vp + (nv - 1) * gv, pw = Math.max(w, row + 0.2), ext = vp / 2 + 0.1;
@@ -489,7 +511,7 @@ function resonatorArray(d, kind, o) {
         items.push({ type: 'via', x: vx, y: ysh, drill: dr, pad: vp, net: 'GND', role: 'core' });
         core.vias.push({ num: G, node: 'GND', x: vx, y: ysh, drill: dr, pad: vp });
       }
-    } else if (!GROUND.has(shortTop[i] ? endA(i) : endB(i))) throw new Error(`.layout ${kind}: line ${i + 1} has no via at its shorted end`);
+    } else if (!hairpin && !GROUND.has(shortTop[i] ? endA(i) : endB(i))) throw new Error(`.layout ${kind}: line ${i + 1} has no via at its shorted end`);
     core.pads.push({ num: G, node: 'GND', polys, at: [x, Ltot / 2] });
   }
   // comb-line with capacitors: each untapped resonator is its own net (r2, …), tied to GND in the part,
@@ -513,7 +535,39 @@ function resonatorArray(d, kind, o) {
     feedItems.push({ t, xedge });
   }
   if (ownNet) core.pads.forEach((p, i) => { if (p.num === G) { p.num = String(++nextNum); p.node = openNode(i); } });
-  core.ties.push([...taps.map(t => portNum(d, t.port.node)), G, ...core.pads.filter(p => +p.num > +G).map(p => p.num)]);
+  if (hairpin) {
+    // each hairpin is one conductor, DC-isolated from the others: the tapped ones are their ports' nets,
+    // the rest nets of their own (h2, …); the U bottom belongs to the first arm's pad; no net tie
+    for (const u of ubots) {
+      const pa = core.pads[u.i], pb = core.pads[u.j], tapped = [pa, pb].find(p => p.num !== G);
+      const num = tapped ? tapped.num : String(++nextNum), node = tapped ? tapped.node : `h${u.k + 1}`;
+      pa.num = pb.num = num; pa.node = pb.node = node;
+      // U bottom: the strip under both arms, its two outer corners chamfered by c = 2MW along each edge
+      // (Douville–James optimum M). For M > 0.5 the chamfer reaches past the corner square into the arm
+      // (c > W): the arm's outer end corner gets the matching cut, so the copper is one polygon.
+      const xL = xs[u.i] - W[u.i] / 2, xR = xs[u.j] + W[u.j] / 2, w = W[u.i], y0 = u.top ? 0 : Ltot, s = u.top ? -1 : 1, ye = y0 + s * w;
+      const c = 2 * (u.M ?? 0) * w, over = Math.max(0, c - w);
+      const left = c > 0 ? (c < w ? [[xL, y0], [xL, ye - s * c], [xL + c, ye]] : [[xL + over, y0], [xL + c, ye]]) : [[xL, y0], [xL, ye]];
+      const right = c > 0 ? (c < w ? [[xR - c, ye], [xR, ye - s * c], [xR, y0]] : [[xR - c, ye], [xR - over, y0]]) : [[xR, ye], [xR, y0]];
+      const poly = [...left, ...right].map(([x, y]) => [+x.toFixed(6), +y.toFixed(6)]);
+      items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: poly, width: w, label: `hairpin ${u.k + 1} bottom`, role: 'core' });
+      pa.polys.push(poly);
+      if (over > 0) {
+        // the arms' outer end corners: (outer edge, y0) → (outer edge, y0 − s·over) and (outer edge ± over, y0)
+        for (const [arm, xo, dir] of [[u.i, xL, 1], [u.j, xR, -1]]) {
+          const pad = core.pads[arm], strip = pad.polys[0];
+          // replace the corner vertex by two points, the one on the outer edge next to the neighbour on that edge
+          const cut = strip.flatMap(([x, y], q) => {
+            if (!(Math.abs(x - xo) < 1e-9 && Math.abs(y - y0) < 1e-9)) return [[x, y]];
+            const prev = strip[(q + strip.length - 1) % strip.length], onEdge = [x, y - s * over], onEnd = [x + dir * over, y];
+            return Math.abs(prev[0] - xo) < 1e-9 ? [onEdge, onEnd] : [onEnd, onEdge];
+          });
+          const item = items.find(it => it.pts === strip);
+          pad.polys[0] = cut; if (item) item.pts = cut;
+        }
+      }
+    }
+  } else core.ties.push([...taps.map(t => portNum(d, t.port.node)), G, ...core.pads.filter(p => +p.num > +G).map(p => p.num)]);
   // end extensions (open single-line stubs at an open end: the interdigital end trim)
   for (let i = 0; i < N; i++) {
     const node = openNode(i);
@@ -579,10 +633,96 @@ function resonatorArray(d, kind, o) {
   notes.push(`taps: Hammerstad tee (as Qucs) with ${taps.map(t => r4(t.wf)).join('/')} mm feeds; the part includes a ${r4(stub)} mm feed stub at each tap`);
   return { outline, items, dims, netlist, core, notes, parts, fence: true };
 }
+// ---------------------------------------------------------------- edge-coupled (#38)
+// The coupled sections of the edge-coupled (parallel-coupled) filter as a staircase: section k couples
+// resonator k (its line 1, open at B) and resonator k+1 (line 2, open at A); each resonator is one strip
+// whose halves may differ in width (a `step` element between them when modelled). The ports sit on the
+// first section's line 1 (A) and the last section's line 2 (B); each gets a linear taper to the feed
+// width and a feed to the edge connector. Every resonator is its own conductor (h1, …; no net tie).
+function edgecoupled(d, _, o) {
+  const secs = d.sections.filter(s => s.geom?.kind === 'msl2');
+  if (secs.length < 2) throw new Error('.layout edgecoupled: needs two or more coupled-microstrip sections (geom=msl W= S=; synthesise with "Realise in microstrip")');
+  const steps = (d.blocks ?? []).filter(b => b.type === 'step');
+  const joined = (a, b) => a === b || steps.some(st => (st.nodes[0] === a && st.nodes[1] === b) || (st.nodes[0] === b && st.nodes[1] === a));
+  const isOpen = (node) => node === '-' || !d.ports.some(p => p.node === node) && !d.elements.some(e => (e.a === node || e.b === node) && !/^Coe/i.test(e.name)) && !secs.some(s2 => s2.ends.A.concat(s2.ends.B).filter(x => x === node).length > 1);
+  for (let k = 0; k < secs.length; k++) {
+    const s = secs[k];
+    if (!isOpen(s.ends.B[0]) || !isOpen(s.ends.A[1])) throw new Error(`.layout edgecoupled: section ${s.name} must have line 1 open at B and line 2 open at A`);
+    if (k > 0 && !joined(secs[k - 1].ends.B[1], s.ends.A[0])) throw new Error(`.layout edgecoupled: section ${secs[k - 1].name} line 2 (B) must continue as ${s.name} line 1 (A)`);
+  }
+  const pin = needPort(d, secs[0].ends.A[0], 'first section, line 1 end A'), pout = needPort(d, secs.at(-1).ends.B[1], 'last section, line 2 end B');
+  const sub = d.substrate, f0 = d.fref, fenceRoom = Math.max(3 * sub.dielectric.h * 1e3, 1) + 2, given = d.layout.opts ?? {};
+  const feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom);
+  const W = secs.map(s => mm(s.geom.W)), S = secs.map(s => mm(s.geom.S)), Ls = secs.map(s => mm(s.len));
+  const xs = [0]; Ls.forEach(l => xs.push(xs.at(-1) + l));
+  // centre lines: line 1 / line 2 of each section. A resonator's two halves differ in width; they are
+  // aligned on the edge that faces no other line (upper edges where it widens, lower where it narrows),
+  // so every coupled edge keeps its gap and no open-end corner meets a neighbour
+  const y1 = [0], y2 = [];
+  secs.forEach((_, k) => { y2.push(y1[k] + W[k] + S[k]); if (k < secs.length - 1) y1.push(y2[k] + Math.abs(W[k + 1] - W[k]) / 2); });
+  const ys = [...y1, y2.at(-1)];                                   // ports: input line 0, output line n+1
+  const items = [], dims = [], notes = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
+  const n = secs.length - 1;
+  const strip = (k, line) => { const y = line ? y2[k] : y1[k]; return rect(xs[k], y - W[k] / 2, xs[k + 1], y + W[k] / 2); };
+  // resonators 0 (input line) … n+1 (output line): polygons
+  const polys = Array.from({ length: n + 2 }, () => []);
+  secs.forEach((_, k) => { polys[k].push(strip(k, 0)); polys[k + 1].push(strip(k, 1)); });
+  // feeds: taper W → wf, then the feed to the edge
+  const feed = (p, P, u, w) => {
+    const wf = feedWidth(d, p.z, f0), tp = taper(P, u, w, wf, Math.max(w, 3 * Math.abs(wf - w)));
+    const edge = [tp.T[0] + u[0] * feedLen, tp.T[1]];
+    items.push({ type: 'poly', layer: 'F.Cu', net: p.node, pts: pathPolygon([tp.T, edge], wf), width: wf, label: `feed ${p.node}`, role: 'feed', node: p.node, path: [edge, tp.T] });
+    items.push({ type: 'port', name: p.node, net: p.node, x: edge[0], y: edge[1], dir: u, width: wf, z0: p.z });
+    core.refs.push(refOf(d, p.node, tp.T, u, wf, wf));
+    return { tp, wf, edge };
+  };
+  const fi = feed(pin, [xs[0], ys[0]], [-1, 0], W[0]), fo = feed(pout, [xs.at(-1), ys.at(-1)], [1, 0], W.at(-1));
+  if (fi.tp.poly) polys[0].push(fi.tp.poly);
+  if (fo.tp.poly) polys[n + 1].push(fo.tp.poly);
+  polys.forEach((ps, j) => {
+    const port = j === 0 ? pin : j === n + 1 ? pout : null, node = port ? port.node : `h${j}`;
+    const num = port ? portNum(d, port.node) : String(d.ports.length + j);
+    ps.forEach(pts => items.push({ type: 'poly', layer: 'F.Cu', net: node, pts, width: Math.min(...W), label: port ? `line ${node}` : `resonator ${j}`, role: 'core' }));
+    core.pads.push({ num, node, polys: ps, at: port ? (j === 0 ? [xs[0] + 0.05, ys[0]] : [xs.at(-1) - 0.05, ys.at(-1)]) : [xs[j], y2[j - 1]] });
+  });
+  // board
+  const allPts = items.filter(it => it.pts).flatMap(it => it.pts);
+  const x0 = fi.edge[0], x1 = fo.edge[0], ymin = Math.min(...allPts.map(q => q[1])) - margin, ymax = Math.max(...allPts.map(q => q[1])) + margin;
+  const outline = rect(x0, ymin, x1, ymax);
+  items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
+  dims.push({ a: [xs[0], ys.at(-1) + W.at(-1) + 1.2], b: [xs.at(-1), ys.at(-1) + W.at(-1) + 1.2], text: `${r4(xs.at(-1))} mm` });
+  dims.push({ a: [xs[0], ys[0] - W[0] - 1.2], b: [xs.at(-1), ys[0] - W[0] - 1.2], text: `W ${W.map(r4).join('/')} · S ${S.map(r4).join('/')} mm`, dy: 0.6 });
+  // netlists: the source with the port nodes moved behind a taper (core) plus the feed (as built)
+  const transform = (asBuilt) => {
+    const lines = d.text.split(/\r?\n/).filter(l => !/^\s*\.layout\b/i.test(l));
+    for (const [p, fd, sec, end] of [[pin, fi, secs[0], 'A'], [pout, fo, secs.at(-1), 'B']]) {
+      const si = lines.findIndex(l => new RegExp(`^\\s*cline\\s+${sec.name}\\b`, 'i').test(l));
+      let ei = si; while (!new RegExp(`^\\s*${end}\\s`).test(lines[ei])) ei++;
+      lines[ei] = lines[ei].replace(new RegExp(`(\\s)${p.node}(\\s|$)`), `$1${p.node}_k$2`);
+      const w = end === 'A' ? W[0] : W.at(-1), add = [];
+      if (asBuilt) add.push(`T${p.node}_f ${p.node} ${p.node}_e W=${r4(fd.wf)}mm len=${r4(feedLen)}mm`, ...taperNl(p.node, `${p.node}_e`, `${p.node}_k`, fd.wf, w, fd.tp.Lt));
+      else add.push(...taperNl(p.node, p.node, `${p.node}_k`, fd.wf, w, fd.tp.Lt));
+      let endi = ei; while (!/^\s*end\b/i.test(lines[endi])) endi++;
+      lines.splice(endi + 1, 0, ...add);
+    }
+    const ti = lines.findIndex(l => /^\s*\.title\b/i.test(l));
+    if (ti >= 0) lines[ti] = lines[ti].replace(/^\s*\.title\s+/i, asBuilt ? '.title as built: ' : '.title core (between the part reference planes): ');
+    return lines.join('\n') + '\n';
+  };
+  core.netlist = transform(false);
+  notes.push(`${n} resonators on a ${r4(xs.at(-1))} mm staircase; each port has a ${r4(fi.tp.Lt)}/${r4(fo.tp.Lt)} mm taper to the feed width (modelled as three stepped sections)`);
+  const unmod = secs.slice(1).map((s2, k) => [W[k], W[k + 1]]).filter(([a2, b2]) => Math.abs(a2 / b2 - 1) > 1e-3 && Math.max(a2, b2) / Math.min(a2, b2) < 1.5);
+  if (unmod.length) notes.push(`${unmod.length} width step(s) under 1.5:1 at the resonator middles are not modelled (outside the step model's range)`);
+  notes.push('the width steps are drawn one-sided (edges facing no other line aligned); the step model is symmetric');
+  return { outline, items, dims, netlist: transform(true), core, notes, fence: true };
+}
+
 const comb = (d, _, o) => resonatorArray(d, 'comb', o);
 const interdigital = (d, _, o) => resonatorArray(d, 'interdigital', o);
+const hairpin = (d, _, o) => resonatorArray(d, 'hairpin', o);
 
-const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital };
+const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital, hairpin, edgecoupled };
 export const templateNames = Object.keys(TEMPLATES);
 
 // Build the layout for a parsed netlist with a .layout statement. Returns the layout with DRC results.

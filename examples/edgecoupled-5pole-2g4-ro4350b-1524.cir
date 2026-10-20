@@ -1,0 +1,69 @@
+.title Edge-coupled chebyshev n=5 0.1dB, f0 = 2.4 GHz, FBW = 10 % on jlc-ro4350b-1.524
+# substrate jlc-ro4350b-1.524: h 1.524 mm, εr 3.66; coupled microstrip (Kirschning–Jansen)
+# sections (Z0e/Z0o 75.35/38.34, 57.05/44.52, 55.23/45.68, 55.23/45.68, 57.05/44.52, 75.35/38.34 Ω): widths 2.426 3.381 3.646 3.646 3.381 2.426 mm; gaps 0.2947 1.522 1.988 1.988 1.522 0.2947 mm; lengths 18.07 17.76 17.68 17.68 17.76 18.07 mm
+# realised (lossless): centre 2.39764 GHz, −3 dB FBW 11.23 % (ideal 11.35 %), worst return loss over the central 80 % of the ripple band 16.41 dB (ideal 16.43 dB)
+# insertion loss at f0 1.43 dB with the substrate's conductor and dielectric loss
+# spurious passband near 2f0: peak S21 -0.0153 dB at 4.968 GHz (2.07 f0). In homogeneous TEM each section is λ/2 there and transmits nothing; microstrip's unequal even/odd velocities remove that zero
+# open ends: KJK Δl as capacitances; width steps of 1.5:1 or more as step elements (smaller ones are not modelled)
+.freq 1680000000 3120000000 801
+.ref 2400000000
+.substrate jlc-ro4350b-1.524
+.layout edgecoupled
+.param w0 = 2.425812mm tune 1.69807mm 3.15356mm
+.param s0 = 0.2947324mm tune 0.176839mm 0.471572mm
+.param th0 = 86.04396 tune 77.4396 94.6484
+.param w1 = 3.381058mm tune 2.36674mm 4.39538mm
+.param s1 = 1.522309mm tune 0.913385mm 2.43569mm
+.param th1 = 86.65643 tune 77.9908 95.3221
+.param w2 = 3.645507mm tune 2.55185mm 4.73916mm
+.param s2 = 1.987623mm tune 1.19257mm 3.1802mm
+.param th2 = 86.715756 tune 78.0442 95.3873
+port in 50
+port out 50
+cline S1 geom=msl W=w0 S=s0
+  len th0*1deg
+  A in o1a
+  B o1b j1
+end
+cline S2 geom=msl W=w1 S=s1
+  len th1*1deg
+  A j1 o2a
+  B o2b j2
+end
+cline S3 geom=msl W=w2 S=s2
+  len th2*1deg
+  A j2 o3a
+  B o3b j3
+end
+cline S4 geom=msl W=w2 S=s2
+  len th2*1deg
+  A j3 o4a
+  B o4b j4
+end
+cline S5 geom=msl W=w1 S=s1
+  len th1*1deg
+  A j4 o5a
+  B o5b j5
+end
+cline S6 geom=msl W=w0 S=s0
+  len th0*1deg
+  A j5 o6a
+  B o6b out
+end
+Coe_o1a o1a 0 0.0563375p   # open-end fringing (Δl 0.6067 mm)
+Coe_o1b o1b 0 0.0563375p   # open-end fringing (Δl 0.6067 mm)
+Coe_o2a o2a 0 0.0749398p   # open-end fringing (Δl 0.655 mm)
+Coe_o2b o2b 0 0.0749398p   # open-end fringing (Δl 0.655 mm)
+Coe_o3a o3a 0 0.0801659p   # open-end fringing (Δl 0.6663 mm)
+Coe_o3b o3b 0 0.0801659p   # open-end fringing (Δl 0.6663 mm)
+Coe_o4a o4a 0 0.0801659p   # open-end fringing (Δl 0.6663 mm)
+Coe_o4b o4b 0 0.0801659p   # open-end fringing (Δl 0.6663 mm)
+Coe_o5a o5a 0 0.0749398p   # open-end fringing (Δl 0.655 mm)
+Coe_o5b o5b 0 0.0749398p   # open-end fringing (Δl 0.655 mm)
+Coe_o6a o6a 0 0.0563375p   # open-end fringing (Δl 0.6067 mm)
+Coe_o6b o6b 0 0.0563375p   # open-end fringing (Δl 0.6067 mm)
+.goal db(S11) < -16.43 2287798100 2518198100
+.goal db(S21) < -3 1680000000 2263608500   # −3 dB band at most 3 % wider than ideal
+.goal db(S21) < -3 2544110800 3120000000
+.plot ylim=-70,0 db(S11) db(S21) db(cheby(5,0.1,2400000000,0.1))
+.plot gd(S21)
