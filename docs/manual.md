@@ -804,7 +804,7 @@ Hovering a copper shape in the preview shows its net and width.
     - each chain joins two neighbouring arms;
     - its line equals the arms' spacing;
     - consecutive hairpins are flipped.
-  - The U bottoms are drawn as mitred routes (§8.5), and the taps are as for comb-line.
+  - Each U bottom is drawn as one strip under both arms, its outer corners chamfered by 2MW along each edge (the Douville–James optimum M, §4.7). Where M > 0.5 the chamfer reaches past the corner square, and the arm's outer end corner gets the matching cut. The taps are as for comb-line.
   - Every hairpin is a separate conductor. The tapped ones carry the port nets, the others nets of their own (`h2`, …), so the part needs no net tie and no vias.
 - **Edge-coupled** (§7.7). The coupled sections form a staircase. The halves of a resonator that differ in width are aligned on the edge facing no other line, so every coupling gap is kept and no open-end corner meets a neighbour. That step is drawn one-sided, while the `step` model is symmetric. Each port line gets a linear taper to the feed width and a feed to the connector.
 

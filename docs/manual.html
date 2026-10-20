@@ -1398,7 +1398,7 @@ The as-built netlist renames each tee&#39;s side node and inserts the feed line 
 <li>consecutive hairpins are flipped.</li>
 </ul>
 </li>
-<li>The U bottoms are drawn as mitred routes (§8.5), and the taps are as for comb-line.</li>
+<li>Each U bottom is drawn as one strip under both arms, its outer corners chamfered by 2MW along each edge (the Douville–James optimum M, §4.7). Where M &gt; 0.5 the chamfer reaches past the corner square, and the arm&#39;s outer end corner gets the matching cut. The taps are as for comb-line.</li>
 <li>Every hairpin is a separate conductor. The tapped ones carry the port nets, the others nets of their own (<code>h2</code>, …), so the part needs no net tie and no vias.</li>
 </ul>
 </li>

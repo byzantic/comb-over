@@ -9,7 +9,6 @@
 // Feed lines are 50 Ω (the port impedance) microstrip on the substrate; where a feed leaves a coupled
 // line it first runs diagonally (45°) at the coupled-line width until it is clear of its neighbour.
 
-import { routeOrtho } from './routing.js';
 import { rect, pathPolygon, pathLength, bbox, drc, cutPath, unit } from './layout.js';
 import { synthMsline, fromSubstrate } from './microstrip.js';
 import { toDirective } from './substrates.js';
@@ -446,7 +445,7 @@ function resonatorArray(d, kind, o) {
       const g = xs[j] - xs[i] - (W[i] + W[j]) / 2;
       if (Math.abs(mm(line.len) - g) > 0.01) throw new Error(`.layout hairpin: U bottom line ${line.name} is ${r4(mm(line.len))} mm but the arms are ${r4(g)} mm apart`);
       if (Math.abs(W[i] - W[j]) > 1e-6 || Math.abs(mm(line.geom.W) - W[i]) > 1e-6) throw new Error(`.layout hairpin: hairpin ${k + 1} must have one width for both arms and its bottom`);
-      ubots.push({ k, i, j, top, mitre: b1.geo.mitre });
+      ubots.push({ k, i, j, top, mitre: b1.geo.mitre, M: b1.geo.M });
     }
   }
   if (kind === 'comb' && shortTop.some(t => t !== shortTop[0])) throw new Error('.layout comb: all lines must be shorted at the same end (this netlist is interdigital: use .layout interdigital)');
@@ -543,10 +542,30 @@ function resonatorArray(d, kind, o) {
       const pa = core.pads[u.i], pb = core.pads[u.j], tapped = [pa, pb].find(p => p.num !== G);
       const num = tapped ? tapped.num : String(++nextNum), node = tapped ? tapped.node : `h${u.k + 1}`;
       pa.num = pb.num = num; pa.node = pb.node = node;
-      const xa = xs[u.i], xb = xs[u.j], w = W[u.i], y0 = u.top ? 0 : Ltot, s = u.top ? -1 : 1;
-      const rt = routeOrtho([[xa, y0], [xa, y0 + s * w / 2], [xb, y0 + s * w / 2], [xb, y0]], { W: w, mitre: u.mitre, sub: d.substrate });
-      items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rt.poly, width: w, label: `hairpin ${u.k + 1} bottom`, role: 'core' });
-      pa.polys.push(rt.poly);
+      // U bottom: the strip under both arms, its two outer corners chamfered by c = 2MW along each edge
+      // (Douville–James optimum M). For M > 0.5 the chamfer reaches past the corner square into the arm
+      // (c > W): the arm's outer end corner gets the matching cut, so the copper is one polygon.
+      const xL = xs[u.i] - W[u.i] / 2, xR = xs[u.j] + W[u.j] / 2, w = W[u.i], y0 = u.top ? 0 : Ltot, s = u.top ? -1 : 1, ye = y0 + s * w;
+      const c = 2 * (u.M ?? 0) * w, over = Math.max(0, c - w);
+      const left = c > 0 ? (c < w ? [[xL, y0], [xL, ye - s * c], [xL + c, ye]] : [[xL + over, y0], [xL + c, ye]]) : [[xL, y0], [xL, ye]];
+      const right = c > 0 ? (c < w ? [[xR - c, ye], [xR, ye - s * c], [xR, y0]] : [[xR - c, ye], [xR - over, y0]]) : [[xR, ye], [xR, y0]];
+      const poly = [...left, ...right].map(([x, y]) => [+x.toFixed(6), +y.toFixed(6)]);
+      items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: poly, width: w, label: `hairpin ${u.k + 1} bottom`, role: 'core' });
+      pa.polys.push(poly);
+      if (over > 0) {
+        // the arms' outer end corners: (outer edge, y0) → (outer edge, y0 − s·over) and (outer edge ± over, y0)
+        for (const [arm, xo, dir] of [[u.i, xL, 1], [u.j, xR, -1]]) {
+          const pad = core.pads[arm], strip = pad.polys[0];
+          // replace the corner vertex by two points, the one on the outer edge next to the neighbour on that edge
+          const cut = strip.flatMap(([x, y], q) => {
+            if (!(Math.abs(x - xo) < 1e-9 && Math.abs(y - y0) < 1e-9)) return [[x, y]];
+            const prev = strip[(q + strip.length - 1) % strip.length], onEdge = [x, y - s * over], onEnd = [x + dir * over, y];
+            return Math.abs(prev[0] - xo) < 1e-9 ? [onEdge, onEnd] : [onEnd, onEdge];
+          });
+          const item = items.find(it => it.pts === strip);
+          pad.polys[0] = cut; if (item) item.pts = cut;
+        }
+      }
     }
   } else core.ties.push([...taps.map(t => portNum(d, t.port.node)), G, ...core.pads.filter(p => +p.num > +G).map(p => p.num)]);
   // end extensions (open single-line stubs at an open end: the interdigital end trim)

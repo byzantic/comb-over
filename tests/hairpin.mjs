@@ -64,7 +64,12 @@ function shape(text, f0, span) {
   check(`hairpin (lossless): centre within 0.3 % of 2.4 GHz, −3 dB width within −5 % … +3 % of ideal 11.35 % (${(sh.fc / 1e9).toFixed(5)} GHz, ${(sh.bw * 100).toFixed(3)} %)`, Math.abs(sh.fc / 2.4e9 - 1) < 3e-3 && sh.bw / 0.11347 > 0.95 && sh.bw / 0.11347 < 1.03);
   const Ly = buildLayout(d);
   check('hairpin layout: DRC clean; 5 conductors, the tapped ones on the port nets, no net tie', Ly.errors.length === 0 && new Set(Ly.core.pads.map(p => p.node)).size === 5 && Ly.core.pads.filter(p => /^t\d$/.test(p.node)).length === 4 && Ly.core.ties.length === 0, JSON.stringify(Ly.errors));
-  check('hairpin layout: 5 mitred U bottoms drawn', Ly.items.filter(i => /hairpin \d bottom/.test(i.label ?? '')).length === 5 && Ly.items.filter(i => /bottom/.test(i.label ?? '')).every(i => i.pts.length === 10));
+  const bottoms = Ly.items.filter(i => /hairpin \d bottom/.test(i.label ?? ''));
+  // simple polygons (KiCad needs each custom pad to resolve to one polygon): no two non-adjacent edges cross
+  const simple = (P) => { const n = P.length, X = (a, b, c, d) => { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; }; for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) { if (i === 0 && j === n - 1) continue; if (X(P[i], P[(i + 1) % n], P[j], P[(j + 1) % n])) return false; } return true; };
+  const arms = Ly.items.filter(i => /^resonator \d+$/.test(i.label ?? ''));
+  check('hairpin layout: 5 U bottoms with chamfered outer corners; bottoms and arms are simple polygons (one KiCad pad shape each)', bottoms.length === 5 && bottoms.every(b => b.pts.length >= 4 && b.pts.length <= 6 && simple(b.pts)) && arms.every(a => simple(a.pts)));
+  check('hairpin layout: at W/h ≈ 2.4 the optimum mitre (c = 2MW > W) carries on into the arms\' outer end corners', arms.filter(a => a.pts.length === 5).length === 10);
   const sb = shape(Ly.netlist, 2.4e9, 0.3);
   check('hairpin as built ≈ design (lossless): centre within 0.05 %, −3 dB width within 1 %', Math.abs(sb.fc / sh.fc - 1) < 5e-4 && Math.abs(sb.bw / sh.bw - 1) < 0.01, JSON.stringify([sh, sb]));
   check('hairpin layout errors: U bottoms not flipped between neighbours', throws(() => {
