@@ -24,7 +24,7 @@
 <ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16">Not checked yet against EM simulation or measurement: the bend, step and resistor models (#16).</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
 <a class="" href="substrates.html">Substrate presets</a>
 <a class="" href="examples/index.html">Worked examples</a>
-<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li></ol></nav></aside>
+<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="examples/11-duplexer.html">Duplexer: spec to Gerbers</a></li></ol></nav></aside>
   <main class="doc">
     <h1>comb-over manual</h1>
 <p>comb-over analyses linear networks built from <strong>uniform coupled multiconductor TEM / quasi-TEM line sections</strong>, single lines and lumped R/L/C. It also synthesises tapped comb-line and interdigital band-pass filters. Everything runs in the browser, and the same engine runs under Node for scripting and tests.</p>
@@ -1260,6 +1260,35 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <li>width steps under 1.5:1;</li>
 <li>the one-sided drawing of the edge-coupled steps (the model&#39;s step is symmetric).</li>
 </ul>
+<h3 id="78-duplexers"><a class="anchor" href="#78-duplexers" aria-hidden="true">#</a>7.8 Duplexers</h3>
+<p>A duplexer (diplexer) joins two bandpass filters at a common antenna port. <code>node tools/synth.mjs SPEC.json --substrate ID</code> designs one when the specification has <code>&quot;bands&quot;: [{ &quot;f0&quot;, &quot;fbw&quot; }, { &quot;f0&quot;, &quot;fbw&quot; }]</code> (band A the lower) and <code>&quot;isolation&quot;</code> in dB. The filters are comb-line, interdigital or hairpin (<code>structure</code>), with the other fields as for a single filter. <a href="examples/11-duplexer.html">Worked example 11</a> goes from specification to Gerbers.</p>
+<pre><code>ant ── tee (side arm) ──┬── vertical vA ── bend ── h ── filter A ── port A
+                        └── vertical vB ── bend ── h ── filter B ── port B
+</code></pre>
+<ol>
+<li><strong>The filters</strong>, each synthesised on its own (§7.6, §7.7), are merged into one netlist by <code>tagNetlist</code> (<code>js/duplexer.js</code>):<ul>
+<li>Every node, parameter and element name gets the suffix <code>_A</code> or <code>_B</code>, and the parameters lose their tune ranges.</li>
+<li>Each section keeps its own f0, because degree lengths and microstrip dispersion are evaluated at a section&#39;s <code>f0</code> (§4.2). A tagged filter in a netlist with another <code>.ref</code> gives exactly the original response, which the tests check.</li>
+<li>Headers, goals and plots are dropped, and the input port becomes the manifold node.</li>
+</ul>
+</li>
+<li><strong>The manifold.</strong> The antenna is on the tee&#39;s side arm, and the main arms run to the two filters. The line to filter X must make X look like an open circuit in the other band, so that it does not load the other filter there. With Γ<sub>X</sub> the reflection at X&#39;s input at the other band&#39;s centre, the branch is θ<sub>X</sub> = arg Γ<sub>X</sub>/2 + k·180°. k is chosen so that the filters, stacked one above the other, keep max(5h, 4 mm) between their copper.</li>
+<li><strong>The polish.</strong> The two vertical runs are polished on the joint goals: antenna return loss 1 dB below the filters&#39; over the central 80 % of each band, and isolation between the filter ports over each ripple band.</li>
+</ol>
+<p>The <strong>isolation budget</strong> in the report shows, for each band:</p>
+<ul>
+<li>the isolation between the filter ports;</li>
+<li>the antenna return loss;</li>
+<li>the insertion loss;</li>
+<li>the leakage to the other port;</li>
+<li>what the other filter alone rejects there.</li>
+</ul>
+<p>When the isolation is short of the specification, the budget says whether the other filter&#39;s rejection limits it (raise n or move the bands apart) or the manifold does.</p>
+<p><strong>Not modelled:</strong></p>
+<ul>
+<li>coupling between the two filters, and between the manifold and the filters, through the layout. This is why the gap between them is generous. An EM check (#16) is the way to know.</li>
+<li>the filters themselves are as their own synthesis left them: the polish moves only the manifold.</li>
+</ul>
 <h2 id="8-export-and-sharing"><a class="anchor" href="#8-export-and-sharing" aria-hidden="true">#</a>8. Export and sharing</h2>
 <p><strong>Touchstone.</strong> Exports the full S-matrix at all sweep points, with frequency in Hz, as RI (real/imaginary), MA (magnitude/angle°) or DB (dB/angle°).</p>
 <div class="table-wrap"><table>
@@ -1313,6 +1342,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 .layout interdigital                      # interdigital resonator array
 .layout hairpin                           # hairpin filter: folded half-wave resonators (§7.7)
 .layout edgecoupled                       # edge-coupled (parallel-coupled) filter (§7.7)
+.layout duplexer                          # duplexer: two filters on a manifold (§7.8)
 </code></pre>
 <div class="table-wrap"><table>
 <thead>
@@ -1375,14 +1405,22 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </tbody></table></div>
 <p><strong>What the templates do:</strong></p>
 <ul>
-<li><strong>Coordinates.</strong> Everything is in millimetres, with the y axis pointing down as in KiCad.</li>
-<li><strong>Port feeds.</strong> Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.</li>
-<li><strong>Leaving a coupled line.</strong> A feed first runs diagonally (45°) at the coupled-line width. As soon as it is clear of its neighbour by the coupling gap, a linear taper of length max(w<sub>f</sub>, 3|w<sub>f</sub> − W|) widens it to the feed width w<sub>f</sub>. The taper replaces an abrupt width step and belongs to the part (§8.2). The as-built netlist models it as three stepped sections.</li>
-<li><strong>Connectors.</strong> An edge-launch SMA at every port (§8.4).</li>
-<li><strong>Ground.</strong> The back of the board is a full ground pour.</li>
-<li><strong>Schiffman reference line.</strong> It is lengthened by the length of the C-section&#39;s feeds, so the designed phase difference between the two networks is kept.</li>
-<li><strong>Marchand.</strong> The secondary lines get via pads at their grounded ends. The two sections are separated by <code>gap</code> so that both outputs can leave from between them, which adds a short uncoupled piece of main line.</li>
-<li><strong>Comb-line and interdigital.</strong> The templates read the resonator array from the netlist that <strong>Realise in microstrip</strong> writes (§7.6): the <code>geom msl W [...] S [...]</code> sections stacked along the lines, the <code>via</code> at each shorted end, a <code>tee</code> at each tap and the loading capacitors. They check that the netlist is what the template draws: every line shorted at exactly one end (all the same end for comb, alternate ends for interdigital), a tap on each outer line, each tee spanning its feed width. Then:<ul>
+<li><p><strong>Coordinates.</strong> Everything is in millimetres, with the y axis pointing down as in KiCad.</p>
+</li>
+<li><p><strong>Port feeds.</strong> Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.</p>
+</li>
+<li><p><strong>Leaving a coupled line.</strong> A feed first runs diagonally (45°) at the coupled-line width. As soon as it is clear of its neighbour by the coupling gap, a linear taper of length max(w<sub>f</sub>, 3|w<sub>f</sub> − W|) widens it to the feed width w<sub>f</sub>. The taper replaces an abrupt width step and belongs to the part (§8.2). The as-built netlist models it as three stepped sections.</p>
+</li>
+<li><p><strong>Connectors.</strong> An edge-launch SMA at every port (§8.4).</p>
+</li>
+<li><p><strong>Ground.</strong> The back of the board is a full ground pour.</p>
+</li>
+<li><p><strong>Schiffman reference line.</strong> It is lengthened by the length of the C-section&#39;s feeds, so the designed phase difference between the two networks is kept.</p>
+</li>
+<li><p><strong>Marchand.</strong> The secondary lines get via pads at their grounded ends. The two sections are separated by <code>gap</code> so that both outputs can leave from between them, which adds a short uncoupled piece of main line.</p>
+</li>
+<li><p><strong>Comb-line and interdigital.</strong> The templates read the resonator array from the netlist that <strong>Realise in microstrip</strong> writes (§7.6): the <code>geom msl W [...] S [...]</code> sections stacked along the lines, the <code>via</code> at each shorted end, a <code>tee</code> at each tap and the loading capacitors. They check that the netlist is what the template draws: every line shorted at exactly one end (all the same end for comb, alternate ends for interdigital), a tap on each outer line, each tee spanning its feed width. Then:</p>
+<ul>
 <li><strong>Resonators</strong> are drawn as one strip each, with a via land at the shorted end (two vias of the netlist&#39;s drill, land width max(W, row + 0.2 mm)). A land wider than its line is noted, since it is not modelled.</li>
 <li><strong>Taps.</strong> A feed-width stub (<code>stub</code>) leaves the outer line at the tee, and the 50 Ω feed runs from it to the edge connector. The tapped resonator, its land and the stub are the port&#39;s pad in the part.</li>
 <li><strong>Capacitors</strong> (comb) are placed on the open end of each resonator as separate footprints (§7.5): pad 1 on the line, pad 2 to ground through its vias, pointing away from the array. Ideal capacitors in the netlist are realised with <code>cap=</code>, at the nominal value whose effective capacitance at f0 is the ideal one; the notes give the values.</li>
@@ -1391,7 +1429,8 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 The as-built netlist renames each tee&#39;s side node and inserts the feed line (stub + feed) and the connector; the core netlist has only the stubs. In the preview all copper is on net GND, since these filters are DC shorts.</li>
 </ul>
 </li>
-<li><strong>Hairpin</strong> (§7.7). The same resonator-array template, with U bottoms in place of vias:<ul>
+<li><p><strong>Hairpin</strong> (§7.7). The same resonator-array template, with U bottoms in place of vias:</p>
+<ul>
 <li>Each line ends either open or in a <code>bend</code> → line → <code>bend</code> chain to its neighbour at the same end. The template checks that:<ul>
 <li>each chain joins two neighbouring arms;</li>
 <li>its line equals the arms&#39; spacing;</li>
@@ -1402,7 +1441,17 @@ The as-built netlist renames each tee&#39;s side node and inserts the feed line 
 <li>Every hairpin is a separate conductor. The tapped ones carry the port nets, the others nets of their own (<code>h2</code>, …), so the part needs no net tie and no vias.</li>
 </ul>
 </li>
-<li><strong>Edge-coupled</strong> (§7.7). The coupled sections form a staircase. The halves of a resonator that differ in width are aligned on the edge facing no other line, so every coupling gap is kept and no open-end corner meets a neighbour. That step is drawn one-sided, while the <code>step</code> model is symmetric. Each port line gets a linear taper to the feed width and a feed to the connector.</li>
+<li><p><strong>Duplexer</strong> (§7.8). The two filters are laid out by the resonator-array template from their parts of the merged netlist:</p>
+<ul>
+<li>Their input feeds are dropped.</li>
+<li>A filter is mirrored top to bottom when that puts less of its copper between the two taps.</li>
+<li>The filters are placed so that their input taps meet the ends of the manifold branches.</li>
+<li>The manifold is drawn as two L-shaped branches with chamfered outer corners. The antenna feed goes to the left edge, and both output feeds run to the right edge.</li>
+</ul>
+<p>In the KiCad part the antenna, both outputs and GND form one net tie when the filters are DC shorts (comb-line, interdigital).</p>
+</li>
+<li><p><strong>Edge-coupled</strong> (§7.7). The coupled sections form a staircase. The halves of a resonator that differ in width are aligned on the edge facing no other line, so every coupling gap is kept and no open-end corner meets a neighbour. That step is drawn one-sided, while the <code>step</code> model is symmetric. Each port line gets a linear taper to the feed width and a feed to the connector.</p>
+</li>
 </ul>
 <p><strong>Checks.</strong> The layout is checked against the substrate&#39;s fabrication limits:</p>
 <ul>

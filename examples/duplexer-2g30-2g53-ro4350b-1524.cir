@@ -1,0 +1,134 @@
+.title Duplexer 2.3 / 2.53 GHz (interdigital, n = 5) on jlc-ro4350b-1.524
+# filters: interdigital, n = 5, chebyshev 0.1 dB; band A 2.3 GHz 4 %, band B 2.53 GHz 4 %, on jlc-ro4350b-1.524
+# manifold: 50 Ω lines (3.291 mm); branch A 15.23 mm, branch B 10.87 mm from the junction (each with one mitred bend), chosen to open each filter in the other band
+# band A (2.2545–2.3465 GHz): isolation A↔B ≥ 49.6 dB over the ripple band; antenna return loss ≥ 15.7 dB and insertion loss antenna → A 2.82 dB at the centre, ≤ 3.96 dB, over the central 80 %; leakage antenna → B ≥ 46.6 dB down; filter B alone rejects this band by ≥ 39 dB
+# band B (2.4799–2.5811 GHz): isolation A↔B ≥ 72.1 dB over the ripple band; antenna return loss ≥ 15.5 dB and insertion loss antenna → B 2.58 dB at the centre, ≤ 3.56 dB, over the central 80 %; leakage antenna → A ≥ 69.3 dB down; filter A alone rejects this band by ≥ 62.8 dB
+# not modelled: coupling between the two filters and between the manifold and the filters through the layout (see #16); the filters are as their own synthesis left them
+.freq 2070000000 2783000000 1201
+.ref 2412260350
+.substrate jlc-ro4350b-1.524
+.layout duplexer
+.param va = 8.651866mm tune 6.0563mm 12.247mm   # junction to the bend, branch A
+.param vb = 4.282649mm tune 2.9979mm 6.5674mm   # junction to the bend, branch B
+.param h = 6.582456mm   # bend to each filter's tap junction
+.param wm = 3.291228mm   # manifold width (50 ohm)
+.param th0_A = 80.2569819
+.param tt_A = 9.408
+.param wf_A = 3.28963mm
+.param hw_A = 7.84035498
+.param w1_A = 5.7423mm
+.param w2_A = 5.77453mm
+.param w3_A = 5.51432mm
+.param s12_A = 4.71089mm
+.param s23_A = 7.21481mm
+.param ext1_A = 0.539576mm
+.param th0_B = 78.6725459
+.param tt_B = 10.39
+.param wf_B = 3.28963mm
+.param hw_B = 8.65434597
+.param w1_B = 5.5704mm
+.param w2_B = 6.73237mm
+.param w3_B = 6.52225mm
+.param s12_B = 4.23317mm
+.param s23_B = 6.78763mm
+.param ext1_B = 0.762035mm
+port ant 50
+port t5_A 50
+port t5_B 50
+# manifold: antenna on the side arm; branch X runs up/down to a bend, then across to filter X
+tee TJM ma mb ant Wa=wm Wb=wm W2=wm
+TMa_v ma mav W=wm len=va
+bend BMa mav mah W=wm mitre=opt
+TMa_h mah ta_in W=wm len=h
+TMb_v mb mbv W=wm len=vb
+bend BMb mbv mbh W=wm mitre=opt
+TMb_h mbh tb_in W=wm len=h
+# filter A
+cline S1_A
+  geom msl
+  W [w1_A w2_A w3_A w2_A w1_A]
+  S [s12_A s23_A s23_A s12_A]
+  len (tt_A-hw_A)*1deg
+  A g1_A r2_A g3_A r4_A g5_A
+  B ta1_A x2_1_A x3_1_A x4_1_A ta5_A
+  f0 2300000000
+end
+cline S2_A
+  geom msl
+  W [w1_A w2_A w3_A w2_A w1_A]
+  S [s12_A s23_A s23_A s12_A]
+  len (2*hw_A)*1deg
+  A - x2_1_A x3_1_A x4_1_A -
+  B - x2_2_A x3_2_A x4_2_A -
+  f0 2300000000
+end
+cline S3_A
+  geom msl
+  W [w1_A w2_A w3_A w2_A w1_A]
+  S [s12_A s23_A s23_A s12_A]
+  len (th0_A-tt_A-hw_A)*1deg
+  A tb1_A x2_2_A x3_2_A x4_2_A tb5_A
+  B r1_A g2_A r3_A g4_A r5_A
+  f0 2300000000
+end
+tee TJ1_A ta1_A tb1_A ta_in Wa=w1_A Wb=w1_A W2=wf_A
+tee TJ5_A ta5_A tb5_A t5_A Wa=w1_A Wb=w1_A W2=wf_A
+via V1_A g1_A d=0.3mm n=2
+via V2_A g2_A d=0.3mm n=2
+via V3_A g3_A d=0.3mm n=2
+via V4_A g4_A d=0.3mm n=2
+via V5_A g5_A d=0.3mm n=2
+T1_ext_A r1_A - W=w1_A len=ext1_A f0=2300000000
+Coe1_A r1_A 0 0.120141p
+Coe2_A r2_A 0 0.120059p
+Coe3_A r3_A 0 0.120118p
+Coe4_A r4_A 0 0.120059p
+T5_ext_A r5_A - W=w1_A len=ext1_A f0=2300000000
+Coe5_A r5_A 0 0.120141p
+# filter B
+cline S1_B
+  geom msl
+  W [w1_B w2_B w3_B w2_B w1_B]
+  S [s12_B s23_B s23_B s12_B]
+  len (tt_B-hw_B)*1deg
+  A g1_B r2_B g3_B r4_B g5_B
+  B ta1_B x2_1_B x3_1_B x4_1_B ta5_B
+  f0 2530000000
+end
+cline S2_B
+  geom msl
+  W [w1_B w2_B w3_B w2_B w1_B]
+  S [s12_B s23_B s23_B s12_B]
+  len (2*hw_B)*1deg
+  A - x2_1_B x3_1_B x4_1_B -
+  B - x2_2_B x3_2_B x4_2_B -
+  f0 2530000000
+end
+cline S3_B
+  geom msl
+  W [w1_B w2_B w3_B w2_B w1_B]
+  S [s12_B s23_B s23_B s12_B]
+  len (th0_B-tt_B-hw_B)*1deg
+  A tb1_B x2_2_B x3_2_B x4_2_B tb5_B
+  B r1_B g2_B r3_B g4_B r5_B
+  f0 2530000000
+end
+tee TJ1_B ta1_B tb1_B tb_in Wa=w1_B Wb=w1_B W2=wf_B
+tee TJ5_B ta5_B tb5_B t5_B Wa=w1_B Wb=w1_B W2=wf_B
+via V1_B g1_B d=0.3mm n=2
+via V2_B g2_B d=0.3mm n=2
+via V3_B g3_B d=0.3mm n=2
+via V4_B g4_B d=0.3mm n=2
+via V5_B g5_B d=0.3mm n=2
+T1_ext_B r1_B - W=w1_B len=ext1_B f0=2530000000
+Coe1_B r1_B 0 0.120141p
+Coe2_B r2_B 0 0.120059p
+Coe3_B r3_B 0 0.120118p
+Coe4_B r4_B 0 0.120059p
+T5_ext_B r5_B - W=w1_B len=ext1_B f0=2530000000
+Coe5_B r5_B 0 0.120141p
+.goal db(S11) < -15.43 2263660000 2337260000   # antenna match, band A (central 80 %, 1 dB below the filter's)
+.goal db(S32) < -40 2254460000 2346460000   # isolation between the filter ports, band A
+.goal db(S11) < -15.43 2490025900 2570985900   # antenna match, band B (central 80 %, 1 dB below the filter's)
+.goal db(S32) < -40 2479905900 2581105900   # isolation between the filter ports, band B
+.plot ylim=-80,0 db(S11) db(S21) db(S31) db(S32)
