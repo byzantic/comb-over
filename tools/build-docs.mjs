@@ -28,6 +28,7 @@ const EXAMPLES = [
   ['08-coupler-to-board', 'From a coupler netlist to a KiCad board'],
   ['09-combline-to-gerbers', 'Comb-line: spec to Gerbers'],
   ['10-hairpin-and-edge-coupled', 'Hairpin and edge-coupled'],
+  ['11-duplexer', 'Duplexer: spec to Gerbers'],
 ];
 const PAGES = [
   { src: 'docs/manual.md', out: 'docs/manual.html', title: 'Manual', kind: 'manual' },

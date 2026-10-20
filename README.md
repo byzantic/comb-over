@@ -19,7 +19,8 @@ The documentation is published as web pages next to the designer: `docs/manual.h
   7. a three-line section from field-solver C/L matrices;
   8. from a coupler netlist to a KiCad board;
   9. a comb-line filter from specification to Gerbers;
-  10. hairpin and edge-coupled filters from one specification.
+  10. hairpin and edge-coupled filters from one specification;
+  11. a duplexer from specification to Gerbers.
 
 ## Run it
 
