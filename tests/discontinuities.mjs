@@ -1,6 +1,6 @@
 // Discontinuity models (issue #5).  Run: node tests/discontinuities.mjs
 import { readFileSync } from 'node:fs';
-import { openEnd, viaL } from '../js/discontinuities.js';
+import { openEnd, viaL, bendLC, stepLC, tlcY } from '../js/discontinuities.js';
 import { parseNetlist } from '../js/netlist.js';
 import { solve } from '../js/solver.js';
 import { buildLayout } from '../js/layout-templates.js';
@@ -69,6 +69,36 @@ const ex = (f) => readFileSync(new URL(`../examples/${f}`, import.meta.url), 'ut
   const r0 = solve(parseNetlist(c.netlist)), r1 = solve(big), k5 = r0.freq.findIndex(f => f >= 5e9);
   const db = (r, i, j) => { const s = r.S(i, j); return 20 * Math.log10(Math.hypot(s.re[k5], s.im[k5])); };
   check('placeholder defaults are negligible; larger values change the match', Math.abs(db(r0, 1, 1) - db(r1, 1, 1)) > 3, `${db(r0, 1, 1)} vs ${db(r1, 1, 1)}`);
+}
+
+// ---- bends and width steps (#37) ----
+{
+  const h = 1.524e-3, er = 3.66, W = 3.3e-3, u = W / h;
+  const b = bendLC({ W, h, er }), m = bendLC({ W, h, er, mitre: 'opt' });
+  check('square bend: KJK C/W and L/h evaluated by hand', Math.abs(b.C - W * ((10.35 * er + 2.5) * u + 2.6 * er + 5.64) * 1e-12) < 1e-20 && Math.abs(b.L1 + b.L2 - 220e-9 * h * (1 - 1.35 * Math.exp(-0.18 * u ** 1.39))) < 1e-20 && b.L1 === b.L2);
+  check('mitred bend: Douville–James C/W, L/h and optimum mitre by hand', Math.abs(m.C - W * ((3.93 * er + 0.62) * u + 7.6 * er + 3.8) * 1e-12) < 1e-20 && Math.abs(m.L1 + m.L2 - 440e-9 * h * (1 - 1.062 * Math.exp(-0.177 * u ** 0.947))) < 1e-20 && Math.abs(m.mitre - (0.52 + 0.65 * Math.exp(-1.35 * u))) < 1e-12);
+  const st = stepLC({ W1: W, W2: W / 3, h, er, f: 2e9 }), r = 3, lg = Math.log10(er);
+  check('step: Gupta C and L by hand; L split towards the higher-impedance side', Math.abs(st.C - Math.sqrt(W * W / 3) * ((10.1 * lg + 2.33) * r - 12.6 * lg - 3.17) * 1e-12) < 1e-20 && Math.abs(st.L1 + st.L2 - h * (40.5 * (r - 1) - 75 * Math.log10(r) + 0.2 * (r - 1) ** 2) * 1e-9) < 1e-20 && st.L2 > st.L1);
+  const sr = stepLC({ W1: W / 3, W2: W, h, er, f: 2e9 });
+  check('step: reversing W1/W2 swaps L1 and L2', Math.abs(sr.L1 - st.L2) < 1e-24 && Math.abs(sr.L2 - st.L1) < 1e-24 && sr.C === st.C);
+  check('step: near-equal widths fall outside the fit and warn; C clamped at 0', stepLC({ W1: 1.1e-3, W2: 1e-3, h, er }).C === 0 && stepLC({ W1: 1.1e-3, W2: 1e-3, h, er }).warnings.some(w => /1.5–3.5/.test(w)));
+  check('bend outside W/h 0.2–6 or εr range warns', bendLC({ W: 0.1e-3, h, er }).warnings.some(w => /0\.2–6/.test(w)) && bendLC({ W, h, er: 12 }).warnings.length === 1);
+  const y = tlcY(1e-10, 1e-13, 2e-10, 3e9);
+  let asym = 0; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) asym = Math.max(asym, Math.abs(y.im[i * 3 + j] - y.im[j * 3 + i]));
+  check('T-network stamp is symmetric and lossless (re = 0)', asym === 0 && y.re.every(v => v === 0));
+  const net = (el, f = '10M 10G 21') => solve(parseNetlist(`.freq ${f}\n.substrate jlc-ro4350b-1.524\nport a\nport b\n${el}\n`));
+  for (const el of ['bend B1 a b W=3.3mm', 'bend B1 a b W=3.3mm mitre=opt', 'step S1 a b W1=3.3mm W2=1.1mm']) {
+    const rr = net(el); let worst = 0;
+    for (let k = 0; k < rr.freq.length; k++) for (let j = 1; j <= 2; j++) { let p = 0; for (let i = 1; i <= 2; i++) { const x = rr.S(i, j); p += x.re[k] ** 2 + x.im[k] ** 2; } worst = Math.max(worst, Math.abs(p - 1)); }
+    const s11 = rr.S(1, 1);
+    check(`${el}: lossless, and transparent at 10 MHz (|S11| < 1e-3)`, worst < 1e-9 && Math.hypot(s11.re[0], s11.im[0]) < 1e-3, worst);
+  }
+  const sq = net('bend B1 a b W=3.3mm', '5G 5G 1'), mt = net('bend B1 a b W=3.3mm mitre=opt', '5G 5G 1');
+  check('the optimally mitred bend matches better than the square corner at 5 GHz', Math.hypot(mt.S(1, 1).re[0], mt.S(1, 1).im[0]) < Math.hypot(sq.S(1, 1).re[0], sq.S(1, 1).im[0]));
+  const bad = (t) => { try { parseNetlist(`.freq 1G 2G 3\n${t}`); return false; } catch (e) { return e.message; } };
+  check('bend/step syntax errors: substrate, nodes, widths, mitre value, equal step widths',
+    /needs a \.substrate/.test(bad('port a\nport b\nbend B a b W=1mm')) && /bend NAME A B/.test(bad('.substrate jlc-fr4-1.6\nport a\nbend B a W=1mm')) && /two nodes/.test(bad('.substrate jlc-fr4-1.6\nport a\nport b\nbend B a b c W=1mm')) && /W \(> 0\)/.test(bad('.substrate jlc-fr4-1.6\nport a\nport b\nbend B a b mitre=opt')) &&
+    /mitre=x/.test(bad('.substrate jlc-fr4-1.6\nport a\nport b\nbend B a b W=1mm mitre=x')) && /not a step/.test(bad('.substrate jlc-fr4-1.6\nport a\nport b\nstep S a b W1=1mm W2=1mm')));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
