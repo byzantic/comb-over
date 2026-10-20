@@ -733,6 +733,8 @@ Hovering a copper shape in the preview shows its net and width.
 .layout marchand S1 S2                    # two coupled sections, grounded secondaries
 .layout comb [cap=smd-0603]               # comb-line resonator array (from Realise in microstrip)
 .layout interdigital                      # interdigital resonator array
+.layout hairpin                           # hairpin filter: folded half-wave resonators (§7.7)
+.layout edgecoupled                       # edge-coupled (parallel-coupled) filter (§7.7)
 ```
 
 | option | default | meaning |
@@ -764,6 +766,14 @@ Hovering a copper shape in the preview shows its net and width.
   - **End extensions** (interdigital `ext1`) are drawn as line beyond the array.
   - **Board room.** The board extends the RF keepout plus a via row beyond the part (unless `margin=` and `feed=` are given), so the KiCad board gets a closed via fence (§8.3).
   The as-built netlist renames each tee's side node and inserts the feed line (stub + feed) and the connector; the core netlist has only the stubs. In the preview all copper is on net GND, since these filters are DC shorts.
+- **Hairpin** (§7.7). The same resonator-array template, with U bottoms in place of vias:
+  - Each line ends either open or in a `bend` → line → `bend` chain to its neighbour at the same end. The template checks that:
+    - each chain joins two neighbouring arms;
+    - its line equals the arms' spacing;
+    - consecutive hairpins are flipped.
+  - The U bottoms are drawn as mitred routes (§8.5), and the taps are as for comb-line.
+  - Every hairpin is a separate conductor. The tapped ones carry the port nets, the others nets of their own (`h2`, …), so the part needs no net tie and no vias.
+- **Edge-coupled** (§7.7). The coupled sections form a staircase. The halves of a resonator that differ in width are aligned on the edge facing no other line, so every coupling gap is kept and no open-end corner meets a neighbour. That step is drawn one-sided, while the `step` model is symmetric. Each port line gets a linear taper to the feed width and a feed to the connector.
 
 **Checks.** The layout is checked against the substrate's fabrication limits:
 

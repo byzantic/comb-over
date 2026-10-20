@@ -437,6 +437,7 @@ $('btn-opt').onclick = async () => {
         f0: num('f0'), fbw: num('fbw') / 100, theta0Deg: num('theta0Deg'), Zr: num('Zr'), er: num('er'), R0: num('R0'), refine: F.refine.checked,
       };
       msg.textContent = 'synthesising…'; msg.className = 'status';
+      if ((spec.structure === 'hairpin' || spec.structure === 'edgecoupled') && !F.phys.value) throw new Error(`${spec.structure === 'hairpin' ? 'Hairpin' : 'Edge-coupled'} filters are designed in microstrip only: choose a substrate under "Realise in microstrip"`);
       if (F.phys.value) {
         // geometry synthesis: off the main thread, with progress
         const via = { d: num('viad'), n: Math.max(1, Math.round(num('vian'))) };

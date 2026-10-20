@@ -45,6 +45,15 @@ jobs:
           node tools/synth.mjs examples/combline-5pole-2g-ro4350b-1524.json --substrate jlc-ro4350b-1.524 --cap smd-0603 --out /tmp/example9.cir
           cmp /tmp/example9.cir examples/combline-5pole-2g-ro4350b-1524.cir || { echo "::error title=example9::synthesis no longer reproduces examples/combline-5pole-2g-ro4350b-1524.cir"; diff /tmp/example9.cir examples/combline-5pole-2g-ro4350b-1524.cir | head -40; exit 1; }
           node tools/kicad.mjs /tmp/example9.cir --out kicad-out/example9-comb --board --date 2026-01-01
+          # worked example 10 (#38): hairpin and edge-coupled from one specification; both syntheses
+          # are rerun (the hairpin takes about 1.5 min) and must reproduce their committed netlists
+          for f in edgecoupled hairpin; do
+            node tools/synth.mjs examples/$f-5pole-2g4-ro4350b-1524.json --substrate jlc-ro4350b-1.524 --out /tmp/example10-$f.cir
+            cmp /tmp/example10-$f.cir examples/$f-5pole-2g4-ro4350b-1524.cir || { echo "::error title=example10::synthesis no longer reproduces examples/$f-5pole-2g4-ro4350b-1524.cir"; exit 1; }
+          done
+          for f in hairpin-5pole-2g4-ro4350b-1524 edgecoupled-5pole-2g4-ro4350b-1524; do
+            node tools/kicad.mjs examples/$f.cir --out kicad-out/$f --board --date 2026-01-01
+          done
           # loading-capacitor footprints (#14), library only
           node tools/kicad.mjs --caps jlc-ro4350b-0.508 --out kicad-out/caps-lib
           # deliberately broken 1: coupled-line gap 0.06 mm, below JLC's 0.1 mm. The gap is inside the

@@ -146,6 +146,7 @@ export function realiseEdgeCoupled(spec0, opts = {}) {
     `spurious passband near 2f0: peak S21 ${fmt(spur.peak, 3)} dB at ${fmt(spur.f / 1e9, 4)} GHz (${fmt(spur.f / f0, 4)} f0). In homogeneous TEM each section is λ/2 there and transmits nothing; microstrip's unequal even/odd velocities remove that zero`,
     'open ends: KJK Δl as capacitances; width steps of 1.5:1 or more as step elements (smaller ones are not modelled)',
   ];
+  st.layout = 'edgecoupled';
   return { netlist: text(), state: st, report: st.report, warnings, assess: a, log, spurious: spur, il, substrate: sub.id, W, S, lengths: lens };
 }
 

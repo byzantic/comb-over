@@ -2,13 +2,16 @@
 // Usage:
 //   node tools/synth.mjs SPEC.json|'{"structure":"comb",...}' --substrate ID [--cap ideal|smd-0603|smd-0402|smd-0805|trimmer]
 //                        [--out FILE.cir]
-// SPEC is the designer's specification (as js/synth.js design() takes it): structure comb|interdigital,
+// SPEC is the designer's specification (as js/synth.js design() takes it): structure comb|interdigital|
+// hairpin|edgecoupled (the last two need --substrate),
 // type chebyshev|butterworth, n, ripple (dB), f0 (Hz), fbw, theta0Deg (comb), Zr, er, R0. Without
 // --substrate, prints the homogeneous design's netlist. Prints the report and warnings to stderr;
 // exits 1 on warnings.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { design } from '../js/synth.js';
 import { realise } from '../js/synth-geom.js';
+import { realiseHairpin } from '../js/synth-hairpin.js';
+import { realiseEdgeCoupled } from '../js/synth-ec.js';
 
 const [, , specArg, ...rest] = process.argv;
 const usage = 'usage: node tools/synth.mjs SPEC.json|JSON --substrate ID [--cap ideal|smd-PKG|trimmer] [--out FILE.cir]';
@@ -20,11 +23,15 @@ for (let i = 0; i < rest.length; i += 2) {
 }
 const spec = JSON.parse(existsSync(specArg) ? readFileSync(specArg, 'utf8') : specArg);
 const t0 = Date.now();
-const r = design(spec);
+const micro = spec.structure === 'hairpin' || spec.structure === 'edgecoupled';
+if (micro && !opt.substrate) { console.error(`${spec.structure} needs --substrate`); process.exit(2); }
+const r = micro ? { netlist: '', warnings: [] } : design(spec);
 let netlist = r.netlist, report = [], warnings = r.warnings ?? [];
 if (opt.substrate) {
   const [type, pkg] = (opt.cap ?? 'ideal').split('-');
-  const g = realise(r, { substrate: opt.substrate, cap: { type, pkg } });
+  const g = spec.structure === 'hairpin' ? realiseHairpin(spec, { substrate: opt.substrate })
+    : spec.structure === 'edgecoupled' ? realiseEdgeCoupled(spec, { substrate: opt.substrate })
+      : realise(r, { substrate: opt.substrate, cap: { type, pkg } });
   netlist = g.netlist; report = g.report; warnings = g.warnings;
 }
 if (opt.out) writeFileSync(opt.out, netlist); else process.stdout.write(netlist);
