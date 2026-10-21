@@ -47,6 +47,17 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   check('lossless: PEC copper and no dielectric loss in openEMS; Q → ∞ on every comb-over line', /^LOSSLESS = True$/m.test(g.script) && /KAPPA = .*, 0$/m.test(g.script) && /^cline K .*\n  Q 1e30$/m.test(g.compare) && g.compare.split('\n').filter(l => /^T/.test(l)).every(l => / Q=1e30$/.test(l)));
   check('the excitation has no DC (a soft source with net charge leaves it trapped and the energy never decays)', /SetCustomExcite\('\(cos\(2\*pi\*.*\)-%.17g\)\*exp/.test(g.script) && /k = np\.exp\(-\(1\.5 \* f0 \/ fc\) \*\* 2\)/.test(g.script));
 }
+{
+  // the committed full-wave result (worked example 13) against comb-over's as-built model at the same planes
+  const { readTouchstone, onSweep } = await import('../js/touchstone.js');
+  const cmp = readFileSync(new URL('../examples/em/coupler-10dB-ro4350b-compare.cir', import.meta.url), 'utf8'), d = parseNetlist(cmp);
+  const ds = readTouchstone(readFileSync(new URL(`../examples/em/${d.data[0].file}`, import.meta.url), 'utf8'), { nPorts: 4, name: d.data[0].file });
+  const F = Float64Array.from({ length: 11 }, (_, k) => 1e9 + k * 0.5e9), r = solve(d, F), em = onSweep(ds, F);
+  const db = (x, k) => 20 * Math.log10(Math.hypot(x.re[k], x.im[k]));
+  const worst = Math.max(...Array.from(F, (_, k) => Math.abs(db(r.S(3, 1), k) - db(em.S(3, 1), k))));
+  check(`openEMS (committed result): comb-over's coupling within 0.3 dB of full wave over 1–6 GHz (worst ${worst.toFixed(2)} dB)`, worst < 0.3);
+  check('the comparison netlist is the export\'s, with the committed result\'s name', cmp.replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-10dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
+}
 check('a netlist without .layout is refused', throws(() => openemsExport(ex('combline-4pole.cir')), /needs a \.layout/));
 
 console.log(`\n${pass} passed, ${fail} failed`);

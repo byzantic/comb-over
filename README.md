@@ -21,7 +21,8 @@ The documentation is published as web pages next to the designer: `docs/manual.h
   9. a comb-line filter from specification to Gerbers;
   10. hairpin and edge-coupled filters from one specification;
   11. a duplexer from specification to Gerbers;
-  12. a compact Wilkinson and a branch-line hybrid.
+  12. a compact Wilkinson and a branch-line hybrid;
+  13. checking a coupler in openEMS (full wave).
 
 ## Run it
 
@@ -140,6 +141,8 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 - a cascade of two sections against one;
 - the Q loss model.
 
+Full wave: the 10 dB microstrip coupler agrees with openEMS to 0.2 dB in coupling from 1 to 6 GHz (worked example 13).
+
 ## Tools
 
 - `node tools/layout.mjs FILE.cir --svg out.svg`: build the `.layout` of a netlist (coupler, Schiffman, Marchand, comb-line or interdigital template), check it against the fab rules, and write the SVG preview or the as-built netlist.
@@ -148,6 +151,7 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 
 - `node tools/mscalc.mjs --sub ID --z0 50 [--f F]`: microstrip calculator. It gives the width for a target Z0, W and S for even/odd impedances (`--ze`/`--zo`), or analyses a geometry (`--w`, `--s`), including losses.
 
+- `node tools/openems.mjs FILE.cir --out DIR`: an openEMS (full-wave FDTD) model of the layout and a comparison netlist at the same reference planes; `--compare DIR` tabulates the two (manual §8.6, worked example 13).
 - `node tools/synth.mjs SPEC.json --substrate ID [--cap smd-0603] --out filter.cir`: filter synthesis headless, including the physical geometry in microstrip (manual §7.6).
 - `node tools/opt.mjs file.cir [iters] [rounds]`: run the optimiser headless and write the tuned values back to the file.
 - `node tools/summary.mjs file.cir 11 21`: print a text table of the response.
@@ -157,5 +161,4 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 - Synthesis:
   - Matthaei-style input/output-line coupling as an alternative to taps;
   - cross-coupled (transmission-zero) comb-line designs.
-- Full-wave (openEMS) check of the generated boards (#16).
 - Varactor tuning sweeps, Monte-Carlo tolerances.

@@ -1053,6 +1053,33 @@ The footprints are `RES_<pkg>` (series) and `RES_<pkg>_GND<n>V` (termination). `
 **Not checked yet** against EM simulation or measurement: the bend, step and resistor models (#16).
 ---
 
+### 8.6 openEMS export (full-wave check)
+
+`node tools/openems.mjs FILE.cir --out DIR` writes a self-contained [openEMS](https://openems.de) Python script for the netlist's `.layout`, and `compare.cir`, the as-built netlist at the same reference planes. Running the script (it needs openEMS's Python modules) writes the S-parameters next to it as a Touchstone file; `--run` runs it straight away (`OPENEMS_PYTHON` selects the interpreter). [Worked example 13](examples/13-openems-coupler.md) checks the 10 dB coupler this way.
+
+**The model:**
+- **Copper.** The layout's core, feeds and part pads at the top of the substrate, as zero-thickness conducting sheets (copper conductivity and thickness from the `.substrate`), or PEC with `--lossless`. Vias are PEC cylinders; `res` and `cap` parts are lumped R and C across their pads.
+- **Substrate.** εr from the `.substrate`; tan δ as a conductivity that matches it at the sweep centre (so dielectric loss is right only near there), or none with `--lossless`.
+- **Ports.** The layout is rebuilt with plain feeds to the board edge (connector=none). Each feed carries an openEMS microstrip port, terminated in the port impedance, with its measurement plane Lp = max(3 mm, 2W) in from the edge (at most the feed length less 0.5 mm). The feed must leave along x or y.
+- **Boundaries.** PEC under the substrate; PML (8 cells) on all other sides, at least 5h (and 3 mm) from the copper, except at the port ends, where the feeds run into the PML.
+- **Excitation.** openEMS's Gaussian pulse over the sweep, less its DC component.
+- **Mesh.** At each straight copper edge, one line fine/3 inside the metal and one 2·fine/3 outside (the "thirds rule"); along diagonal edges, lines every third of the narrowest strip; graded at ratio 1.4 to at most λ/20 in the substrate at the top frequency. In z: lines graded from the strip plane both ways, starting at `zfine` (default `fine`), at most h/nz in the substrate (nz default 4), and air to above 9h. Each port end has 12 uniform cells of Lp/20, so the feed point lies outside the PML.
+
+| option | default | |
+|---|---|---|
+| `--fmin`, `--fmax` | the netlist's `.freq` | band of the excitation and of the result (401 points) |
+| `--excite all\|N` | all | which ports to drive; one run per port. Undriven columns of the S-matrix are written as 0 |
+| `--fine MM` | a third of the narrowest strip or gap (at least 0.02 mm) | edge cell |
+| `--zfine MM`, `--nz N` | `fine`, 4 | z cell at the strip plane; the largest substrate cell is h/nz |
+| `--end X` | 1e-4 | stop when the field energy falls to X of its peak (−40 dB) |
+| `--lossless` | | PEC copper and no dielectric loss in openEMS, Q → ∞ in `compare.cir`. 1 − Σ\|S\|² is then radiation |
+
+**Comparing.** `node tools/openems.mjs --compare DIR` (or `--compare FILE.cir`) tabulates comb-over and openEMS side by side for the driven port: \|S\| in dB, the power not accounted for, and the difference in transmission phase. `--at F1,F2,…` picks the frequencies, `--port N` the driven port, and `--csv FILE` writes the whole sweep. `compare.cir` names the Touchstone file in a `.data em … overlay` line; open it in the designer and load the file with **Data…** to see both on one plot.
+
+**Accuracy.** For the coupler of example 13, halving the edge cell moves the coupling by 0.24 dB and the phase by less than 0.1°; isolation and match 30–40 dB down move by 1–2 dB. Port wave separation is good to about 1 % of power. Check convergence for your own structure with `--fine` and `--zfine`.
+
+**Not exported:** edge connectors (the feeds stop at the board edge), copper thickness in the field solution (the sheets are zero-thickness), solder mask, and parts other than chip R and C.
+
 ## 9. The model, its assumptions and limits
 
 ### 9.1 Section admittance matrix
@@ -1092,7 +1119,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 ### 9.3 Not modelled
 
 - Dispersion; the quasi-TEM ε<sub>eff</sub> is constant.
-- Higher-order modes and radiation.
+- Higher-order modes and radiation. An openEMS export (§8.6) checks these on the actual copper.
 - Open-end fringing, via inductance and connector launches, except where you add them: the `via` element, the layout templates (§4.7), or explicit lumped elements and short line sections. Tap and junction discontinuities and bond wires are not modelled.
 - Frequency-dependent conductor loss, apart from the constant-Q approximation.
 - Mutual coupling between sections that do not share a `cline` block.
@@ -1111,6 +1138,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
   - Matthaei g-value tables;
   - the engine against the analytic pair split;
   - realised centre, bandwidth and return loss of synthesised designs, before and after polishing.
+- **Full wave.** The 10 dB coupler on 0.508 mm RO4350B against openEMS ([worked example 13](examples/13-openems-coupler.md)): coupling within 0.2 dB from 1 to 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout's unmodelled corners; radiation below 1 %.
 
 ---
 
@@ -1127,6 +1155,8 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/synth.mjs SPEC.json\|JSON [--substrate ID] [--cap ideal\|smd-0603\|…\|trimmer] [--out FILE.cir]` | Filter synthesis headless: the dialog's design, and with `--substrate` its **Realise in microstrip** (§7.6). The report goes to stderr; exits with code 1 on warnings. |
 | `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |
 | `node tools/divider.mjs SPEC.json\|JSON [--substrate ID] [--coupled true\|false] [--gap MM] [--pitch MM] [--pkg 0603] [--out FILE.cir]` | Power dividers and hybrids (§7.9): the ideal design, or with `--substrate` the microstrip Wilkinson or branch-line with its layout line. |
+| `node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all\|N] [--fine MM] [--zfine MM] [--nz N] [--end X] [--lossless] [--run]` | openEMS model of the `.layout` and the comparison netlist (§8.6). `--compare DIR\|FILE.cir [--at F1,…] [--port N] [--csv FILE]` tabulates the result against comb-over. |
+| `python3 tools/oemsfig.py CMP.csv OUT.png [--title T]` | Figure of an openEMS comparison from `--compare --csv` (needs matplotlib). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
 

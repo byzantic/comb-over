@@ -6,23 +6,26 @@
 // DIR/compare.cir (the as-built netlist at the same reference planes, overlaying the result). --run
 // runs the script with python3 (openEMS's Python modules must be importable; set OPENEMS_PYTHON to use
 // another interpreter, e.g. openEMS's venv).
-//   node tools/openems.mjs --compare DIR [--at F1,F2,…] [--port N] [--csv FILE]   tabulate (and write) the result against comb-over
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+//   node tools/openems.mjs --compare DIR|FILE.cir [--at F1,F2,…] [--port N] [--csv FILE]   tabulate (and write) the result against comb-over
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { openemsExport } from '../js/openems.js';
 
-// --compare DIR [--at F1,F2,…] [--port N]: the openEMS result in DIR against comb-over's comparison netlist
+// --compare DIR|FILE.cir [--at F1,F2,…] [--port N]: the openEMS result in DIR against comb-over's comparison netlist
 if (process.argv[2] === '--compare') {
   const { readdirSync } = await import('node:fs');
   const { parseNetlist } = await import('../js/netlist.js');
   const { solve } = await import('../js/solver.js');
   const { readTouchstone, onSweep } = await import('../js/touchstone.js');
   const dir = process.argv[3], args = process.argv.slice(4), get = (k) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : null; };
-  const cmp = readFileSync(join(dir, 'compare.cir'), 'utf8'), d = parseNetlist(cmp), P = d.ports.length;
-  const tsName = readdirSync(dir).find(f => new RegExp(`\\.s${P}p$`, 'i').test(f));
-  if (!tsName) { console.error(`no .s${P}p in ${dir} (run the script first)`); process.exit(2); }
-  const ds = readTouchstone(readFileSync(join(dir, tsName), 'utf8'), { nPorts: P, name: tsName });
+  // DIR (holding compare.cir and the script's result) or a comparison netlist, whose .data line names the result
+  const { dirname } = await import('node:path');
+  const isCir = /\.cir$/i.test(dir), cirPath = isCir ? dir : join(dir, 'compare.cir'), base = dirname(cirPath);
+  const cmp = readFileSync(cirPath, 'utf8'), d = parseNetlist(cmp), P = d.ports.length;
+  const tsName = d.data?.[0]?.file && existsSync(join(base, d.data[0].file)) ? d.data[0].file : readdirSync(base).find(f => new RegExp(`\\.s${P}p$`, 'i').test(f));
+  if (!tsName) { console.error(`no .s${P}p next to ${cirPath} (run the script first)`); process.exit(2); }
+  const ds = readTouchstone(readFileSync(join(base, tsName), 'utf8'), { nPorts: P, name: tsName });
   const F = Float64Array.from((get('at') ?? '').split(',').filter(Boolean).map(Number).length ? get('at').split(',').map(Number) : Array.from({ length: 9 }, (_, k) => d.freq.start + (d.freq.stop - d.freq.start) * k / 8));
   const r = solve(d, F), em = onSweep(ds, F), j = Number(get('port') ?? 1);
   const db = (x, k) => 20 * Math.log10(Math.hypot(x.re[k], x.im[k]));

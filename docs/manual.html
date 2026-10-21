@@ -24,7 +24,7 @@
 <ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16">Not checked yet against EM simulation or measurement: the bend, step and resistor models (#16).</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
 <a class="" href="substrates.html">Substrate presets</a>
 <a class="" href="examples/index.html">Worked examples</a>
-<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="examples/11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="" href="examples/12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li></ol></nav></aside>
+<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="examples/11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="" href="examples/12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li><li><a class="" href="examples/13-openems-coupler.html">Checking a coupler in openEMS</a></li></ol></nav></aside>
   <main class="doc">
     <h1>comb-over manual</h1>
 <p>comb-over analyses linear networks built from <strong>uniform coupled multiconductor TEM / quasi-TEM line sections</strong>, single lines and lumped R/L/C. It also synthesises tapped comb-line and interdigital band-pass filters. Everything runs in the browser, and the same engine runs under Node for scripting and tests.</p>
@@ -1708,6 +1708,59 @@ The as-built netlist renames each tee&#39;s side node and inserts the feed line 
 <p>The ESL and body capacitance are typical values, not from a particular part; set <code>esl=</code> and <code>cp=</code> from your resistor&#39;s datasheet. A termination&#39;s pad 2 goes to ground through a land with <code>n</code> vias, as the loading capacitors&#39; does.</p>
 <p>The footprints are <code>RES_&lt;pkg&gt;</code> (series) and <code>RES_&lt;pkg&gt;_GND&lt;n&gt;V</code> (termination). <code>node tools/kicad.mjs --caps SUBSTRATE --out DIR</code> writes them with the capacitor footprints, and CI checks them in KiCad.</p>
 <h2 id="not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16"><a class="anchor" href="#not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16" aria-hidden="true">#</a><strong>Not checked yet</strong> against EM simulation or measurement: the bend, step and resistor models (#16).</h2>
+<h3 id="86-openems-export-full-wave-check"><a class="anchor" href="#86-openems-export-full-wave-check" aria-hidden="true">#</a>8.6 openEMS export (full-wave check)</h3>
+<p><code>node tools/openems.mjs FILE.cir --out DIR</code> writes a self-contained <a href="https://openems.de">openEMS</a> Python script for the netlist&#39;s <code>.layout</code>, and <code>compare.cir</code>, the as-built netlist at the same reference planes. Running the script (it needs openEMS&#39;s Python modules) writes the S-parameters next to it as a Touchstone file; <code>--run</code> runs it straight away (<code>OPENEMS_PYTHON</code> selects the interpreter). <a href="examples/13-openems-coupler.html">Worked example 13</a> checks the 10 dB coupler this way.</p>
+<p><strong>The model:</strong></p>
+<ul>
+<li><strong>Copper.</strong> The layout&#39;s core, feeds and part pads at the top of the substrate, as zero-thickness conducting sheets (copper conductivity and thickness from the <code>.substrate</code>), or PEC with <code>--lossless</code>. Vias are PEC cylinders; <code>res</code> and <code>cap</code> parts are lumped R and C across their pads.</li>
+<li><strong>Substrate.</strong> εr from the <code>.substrate</code>; tan δ as a conductivity that matches it at the sweep centre (so dielectric loss is right only near there), or none with <code>--lossless</code>.</li>
+<li><strong>Ports.</strong> The layout is rebuilt with plain feeds to the board edge (connector=none). Each feed carries an openEMS microstrip port, terminated in the port impedance, with its measurement plane Lp = max(3 mm, 2W) in from the edge (at most the feed length less 0.5 mm). The feed must leave along x or y.</li>
+<li><strong>Boundaries.</strong> PEC under the substrate; PML (8 cells) on all other sides, at least 5h (and 3 mm) from the copper, except at the port ends, where the feeds run into the PML.</li>
+<li><strong>Excitation.</strong> openEMS&#39;s Gaussian pulse over the sweep, less its DC component.</li>
+<li><strong>Mesh.</strong> At each straight copper edge, one line fine/3 inside the metal and one 2·fine/3 outside (the &quot;thirds rule&quot;); along diagonal edges, lines every third of the narrowest strip; graded at ratio 1.4 to at most λ/20 in the substrate at the top frequency. In z: lines graded from the strip plane both ways, starting at <code>zfine</code> (default <code>fine</code>), at most h/nz in the substrate (nz default 4), and air to above 9h. Each port end has 12 uniform cells of Lp/20, so the feed point lies outside the PML.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>option</th>
+<th>default</th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--fmin</code>, <code>--fmax</code></td>
+<td>the netlist&#39;s <code>.freq</code></td>
+<td>band of the excitation and of the result (401 points)</td>
+</tr>
+<tr>
+<td><code>--excite all|N</code></td>
+<td>all</td>
+<td>which ports to drive; one run per port. Undriven columns of the S-matrix are written as 0</td>
+</tr>
+<tr>
+<td><code>--fine MM</code></td>
+<td>a third of the narrowest strip or gap (at least 0.02 mm)</td>
+<td>edge cell</td>
+</tr>
+<tr>
+<td><code>--zfine MM</code>, <code>--nz N</code></td>
+<td><code>fine</code>, 4</td>
+<td>z cell at the strip plane; the largest substrate cell is h/nz</td>
+</tr>
+<tr>
+<td><code>--end X</code></td>
+<td>1e-4</td>
+<td>stop when the field energy falls to X of its peak (−40 dB)</td>
+</tr>
+<tr>
+<td><code>--lossless</code></td>
+<td></td>
+<td>PEC copper and no dielectric loss in openEMS, Q → ∞ in <code>compare.cir</code>. 1 − Σ|S|² is then radiation</td>
+</tr>
+</tbody></table></div>
+<p><strong>Comparing.</strong> <code>node tools/openems.mjs --compare DIR</code> (or <code>--compare FILE.cir</code>) tabulates comb-over and openEMS side by side for the driven port: |S| in dB, the power not accounted for, and the difference in transmission phase. <code>--at F1,F2,…</code> picks the frequencies, <code>--port N</code> the driven port, and <code>--csv FILE</code> writes the whole sweep. <code>compare.cir</code> names the Touchstone file in a <code>.data em … overlay</code> line; open it in the designer and load the file with <strong>Data…</strong> to see both on one plot.</p>
+<p><strong>Accuracy.</strong> For the coupler of example 13, halving the edge cell moves the coupling by 0.24 dB and the phase by less than 0.1°; isolation and match 30–40 dB down move by 1–2 dB. Port wave separation is good to about 1 % of power. Check convergence for your own structure with <code>--fine</code> and <code>--zfine</code>.</p>
+<p><strong>Not exported:</strong> edge connectors (the feeds stop at the board edge), copper thickness in the field solution (the sheets are zero-thickness), solder mask, and parts other than chip R and C.</p>
 <h2 id="9-the-model-its-assumptions-and-limits"><a class="anchor" href="#9-the-model-its-assumptions-and-limits" aria-hidden="true">#</a>9. The model, its assumptions and limits</h2>
 <h3 id="91-section-admittance-matrix"><a class="anchor" href="#91-section-admittance-matrix" aria-hidden="true">#</a>9.1 Section admittance matrix</h3>
 <p>For per-unit-length Maxwell C and inductance L:</p>
@@ -1750,7 +1803,7 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <h3 id="93-not-modelled"><a class="anchor" href="#93-not-modelled" aria-hidden="true">#</a>9.3 Not modelled</h3>
 <ul>
 <li>Dispersion; the quasi-TEM ε<sub>eff</sub> is constant.</li>
-<li>Higher-order modes and radiation.</li>
+<li>Higher-order modes and radiation. An openEMS export (§8.6) checks these on the actual copper.</li>
 <li>Open-end fringing, via inductance and connector launches, except where you add them: the <code>via</code> element, the layout templates (§4.7), or explicit lumped elements and short line sections. Tap and junction discontinuities and bond wires are not modelled.</li>
 <li>Frequency-dependent conductor loss, apart from the constant-Q approximation.</li>
 <li>Mutual coupling between sections that do not share a <code>cline</code> block.</li>
@@ -1773,6 +1826,7 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <li>realised centre, bandwidth and return loss of synthesised designs, before and after polishing.</li>
 </ul>
 </li>
+<li><strong>Full wave.</strong> The 10 dB coupler on 0.508 mm RO4350B against openEMS (<a href="examples/13-openems-coupler.html">worked example 13</a>): coupling within 0.2 dB from 1 to 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout&#39;s unmodelled corners; radiation below 1 %.</li>
 </ul>
 <hr>
 <h2 id="10-command-line-tools"><a class="anchor" href="#10-command-line-tools" aria-hidden="true">#</a>10. Command-line tools</h2>
@@ -1818,6 +1872,14 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>node tools/divider.mjs SPEC.json|JSON [--substrate ID] [--coupled true|false] [--gap MM] [--pitch MM] [--pkg 0603] [--out FILE.cir]</code></td>
 <td>Power dividers and hybrids (§7.9): the ideal design, or with <code>--substrate</code> the microstrip Wilkinson or branch-line with its layout line.</td>
+</tr>
+<tr>
+<td><code>node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all|N] [--fine MM] [--zfine MM] [--nz N] [--end X] [--lossless] [--run]</code></td>
+<td>openEMS model of the <code>.layout</code> and the comparison netlist (§8.6). <code>--compare DIR|FILE.cir [--at F1,…] [--port N] [--csv FILE]</code> tabulates the result against comb-over.</td>
+</tr>
+<tr>
+<td><code>python3 tools/oemsfig.py CMP.csv OUT.png [--title T]</code></td>
+<td>Figure of an openEMS comparison from <code>--compare --csv</code> (needs matplotlib).</td>
 </tr>
 <tr>
 <td><code>npm run docs</code></td>
