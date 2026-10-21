@@ -6,7 +6,7 @@
 // DIR/compare.cir (the as-built netlist at the same reference planes, overlaying the result). --run
 // runs the script with python3 (openEMS's Python modules must be importable; set OPENEMS_PYTHON to use
 // another interpreter, e.g. openEMS's venv).
-//   node tools/openems.mjs --compare DIR [--at F1,F2,…] [--port N]   tabulate the result against comb-over
+//   node tools/openems.mjs --compare DIR [--at F1,F2,…] [--port N] [--csv FILE]   tabulate (and write) the result against comb-over
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -33,6 +33,15 @@ if (process.argv[2] === '--compare') {
   for (let k = 0; k < F.length; k++) {
     const cells = d.ports.map((_, i) => { const a = r.S(i + 1, j), b = em.S(i + 1, j); return `${db(a, k).toFixed(2)} | ${db(b, k).toFixed(2)}`; });
     console.log([(F[k] / 1e9).toFixed(3), ...cells, `${lost(r.S, k).toFixed(1)} | ${lost(em.S, k).toFixed(1)}`, `${(((ph(em.S, k) - ph(r.S, k)) % 360 + 540) % 360 - 180).toFixed(1)}°`].map(x => String(x).padEnd(22)).join(''));
+  }
+  // --csv FILE: the whole sweep (the comparison netlist's .freq), |S| in dB and ∠ in degrees, both sides
+  if (get('csv')) {
+    const N = d.freq.n, FF = Float64Array.from({ length: N }, (_, k) => d.freq.start + (d.freq.stop - d.freq.start) * k / (N - 1));
+    const R = solve(d, FF), E = onSweep(ds, FF), cols = d.ports.map((_, i) => `S${i + 1}${j}`);
+    const rows = [['f_GHz', ...cols.flatMap(c => [`co_${c}_dB`, `co_${c}_deg`, `em_${c}_dB`, `em_${c}_deg`])].join(',')];
+    for (let k = 0; k < N; k++) rows.push([(FF[k] / 1e9).toFixed(6), ...d.ports.flatMap((_, i) => [R.S(i + 1, j), E.S(i + 1, j)].flatMap(x => [db(x, k).toFixed(4), (Math.atan2(x.im[k], x.re[k]) * 180 / Math.PI).toFixed(3)]))].join(','));
+    writeFileSync(get('csv'), rows.join('\n') + '\n');
+    console.log(`wrote ${get('csv')} (${N} points)`);
   }
   process.exit(0);
 }
