@@ -853,7 +853,8 @@ function wilkinsonT(d, _, o) {
   if (res.length !== n) throw new Error(`.layout wilkinson: needs one resistor per section (R1…R${n})`);
   const wfPar = d.params.find(x => x.name === 'wf'), wf = wfPar.value * 1e3;
   const sub = d.substrate, fenceRoom = Math.max(3 * sub.dielectric.h * 1e3, 1) + 2, given = d.layout.opts ?? {};
-  const feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom), stub = 1;
+  // the input stub must outlast the feed track's round end cap (radius wf/2), or the cap reaches the arms
+  const feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom), stub = Math.max(1, wf / 2 + 0.3);
   const pitch = o.pitch ?? 12;
   const xs = [0]; Ls.forEach(l => xs.push(xs.at(-1) + l));
   const items = [], notes = [], dims = [], parts = [];

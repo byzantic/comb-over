@@ -54,6 +54,8 @@ const ll = (t) => t.replace(/^(cline K\d+ geom=msl .*)$/mg, '$1\n  Q 1e30').repl
   check(`ignoring the arm coupling costs input match (${u.assess.rl[0].toFixed(2)} → ${asCoupled.rl[0].toFixed(2)} dB) and isolation (${u.assess.iso.toFixed(2)} → ${asCoupled.iso.toFixed(2)} dB)`, asCoupled.rl[0] < u.assess.rl[0] - 5 && asCoupled.iso < u.assess.iso - 2);
   const L = buildLayout(parseNetlist(text));
   check('layout: DRC clean, no warnings; one 0603 resistor part across the gap; in/o1/o2 tied', L.errors.length === 0 && L.warnings.length === 0 && L.parts.length === 1 && L.parts[0].kind === 'res' && L.core.ties[0].length === 3, JSON.stringify(L.errors));
+  const inPad = L.core.pads.find(pd => pd.node === 'in').polys[0], wfIn = L.items.find(i => i.role === 'feed' && i.node === 'in').width;
+  check('the input stub outlasts the feed track\'s round end cap (KiCad would short it to the arms)', Math.max(...inPad.map(q => q[0])) - Math.min(...inPad.map(q => q[0])) > wfIn / 2 + 0.1);
   const b = assessDivider(ll(L.netlist), lo, hi, 3);
   check('as built ≈ design: return loss and isolation within 0.2 dB', Math.abs(b.rl[0] - a.rl[0]) < 0.2 && Math.abs(b.iso - a.iso) < 0.2, JSON.stringify([a, b]));
   const pcb = boardProject(L, { source: text, date: '2026-01-01' });
