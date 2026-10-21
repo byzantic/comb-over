@@ -28,10 +28,11 @@ if (process.argv[2] === '--compare') {
   const db = (x, k) => 20 * Math.log10(Math.hypot(x.re[k], x.im[k]));
   const lost = (S, k) => 100 * (1 - d.ports.reduce((acc, _, i) => { const s = S(i + 1, j); return acc + s.re[k] ** 2 + s.im[k] ** 2; }, 0));
   console.log(`excitation port ${j} (${d.ports[j - 1].node}); comb-over | openEMS: |S| in dB; power lost (absorbed or radiated) in %`);
-  console.log(['f (GHz)', ...d.ports.map((p, i) => `S${i + 1}${j}`), 'lost %'].map(x => x.padEnd(22)).join(''));
+  const tr = j === 1 ? 2 : 1, ph = (S, k) => { const s = S(tr, j); return Math.atan2(s.im[k], s.re[k]) * 180 / Math.PI; };
+  console.log(['f (GHz)', ...d.ports.map((p, i) => `S${i + 1}${j}`), 'lost %', `∠S${tr}${j} EM − c-o`].map(x => x.padEnd(22)).join(''));
   for (let k = 0; k < F.length; k++) {
     const cells = d.ports.map((_, i) => { const a = r.S(i + 1, j), b = em.S(i + 1, j); return `${db(a, k).toFixed(2)} | ${db(b, k).toFixed(2)}`; });
-    console.log([(F[k] / 1e9).toFixed(3), ...cells, `${lost(r.S, k).toFixed(1)} | ${lost(em.S, k).toFixed(1)}`].map(x => String(x).padEnd(22)).join(''));
+    console.log([(F[k] / 1e9).toFixed(3), ...cells, `${lost(r.S, k).toFixed(1)} | ${lost(em.S, k).toFixed(1)}`, `${(((ph(em.S, k) - ph(r.S, k)) % 360 + 540) % 360 - 180).toFixed(1)}°`].map(x => String(x).padEnd(22)).join(''));
   }
   process.exit(0);
 }

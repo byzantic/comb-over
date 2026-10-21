@@ -79,7 +79,10 @@ export function openemsExport(text, opts = {}) {
     if (len < Lp + 0.5) throw new Error(`openEMS export: the feed at ${p.node} is ${r6(len)} mm, too short for a ${Lp} mm port (give the layout a longer feed=)`);
     const along = Math.abs(ux) > 0 ? 'x' : 'y', end = [e[0] + ux * Lp, e[1] + uy * Lp];
     const start = along === 'x' ? [e[0], e[1] - w / 2, h] : [e[0] - w / 2, e[1], h], stop = along === 'x' ? [end[0], e[1] + w / 2, 0] : [e[0] + w / 2, end[1], 0];
-    return { n: k + 1, node: p.node, z: p.z, along, start, stop, Lp, w };
+    // a uniform run of 12 cells (Lp/20) from the edge: the 8-cell PML, then the feed (resistor and source) on
+    // the 10th line, outside the absorber (openEMS drops a lumped port resistor inside a PML)
+    const dp = Lp / 20, lines = Array.from({ length: 13 }, (_, i) => (along === 'x' ? e[0] + ux * i * dp : e[1] + uy * i * dp));
+    return { n: k + 1, node: p.node, z: p.z, along, start, stop, Lp, w, feed: 10 * dp, lines };
   });
   // lumped parts: R / C between the two pads
   const lumped = [];
@@ -117,7 +120,7 @@ export function openemsExport(text, opts = {}) {
     }
   }
   for (const v of vias) fixX.push(v.x - v.r, v.x + v.r), fixY.push(v.y - v.r, v.y + v.r);
-  for (const p of ports) { fixX.push(p.start[0], p.stop[0]); fixY.push(p.start[1], p.stop[1]); }
+  for (const p of ports) { fixX.push(p.start[0], p.stop[0]); fixY.push(p.start[1], p.stop[1]); (p.along === 'x' ? fixX : fixY).push(...p.lines); }
   for (const l of lumped) { fixX.push(l.start[0], l.stop[0]); fixY.push(l.start[1], l.stop[1]); }
   // open sides: PML (8 cells) beyond a margin of 5h (≥ 3 mm), so the absorber stays clear of the fields
   const margin = Math.max(5 * h, 3) + 8 * maxStep;
@@ -128,7 +131,17 @@ export function openemsExport(text, opts = {}) {
   const Y0 = portY.length && Math.min(...portY) <= by[0] + 1e-9 ? by[0] : by[0] - margin, Y1 = portY.length && Math.max(...portY) >= by[1] - 1e-9 ? by[1] : by[1] + margin;
   fixX.push(X0, X1); fixY.push(Y0, Y1);
   const clip = (a, lo, hi) => a.filter(x => x >= lo - 1e-9 && x <= hi + 1e-9);
-  const X = clip(smooth(fixX, maxStep, 1.4, fine / 2), X0, X1), Y = clip(smooth(fixY, maxStep, 1.4, fine / 2), Y0, Y1);
+  // (fixed lines beyond the domain — the outer straddle of a feed's end at a port — would displace its edge)
+  // inside a port's uniform run only its own lines (no straddle slivers in the PML or at the feed)
+  for (const p of ports) {
+    const F = p.along === 'x' ? fixX : fixY, lo = Math.min(...p.lines), hi = Math.max(...p.lines);
+    const keep = F.filter(x => x < lo - 1e-9 || x > hi + 1e-9 || p.lines.some(l => Math.abs(l - x) < 1e-9));
+    F.length = 0; F.push(...keep);
+  }
+  const ends = (a, lo, hi) => {   // the domain edges exactly (a merge may have kept a line within fine/2 instead)
+    a = a.filter(x => x > lo + fine / 2 && x < hi - fine / 2); return [lo, ...a, hi].map(r6);
+  };
+  const X = ends(smooth(clip(fixX, X0, X1), maxStep, 1.4, fine / 2), X0, X1), Y = ends(smooth(clip(fixY, Y0, Y1), maxStep, 1.4, fine / 2), Y0, Y1);
   // z: graded from the strip plane (z = h) both ways, starting at `zfine` (the strip-edge field is singular
   // there; uniform h/4 cells over-state a tight gap's coupling by ~1.5 dB), at most h/nz in the substrate
   const nz = opts.nz ?? 4, zf = Math.min(opts.zfine ?? fine, h / nz), below = [h];
@@ -164,7 +177,7 @@ Y = ${J(Y)}
 Z = ${J(Z.map(r6))}
 POLYS = ${J(polys.map(P => P.map(q => q.map(r6))))}
 VIAS = ${J(vias.map(v => [r6(v.x), r6(v.y), r6(v.r)]))}
-PORTS = ${J(ports.map(p => ({ n: p.n, node: p.node, z: p.z, dir: p.along, start: p.start.map(r6), stop: p.stop.map(r6), Lp: p.Lp })))}
+PORTS = ${J(ports.map(p => ({ n: p.n, node: p.node, z: p.z, dir: p.along, start: p.start.map(r6), stop: p.stop.map(r6), Lp: p.Lp, feed: r6(p.feed) })))}
 LUMPED = ${J(lumped.map(l => ({ ...l, start: l.start.map(r6), stop: l.stop.map(r6) })))}
 BOX = ${J([X0, Y0, X1, Y1].map(r6))}
 H, T, SIGMA, ER, KAPPA = ${h}, ${t}, ${sigma}, ${er}, ${kappa}
@@ -199,7 +212,7 @@ def model(exc):
     ports = []
     for p in PORTS:
         ports.append(fdtd.AddMSLPort(p['n'], pec, p['start'], p['stop'], p['dir'], 'z', excite=(1 if p['n'] == exc else 0),
-                                     FeedShift=min(10 * FINE, p['Lp'] / 3), MeasPlaneShift=p['Lp'], Feed_R=p['z'], priority=20))
+                                     FeedShift=p['feed'], MeasPlaneShift=p['Lp'], Feed_R=p['z'], priority=20))
     return fdtd, ports
 
 def run():
