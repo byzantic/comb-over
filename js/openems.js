@@ -15,7 +15,8 @@
 //
 // Mesh (mm): fixed lines on every copper edge (two lines straddling it, `fine` apart) and vertex, then
 // graded at ratio 1.4 to at most λ/20 in the substrate at the highest frequency; z: `nz` cells through the
-// substrate, graded into air up to 8h above it.
+// substrate, graded into air up to 8h above it. Boundaries: PEC ground below, PML (8 cells) on every
+// other side — at the ports' ends the feeds run into it.
 import { parseNetlist } from './netlist.js';
 import { buildLayout } from './layout-templates.js';
 
@@ -26,7 +27,7 @@ const r6 = (x) => +x.toFixed(6);
 function smooth(fixed, maxStep, ratio = 1.4, minStep = 0) {
   const L = [...new Set(fixed.map(r6))].sort((a, b) => a - b);
   const merged = [];
-  for (const x of L) if (!merged.length || x - merged.at(-1) > minStep * 0.5) merged.push(x);
+  for (const x of L) if (!merged.length || x - merged.at(-1) > minStep) merged.push(x);
   const out = [merged[0]];
   for (let i = 1; i < merged.length; i++) {
     const a = merged[i - 1], b = merged[i], gap = b - a;
@@ -118,7 +119,8 @@ export function openemsExport(text, opts = {}) {
   for (const v of vias) fixX.push(v.x - v.r, v.x + v.r), fixY.push(v.y - v.r, v.y + v.r);
   for (const p of ports) { fixX.push(p.start[0], p.stop[0]); fixY.push(p.start[1], p.stop[1]); }
   for (const l of lumped) { fixX.push(l.start[0], l.stop[0]); fixY.push(l.start[1], l.stop[1]); }
-  const margin = Math.max(5 * h, 3);
+  // open sides: PML (8 cells) beyond a margin of 5h (≥ 3 mm), so the absorber stays clear of the fields
+  const margin = Math.max(5 * h, 3) + 8 * maxStep;
   const bx = [Math.min(...xs), Math.max(...xs)], by = [Math.min(...ys), Math.max(...ys)];
   // the domain ends at the feeds' outer ends along their axis (the ports' PML), with a margin elsewhere
   const portX = ports.filter(p => p.along === 'x').map(p => p.start[0]), portY = ports.filter(p => p.along === 'y').map(p => p.start[1]);
@@ -129,13 +131,13 @@ export function openemsExport(text, opts = {}) {
   const X = clip(smooth(fixX, maxStep, 1.4, fine / 2), X0, X1), Y = clip(smooth(fixY, maxStep, 1.4, fine / 2), Y0, Y1);
   const nz = opts.nz ?? 4, Z = [];
   for (let i = 0; i <= nz; i++) Z.push(h * i / nz);
-  for (let z = h, dz = h / nz; z < 9 * h;) { dz = Math.min(dz * 1.3, maxStep); z += dz; Z.push(z); }
+  for (let z = h, dz = h / nz; z < 9 * h + 8 * maxStep;) { dz = Math.min(dz * 1.3, maxStep); z += dz; Z.push(z); }
   const cells = (X.length - 1) * (Y.length - 1) * (Z.length - 1);
   const bc = ['x', 'y'].flatMap(ax => [0, 1].map(side => {
     const P = ports.filter(p => p.along === ax), at = ax === 'x' ? [X0, X1][side] : [Y0, Y1][side];
-    return P.some(p => Math.abs((ax === 'x' ? p.start[0] : p.start[1]) - at) < 1e-6) ? 'PML_8' : 'MUR';
+    return 'PML_8';
   }));
-  bc.push('PEC', 'MUR');
+  bc.push('PEC', 'PML_8');
   const nPort = ports.length, exc = opts.excite && opts.excite !== 'all' ? [Number(opts.excite)] : ports.map(p => p.n);
   const name = (L.title || 'layout').replace(/[^\w.-]+/g, '_').slice(0, 60);
   const J = (x) => JSON.stringify(x);

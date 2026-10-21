@@ -21,8 +21,8 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   check('coupler: ports from the ground (z = 0) to the strip (z = h), across the feed width', P.every(p => p.start[2] === 0 && p.stop[2] === 0.508 && Math.abs(Math.abs(p.stop[1] - p.start[1]) - 1.073) < 1e-3));
   check('mesh: monotonic; a line on both sides of each coupled-strip edge (the 0.1025 mm gap resolved)', [X, Y, Z].every(a => a.every((v, i) => i === 0 || v > a[i - 1])) && Y.filter(y => y > -0.06 && y < 0.06).length >= 2);
   check('mesh: steps at most λ/20 in the substrate at fmax', [X, Y].every(a => a.every((v, i) => i === 0 || v - a[i - 1] <= g.info.maxStep + 1e-6)));
-  check('mesh: four cells through the substrate, then graded air', Z.filter(z => z <= 0.508 + 1e-9).length === 5 && Z.at(-1) > 8 * 0.508 * 0.9);
-  check('boundaries: PML at the port ends (x), MUR at the sides and top, PEC ground', JSON.stringify(g.info.bc) === JSON.stringify(['PML_8', 'PML_8', 'MUR', 'MUR', 'PEC', 'MUR']));
+  check('mesh: four cells through the substrate, then graded air', Z.filter(z => z <= 0.508 + 1e-9).length === 5 && Z.at(-1) > 9 * 0.508);
+  check('boundaries: PML on every open side, PEC ground', JSON.stringify(g.info.bc) === JSON.stringify(['PML_8', 'PML_8', 'PML_8', 'PML_8', 'PEC', 'PML_8']));
   check('the script compiles (python3 -m py_compile)', (() => { const dir = mkdtempSync(join(tmpdir(), 'oems-')), f = join(dir, 'm.py'); writeFileSync(f, g.script); const r = spawnSync('python3', ['-m', 'py_compile', f]); return r.status === 0; })());
   // the comparison netlist: the as-built feeds shortened by Lp — same as the core netlist with feeds of the remaining length
   const d = parseNetlist(g.compare);
