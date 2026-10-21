@@ -9,6 +9,9 @@
 // Feed lines are 50 Ω (the port impedance) microstrip on the substrate; where a feed leaves a coupled
 // line it first runs diagonally (45°) at the coupled-line width until it is clear of its neighbour.
 
+import { wilkinsonRoute } from './dividers-ms.js';
+import { resGeometry, RES_PACKAGES } from './resistors.js';
+import { routeOrtho } from './routing.js';
 import { rect, pathPolygon, pathLength, bbox, drc, cutPath, unit } from './layout.js';
 import { synthMsline, fromSubstrate } from './microstrip.js';
 import { toDirective } from './substrates.js';
@@ -833,11 +836,148 @@ function duplexer(d, _, o) {
   return { outline, items, dims, netlist: transform(true), core, notes, parts, fence: true };
 }
 
+// ---------------------------------------------------------------- compact Wilkinson (#39)
+// Arms side by side at a constant gap s (their inner edges at ±s/2), section by section, with a chip
+// resistor standing across the gap at each section end (its pads on both arms); after the last one each
+// output turns away to the port pitch through two optimally mitred bends (js/routing.js). The input line
+// meets both arms at x = 0. The whole conductor is one piece of copper: the part ties in, o1 and o2.
+function wilkinsonT(d, _, o) {
+  const K = d.sections.filter(sc => /^K\d+$/.test(sc.name)), Ta = d.sections.filter(sc => /^T\d+a$/.test(sc.name));
+  const coupled = K.length > 0, n = coupled ? K.length : Ta.length;
+  if (!n) throw new Error('.layout wilkinson: needs the arm sections K1… (coupled) or T1a/T1b… (independent) of a synthesised Wilkinson');
+  const W = [], Ls = [];
+  for (let k = 1; k <= n; k++) { const sc = coupled ? K[k - 1] : d.sections.find(x => x.name === `T${k}a`); W.push(mm(sc.geom.W)); Ls.push(mm(sc.len)); }
+  const sPar = d.params.find(x => x.name === 's'), s = coupled ? mm(K[0].geom.S) : sPar ? sPar.value * 1e3 : NaN;
+  if (!(s > 0)) throw new Error('.layout wilkinson: the arm gap (.param s) is missing');
+  const res = (d.resistors ?? []).filter(r => /^R\d+$/.test(r.name));
+  if (res.length !== n) throw new Error(`.layout wilkinson: needs one resistor per section (R1…R${n})`);
+  const wfPar = d.params.find(x => x.name === 'wf'), wf = wfPar.value * 1e3;
+  const sub = d.substrate, fenceRoom = Math.max(3 * sub.dielectric.h * 1e3, 1) + 2, given = d.layout.opts ?? {};
+  const feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom), stub = 1;
+  const pitch = o.pitch ?? 12;
+  const xs = [0]; Ls.forEach(l => xs.push(xs.at(-1) + l));
+  const items = [], notes = [], dims = [], parts = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
+  const NET = 'sig';
+  const arm = (k, sgn) => rect(xs[k], sgn < 0 ? -s / 2 - W[k] : s / 2, xs[k + 1], sgn < 0 ? -s / 2 : s / 2 + W[k]);
+  const polys = { o1: [], o2: [] };
+  for (let k = 0; k < n; k++) for (const [port, sgn] of [['o1', -1], ['o2', 1]]) { const pl = arm(k, sgn); polys[port].push(pl); items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: pl, width: W[k], label: `arm ${port} section ${k + 1}`, role: 'core' }); }
+  // resistors at the section ends: separate parts, standing across the gap
+  res.forEach((r, k) => {
+    const P = RES_PACKAGES[r.pkg ?? '0603'];
+    if (!P) throw new Error(`.layout wilkinson: ${r.name}: unknown package ${r.pkg}`);
+    const over = P.pads.x + P.pads.l / 2 - s / 2;
+    if (over < 0.3) throw new Error(`.layout wilkinson: ${r.name}: its ${r.pkg} pads reach only ${r4(over)} mm onto the arms across a ${r4(s)} mm gap`);
+    const g = resGeometry({ pkg: r.pkg ?? '0603' }), at = [xs[k + 1], 0], T = ([u, v]) => [at[0] - v, at[1] + u];     // local +x → +y
+    g.hot.concat(g.cold).forEach((pl, q) => items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: pl.map(T), width: P.pads.w, label: `${r.name} pad ${q + 1}`, role: 'part' }));
+    items.push({ type: 'courtyard', name: r.name, pts: g.crt.map(T) });
+    parts.push({ kind: 'res', name: r.name, pkg: r.pkg ?? '0603', at, dir: [0, 1], node: 'o1', node2: 'o2', R: r.R, bbox: g.crt.map(T) });
+  });
+  // outputs: route to the pitch, then the feed to the right edge
+  const xe = xs[n];
+  const routes = {};
+  for (const [port, sgn] of [['o1', -1], ['o2', 1]]) {
+    const path = wilkinsonRoute(xe, s, pitch, wf, sgn);
+    const rt = routeOrtho(path, { W: wf, mitre: 'opt', sub });
+    items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: rt.poly, width: wf, label: `route ${port}`, role: 'core' });
+    polys[port].push(rt.poly); routes[port] = path.at(-1);
+  }
+  if (pitch / 2 - s / 2 - wf / 2 < wf) throw new Error(`.layout wilkinson: pitch ${pitch} mm leaves no room for the output bends`);
+  // input stub (part of the core) and feeds
+  const inPoly = rect(-stub, -wf / 2, 0, wf / 2);
+  items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: inPoly, width: wf, label: 'input', role: 'core' });
+  const xL = -stub - feedLen, xR = routes.o1[0] + feedLen;
+  const feed = (node, x0, x1, y, dir) => {
+    items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: rect(Math.min(x0, x1), y - wf / 2, Math.max(x0, x1), y + wf / 2), width: wf, label: `feed ${node}`, role: 'feed', node, path: [[x1, y], [x0, y]] });
+    items.push({ type: 'port', name: node, net: NET, x: x1, y, dir, width: wf, z0: portOf(d, node).z });
+    core.refs.push(refOf(d, node, [x0, y], dir, wf, wf));
+  };
+  feed('in', -stub, xL, 0, [-1, 0]); feed('o1', routes.o1[0], xR, routes.o1[1], [1, 0]); feed('o2', routes.o2[0], xR, routes.o2[1], [1, 0]);
+  core.pads.push({ num: portNum(d, 'in'), node: 'in', polys: [inPoly], at: [-stub + 0.05, 0] });
+  core.pads.push({ num: portNum(d, 'o1'), node: 'o1', polys: polys.o1, at: [routes.o1[0] - 0.05, routes.o1[1]] });
+  core.pads.push({ num: portNum(d, 'o2'), node: 'o2', polys: polys.o2, at: [routes.o2[0] - 0.05, routes.o2[1]] });
+  core.ties.push(['in', 'o1', 'o2'].map(x => portNum(d, x)));
+  const allPts = items.filter(i => i.pts).flatMap(i => i.pts);
+  const outline = rect(xL, Math.min(...allPts.map(q => q[1])) - margin, xR, Math.max(...allPts.map(q => q[1])) + margin);
+  items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
+  dims.push({ a: [0, -s / 2 - Math.max(...W) - 1.2], b: [xe, -s / 2 - Math.max(...W) - 1.2], text: `arms ${Ls.map(r4).join(' + ')} mm, W ${W.map(r4).join('/')} mm, gap ${r4(s)} mm` });
+  // netlists: feeds at the three ports (as built); the input stub only (core)
+  const transform = (asBuilt) => {
+    const lines = d.text.split(/\r?\n/).filter(l => !/^\s*\.layout\b/i.test(l));
+    for (const node of ['in', 'o1', 'o2']) {
+      const len = node === 'in' ? stub + (asBuilt ? feedLen : 0) : (asBuilt ? feedLen : 0);
+      if (!(len > 0)) continue;
+      // rename the port node where the circuit uses it (section A lines, element nodes), then the feed
+      for (let i = 0; i < lines.length; i++) {
+        if (/^\s*(port|\.)/i.test(lines[i])) continue;
+        if (/^\s*A\s/.test(lines[i]) || /^\s*(T|bend|step|wire)/i.test(lines[i])) lines[i] = lines[i].replace(new RegExp(`(\\s)${node}(?=\\s|$)`, 'g'), `$1${node}_k`);
+      }
+      const at = lines.findIndex(l => /^\s*port\s/i.test(l)) + 3;
+      lines.splice(at, 0, `T${node}_f ${node} ${node}_k W=${r4(wf)}mm len=${r4(len)}mm`);
+    }
+    const ti = lines.findIndex(l => /^\s*\.title\b/i.test(l));
+    if (ti >= 0) lines[ti] = lines[ti].replace(/^\s*\.title\s+/i, asBuilt ? '.title as built: ' : '.title core (between the part reference planes): ');
+    return lines.join('\n') + '\n';
+  };
+  core.netlist = transform(false);
+  notes.push(`${n} section${n > 1 ? 's' : ''}; arms ${coupled ? 'modelled as coupled pairs' : 'modelled as independent lines (their coupling across the gap is NOT in the model)'}; ${n} ${res[0].pkg ?? '0603'} resistor${n > 1 ? 's' : ''} across the gap`, 'the input line meets both arms at x = 0: that junction is not modelled');
+  return { outline, items, dims, netlist: transform(true), core, notes, parts, fence: true };
+}
+
+// ---------------------------------------------------------------- branch-line hybrid (#39)
+// A rectangle: series arms (top, bottom) and shunt arms (left, right) between Hammerstad tees at the
+// corners; each port leaves its corner horizontally. One conductor: four pads (a corner each, with
+// half of each arm) in one net tie.
+function branchlineT(d, _, o) {
+  const sec = (name) => { const x = d.sections.find(sc => sc.name === name); if (!x) throw new Error(`.layout branchline: ${name} is missing`); return x; };
+  const tees = ['TJ1', 'TJ2', 'TJ3', 'TJ4'].map(nm => { const t = (d.blocks ?? []).find(b => b.name === nm); if (!t) throw new Error(`.layout branchline: tee ${nm} is missing`); return t; });
+  const wse = mm(sec('Tse1').geom.W), wsh = mm(sec('Tsh1').geom.W), lse = mm(sec('Tse1').len), lsh = mm(sec('Tsh1').len), wf = mm(tees[0].geo.Wa);
+  const Dx = lse + wsh, Dy = lsh + wse;
+  const sub = d.substrate, fenceRoom = Math.max(3 * sub.dielectric.h * 1e3, 1) + 2, given = d.layout.opts ?? {};
+  const feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom), stub = 1;
+  if (Dy < 11.2) throw new Error(`.layout branchline: the ports are ${r4(Dy)} mm apart, closer than the connectors' 11.16 mm courtyard`);
+  const items = [], notes = [], dims = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
+  const NET = 'sig';
+  const corners = [['p1', 0, 0, -1], ['p2', Dx, 0, 1], ['p3', Dx, Dy, 1], ['p4', 0, Dy, -1]];
+  for (const [port, cx, cy, dir] of corners) {
+    const sq = rect(cx - wsh / 2, cy - wse / 2, cx + wsh / 2, cy + wse / 2);
+    const se = cx === 0 ? rect(wsh / 2, cy - wse / 2, Dx / 2, cy + wse / 2) : rect(Dx / 2, cy - wse / 2, Dx - wsh / 2, cy + wse / 2);
+    const sh = cy === 0 ? rect(cx - wsh / 2, wse / 2, cx + wsh / 2, Dy / 2) : rect(cx - wsh / 2, Dy / 2, cx + wsh / 2, Dy - wse / 2);
+    const x0 = cx + dir * wsh / 2, x1 = x0 + dir * stub, st = rect(Math.min(x0, x1), cy - wf / 2, Math.max(x0, x1), cy + wf / 2);
+    for (const [pl, lab, w] of [[sq, 'corner', wse], [se, 'series arm', wse], [sh, 'shunt arm', wsh], [st, 'port stub', wf]]) items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: pl, width: w, label: `${lab} ${port}`, role: 'core' });
+    core.pads.push({ num: portNum(d, port), node: port, polys: [sq, se, sh, st], at: [x1 - dir * 0.05, cy] });
+    const xe = x1 + dir * feedLen;
+    items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: rect(Math.min(x1, xe), cy - wf / 2, Math.max(x1, xe), cy + wf / 2), width: wf, label: `feed ${port}`, role: 'feed', node: port, path: [[xe, cy], [x1, cy]] });
+    items.push({ type: 'port', name: port, net: NET, x: xe, y: cy, dir: [dir, 0], width: wf, z0: portOf(d, port).z });
+    core.refs.push(refOf(d, port, [x1, cy], [dir, 0], wf, wf));
+  }
+  core.ties.push(['p1', 'p2', 'p3', 'p4'].map(x => portNum(d, x)));
+  const xL = -wsh / 2 - stub - feedLen, xR = Dx + wsh / 2 + stub + feedLen;
+  const outline = rect(xL, -wse / 2 - margin, xR, Dy + wse / 2 + margin);
+  items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
+  dims.push({ a: [0, -wse / 2 - 1.2], b: [Dx, -wse / 2 - 1.2], text: `series W ${r4(wse)} mm, shunt W ${r4(wsh)} mm; ${r4(Dx)} × ${r4(Dy)} mm centre to centre` });
+  const transform = (asBuilt) => {
+    const lines = d.text.split(/\r?\n/).filter(l => !/^\s*\.layout\b/i.test(l));
+    for (const t of tees) {
+      const pn = t.nodes.find(nd => /^p\d$/.test(nd)), ti = lines.findIndex(l => new RegExp(`^\\s*tee\\s+${t.name}\\b`, 'i').test(l));
+      lines[ti] = lines[ti].replace(new RegExp(`(\\s)${pn}(\\s)`), `$1${pn}_k$2`);
+      lines.splice(ti + 1, 0, `T${pn}_f ${pn} ${pn}_k W=${r4(wf)}mm len=${r4(asBuilt ? stub + feedLen : stub)}mm`);
+    }
+    const ti = lines.findIndex(l => /^\s*\.title\b/i.test(l));
+    if (ti >= 0) lines[ti] = lines[ti].replace(/^\s*\.title\s+/i, asBuilt ? '.title as built: ' : '.title core (between the part reference planes): ');
+    return lines.join('\n') + '\n';
+  };
+  core.netlist = transform(false);
+  notes.push('Hammerstad tees at the corners (port line and series arm the main arms, shunt arm the side arm); each port leaves its corner with a 1 mm stub in the part');
+  return { outline, items, dims, netlist: transform(true), core, notes, fence: true };
+}
+
 const comb = (d, _, o) => resonatorArray(d, 'comb', o);
 const interdigital = (d, _, o) => resonatorArray(d, 'interdigital', o);
 const hairpin = (d, _, o) => resonatorArray(d, 'hairpin', o);
 
-const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital, hairpin, edgecoupled, duplexer };
+const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital, hairpin, edgecoupled, duplexer, wilkinson: wilkinsonT, branchline: branchlineT };
 export const templateNames = Object.keys(TEMPLATES);
 
 // Build the layout for a parsed netlist with a .layout statement. Returns the layout with DRC results.

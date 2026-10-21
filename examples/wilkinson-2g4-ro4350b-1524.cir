@@ -1,0 +1,37 @@
+.title Compact Wilkinson, 1 section, f0 = 2.4 GHz on jlc-ro4350b-1.524 (arms modelled as coupled pairs)
+# substrate jlc-ro4350b-1.524; arms as coupled pairs (Kirschning–Jansen) at a 1 mm gap; 0603 resistors bridging it
+# sections: W 2.781 mm, 19.52 mm, R 73.33 Ω; outputs at a 12 mm pitch through two mitred bends each
+# lossless, 2.16–2.64 GHz: return loss ≥ 20.4 dB (input), ≥ 24.4 dB (outputs); isolation ≥ 21 dB; split -3.05 … -3.011 dB
+# not modelled: the junction where the input line meets both arms; the resistor body over the gap (its pads, ESL and body capacitance are)
+.freq 1200000000 3600000000 401
+.ref 2400000000
+.substrate jlc-ro4350b-1.524
+.layout wilkinson pitch=12mm
+.param s = 1mm   # gap between the arms (the resistor bridges it)
+.param wf = 3.29115mm   # port lines (50 ohm)
+.param w1 = 2.781385mm tune 1.947mm 3.8939mm
+.param l1 = 19.51597mm tune 15.613mm 23.419mm
+.param r1 = 73.3333 tune 36.667 146.67
+port in 50
+port o1 50
+port o2 50
+cline K1 geom=msl W=w1 S=s
+  len l1
+  A in in
+  B a1 b1
+end
+res R1 a1 b1 R=r1 pkg=0603
+TOa_1 a1 Oa_1e W=3.29115mm len=4.936724mm
+bend Oa_B1 Oa_1e Oa_2s W=3.29115mm mitre=opt
+TOa_2 Oa_2s Oa_2e W=3.29115mm len=0.563276mm
+bend Oa_B2 Oa_2e Oa_3s W=3.29115mm mitre=opt
+TOa_3 Oa_3s o1 W=3.29115mm len=4.936724mm
+TOb_1 b1 Ob_1e W=3.29115mm len=4.936724mm
+bend Ob_B1 Ob_1e Ob_2s W=3.29115mm mitre=opt
+TOb_2 Ob_2s Ob_2e W=3.29115mm len=0.563276mm
+bend Ob_B2 Ob_2e Ob_3s W=3.29115mm mitre=opt
+TOb_3 Ob_3s o2 W=3.29115mm len=4.936724mm
+.goal db(S11) < -20 2160000000 2640000000
+.goal db(S22) < -20 2160000000 2640000000
+.goal db(S32) < -20 2160000000 2640000000
+.plot ylim=-50,0 db(S11) db(S21) db(S31) db(S22) db(S32)
