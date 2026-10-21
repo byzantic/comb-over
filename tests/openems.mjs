@@ -21,7 +21,8 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   check('coupler: ports from the strip (start, z = h; openEMS draws the port strip there) to the ground (stop, z = 0), across the feed width', P.every(p => p.start[2] === 0.508 && p.stop[2] === 0 && Math.abs(Math.abs(p.stop[1] - p.start[1]) - 1.073) < 1e-3));
   check('mesh: monotonic; a line on both sides of each coupled-strip edge (the 0.1025 mm gap resolved)', [X, Y, Z].every(a => a.every((v, i) => i === 0 || v > a[i - 1])) && Y.filter(y => y > -0.06 && y < 0.06).length >= 2);
   check('mesh: steps at most λ/20 in the substrate at fmax', [X, Y].every(a => a.every((v, i) => i === 0 || v - a[i - 1] <= g.info.maxStep + 1e-6)));
-  check('mesh: four cells through the substrate, then graded air', Z.filter(z => z <= 0.508 + 1e-9).length === 5 && Z.at(-1) > 9 * 0.508);
+  const dz = (i) => Z[i + 1] - Z[i], ih = Z.findIndex(z => Math.abs(z - 0.508) < 1e-9);
+  check('mesh z: a line on the strip plane, graded from `fine` either side, at most h/4 in the substrate, air to above 9 h', ih > 0 && Math.abs(dz(ih) - g.info.fine) < 1e-6 && Math.abs(dz(ih - 1) - g.info.fine) < 1e-6 && Z.slice(0, ih + 1).every((z, i) => i === 0 || z - Z[i - 1] <= 0.127 + 1e-6) && Z.at(-1) > 9 * 0.508);
   check('boundaries: PML on every open side, PEC ground', JSON.stringify(g.info.bc) === JSON.stringify(['PML_8', 'PML_8', 'PML_8', 'PML_8', 'PEC', 'PML_8']));
   check('ports terminated in their impedance (Feed_R), so the DC-isolated strips discharge and the energy decays', /Feed_R=p\['z'\]/.test(g.script) && P.every(p => p.z === 50));
   check('the script compiles (python3 -m py_compile)', (() => { const dir = mkdtempSync(join(tmpdir(), 'oems-')), f = join(dir, 'm.py'); writeFileSync(f, g.script); const r = spawnSync('python3', ['-m', 'py_compile', f]); return r.status === 0; })());
@@ -37,6 +38,11 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
 {
   const g = openemsExport(ex('combline-5pole-2g-ro4350b-1524.cir'));
   check('comb-line: grounding vias as cylinders (10 shorting + 10 under the capacitors), five lumped capacitors', val(g.script, 'VIAS').length === 20 && val(g.script, 'LUMPED').filter(l => l.C > 0).length === 5);
+}
+{
+  const g = openemsExport(ex('coupler-10dB-ro4350b.cir'), { lossless: true });
+  check('lossless: PEC copper and no dielectric loss in openEMS; Q → ∞ on every comb-over line', /^LOSSLESS = True$/m.test(g.script) && /KAPPA = .*, 0$/m.test(g.script) && /^cline K .*\n  Q 1e30$/m.test(g.compare) && g.compare.split('\n').filter(l => /^T/.test(l)).every(l => / Q=1e30$/.test(l)));
+  check('the excitation has no DC (a soft source with net charge leaves it trapped and the energy never decays)', /SetCustomExcite\('\(cos\(2\*pi\*.*\)-%.17g\)\*exp/.test(g.script) && /k = np\.exp\(-\(1\.5 \* f0 \/ fc\) \*\* 2\)/.test(g.script));
 }
 check('a netlist without .layout is refused', throws(() => openemsExport(ex('combline-4pole.cir')), /needs a \.layout/));
 

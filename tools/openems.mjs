@@ -1,7 +1,7 @@
 // openEMS export (issue #16): write the full-wave model of a netlist's .layout and the netlist to compare.
 // Usage:
-//   node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all|N] [--fine MM] [--nz N]
-//                          [--end 1e-4] [--run]
+//   node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all|N] [--fine MM] [--zfine MM] [--nz N]
+//                          [--end 1e-4] [--lossless] [--run]
 // Writes DIR/<name>.py (self-contained openEMS/CSXCAD Python script; it writes DIR/<name>.sNp) and
 // DIR/compare.cir (the as-built netlist at the same reference planes, overlaying the result). --run
 // runs the script with python3 (openEMS's Python modules must be importable; set OPENEMS_PYTHON to use
@@ -25,28 +25,30 @@ if (process.argv[2] === '--compare') {
   const ds = readTouchstone(readFileSync(join(dir, tsName), 'utf8'), { nPorts: P, name: tsName });
   const F = Float64Array.from((get('at') ?? '').split(',').filter(Boolean).map(Number).length ? get('at').split(',').map(Number) : Array.from({ length: 9 }, (_, k) => d.freq.start + (d.freq.stop - d.freq.start) * k / 8));
   const r = solve(d, F), em = onSweep(ds, F), j = Number(get('port') ?? 1);
-  const db = (x, k) => 20 * Math.log10(Math.hypot(x.re[k], x.im[k])), deg = (x, k) => Math.atan2(x.im[k], x.re[k]) * 180 / Math.PI;
-  console.log(`excitation port ${j} (${d.ports[j - 1].node}); comb-over | openEMS, dB (and phase of the transmission, °)`);
-  console.log(['f (GHz)', ...d.ports.map((p, i) => `S${i + 1}${j}`)].map(x => x.padEnd(24)).join(''));
+  const db = (x, k) => 20 * Math.log10(Math.hypot(x.re[k], x.im[k]));
+  const lost = (S, k) => 100 * (1 - d.ports.reduce((acc, _, i) => { const s = S(i + 1, j); return acc + s.re[k] ** 2 + s.im[k] ** 2; }, 0));
+  console.log(`excitation port ${j} (${d.ports[j - 1].node}); comb-over | openEMS: |S| in dB; power lost (absorbed or radiated) in %`);
+  console.log(['f (GHz)', ...d.ports.map((p, i) => `S${i + 1}${j}`), 'lost %'].map(x => x.padEnd(22)).join(''));
   for (let k = 0; k < F.length; k++) {
     const cells = d.ports.map((_, i) => { const a = r.S(i + 1, j), b = em.S(i + 1, j); return `${db(a, k).toFixed(2)} | ${db(b, k).toFixed(2)}`; });
-    console.log([(F[k] / 1e9).toFixed(3), ...cells].map(x => String(x).padEnd(24)).join(''));
+    console.log([(F[k] / 1e9).toFixed(3), ...cells, `${lost(r.S, k).toFixed(1)} | ${lost(em.S, k).toFixed(1)}`].map(x => String(x).padEnd(22)).join(''));
   }
   process.exit(0);
 }
 const [, , file, ...rest] = process.argv;
-const usage = 'usage: node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all|N] [--fine MM] [--nz N] [--end 1e-4] [--run]';
+const usage = 'usage: node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all|N] [--fine MM] [--zfine MM] [--nz N] [--end 1e-4] [--lossless] [--run]';
 if (!file) { console.error(usage); process.exit(2); }
 const opt = {};
 for (let i = 0; i < rest.length; i++) {
   const k = rest[i].replace(/^--/, '');
   if (k === 'run') { opt.run = true; continue; }
-  if (!['out', 'fmin', 'fmax', 'excite', 'fine', 'nz', 'end'].includes(k) || rest[i + 1] == null) { console.error(usage); process.exit(2); }
+  if (k === 'lossless') { opt.lossless = true; continue; }
+  if (!['out', 'fmin', 'fmax', 'excite', 'fine', 'zfine', 'nz', 'end'].includes(k) || rest[i + 1] == null) { console.error(usage); process.exit(2); }
   opt[k] = rest[++i];
 }
 if (!opt.out) { console.error(usage); process.exit(2); }
 const num = (x) => (x == null ? undefined : Number(x));
-const g = openemsExport(readFileSync(file, 'utf8'), { fmin: num(opt.fmin), fmax: num(opt.fmax), excite: opt.excite, fine: num(opt.fine), nz: num(opt.nz), endCriteria: num(opt.end) });
+const g = openemsExport(readFileSync(file, 'utf8'), { fmin: num(opt.fmin), fmax: num(opt.fmax), excite: opt.excite, fine: num(opt.fine), nz: num(opt.nz), zfine: num(opt.zfine), lossless: opt.lossless, endCriteria: num(opt.end) });
 mkdirSync(opt.out, { recursive: true });
 const py = join(opt.out, `${g.name}.py`);
 writeFileSync(py, g.script);
