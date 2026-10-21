@@ -443,7 +443,17 @@ export function boardProject(layout, opts = {}) {
   });
   // other parts of the layout (#15: loading capacitors on the resonator ends), with their nets
   const parts = layout.parts ?? [];
+  let nRes = 0;
   parts.forEach((p, k) => {
+    if (p.kind === 'res') {
+      // chip resistor between two nets of the part (#39: the Wilkinson's isolation resistors)
+      const lf = resFootprint({ pkg: p.pkg });
+      files[`${lib.lib}.pretty/${lf.name}.kicad_mod`] = lf.text;
+      const emb = resFootprint({ pkg: p.pkg, lib: lib.lib, embed: { at: p.at, rot: rotTo(p.dir) }, nets: { hot: nets[p.node], gnd: nets[p.node2] }, ref: `RI${++nRes}`, value: `${+p.R.toPrecision(3)}`, uuid });
+      L.push(emb.text.trim().split('\n').map(l => '\t' + l).join('\n'));
+      connBoxes.push(p.bbox); signal.push(p.bbox);
+      return;
+    }
     if (p.kind !== 'cap') return;
     const opt = { type: p.type, pkg: p.pkg, a: p.a, via: p.via };
     const lf = capFootprint(opt);
@@ -503,8 +513,9 @@ export function boardProject(layout, opts = {}) {
   files[`${name}-asbuilt.cir`] = layout.netlist;
   const dru = [];
   if (conn) dru.push(`(rule "Edge-launch connector pads meet the board edge"\n\t(constraint edge_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.memberOfFootprint('J*')"))`);
-  if (parts.length) dru.push(`(rule "Loading capacitors sit on the resonator ends of the RF part"\n\t(constraint courtyard_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.Reference == 'C*' || B.Reference == 'C*'"))`);
-  if (layout.fence) dru.push(`(rule "Shorting vias inside the resonators of the RF part (one conductor, net-tied)"\n\t(constraint hole_clearance (min 0mm))\n\t(condition "A.memberOfFootprint('RF*') && B.memberOfFootprint('RF*')"))`);
+  if (parts.some(p => p.kind === 'cap')) dru.push(`(rule "Loading capacitors sit on the resonator ends of the RF part"\n\t(constraint courtyard_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.Reference == 'C*' || B.Reference == 'C*'"))`);
+  if (parts.some(p => p.kind === 'res')) dru.push(`(rule "Isolation resistors sit across the arms of the RF part"\n\t(constraint courtyard_clearance (min 0mm))\n\t(severity ignore)\n\t(condition "A.Reference == 'RI*' || B.Reference == 'RI*'"))`);
+  if (layout.fence && core.vias.length) dru.push(`(rule "Shorting vias inside the resonators of the RF part (one conductor, net-tied)"\n\t(constraint hole_clearance (min 0mm))\n\t(condition "A.memberOfFootprint('RF*') && B.memberOfFootprint('RF*')"))`);
   if (dru.length) files[`${name}.kicad_dru`] = `(version 1)\n${dru.join('\n')}\n`;
   files['README.txt'] += [
     '',

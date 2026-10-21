@@ -1,0 +1,31 @@
+.title Branch-line hybrid, f0 = 2.4 GHz on jlc-ro4350b-1.524
+# substrate jlc-ro4350b-1.524; Hammerstad tees at the corners
+# series arms W 5.456 mm × 15.97 mm, shunt arms W 3.345 mm × 16.48 mm (between the tees' planes); port lines 3.291 mm
+# lossless, 2.28–2.52 GHz: return loss ≥ 20 dB; isolation ≥ 20.3 dB; through/coupled -3.29 … -2.907 dB; phase difference -90 … -89.61°
+.freq 1440000000 3360000000 401
+.ref 2400000000
+.substrate jlc-ro4350b-1.524
+.layout branchline
+.param wse = 5.456387mm tune 3.8195mm 7.6389mm   # series arms (R0/√2)
+.param wsh = 3.345022mm tune 2.3415mm 4.683mm   # shunt arms (R0)
+.param lse = 15.96534mm tune 13.571mm 18.36mm
+.param lsh = 16.4782mm tune 14.006mm 18.95mm
+.param wf = 3.29115mm   # port lines
+port p1 50   # input
+port p2 50   # through
+port p3 50   # coupled
+port p4 50   # isolated
+tee TJ1 p1 s1 v1 Wa=wf Wb=wse W2=wsh
+tee TJ2 s2 p2 v2 Wa=wse Wb=wf W2=wsh
+tee TJ3 s3 p3 v3 Wa=wse Wb=wf W2=wsh
+tee TJ4 p4 s4 v4 Wa=wf Wb=wse W2=wsh
+Tse1 s1 s2 W=wse len=lse
+Tse2 s4 s3 W=wse len=lse
+Tsh1 v1 v4 W=wsh len=lsh
+Tsh2 v2 v3 W=wsh len=lsh
+.goal db(S11) < -20 2280000000 2520000000
+.goal db(S41) < -20 2280000000 2520000000
+.goal db(S21) = -3.0103 2400000000 2400000000
+.goal db(S31) = -3.0103 2400000000 2400000000
+.plot ylim=-40,0 db(S11) db(S21) db(S31) db(S41)
+.plot ang(S31/S21)

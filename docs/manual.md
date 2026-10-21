@@ -748,6 +748,34 @@ When the isolation is short of the specification, the budget says whether the ot
 - coupling between the two filters, and between the manifold and the filters, through the layout. This is why the gap between them is generous. An EM check (#16) is the way to know.
 - the filters themselves are as their own synthesis left them: the polish moves only the manifold.
 
+### 7.9 Power dividers and hybrids
+
+`node tools/divider.mjs SPEC.json [--substrate ID]` designs dividers and hybrids. Without a substrate it gives an ideal TEM netlist of uniform lines; with one, a microstrip design with its layout (Wilkinson with equal split, branch-line). [Worked example 12](examples/12-wilkinson-and-branch-line.md) builds both at 2.4 GHz.
+
+| `type` | ideal design (`js/dividers.js`) |
+|---|---|
+| `wilkinson` | Equal split, `sections` 1–3. Each arm is a Chebyshev quarter-wave transformer from 2R₀ to R₀ for `fbw` (small-reflection theory). One resistor per section: 2R₀ for one section; for more, the optimiser's best result from several starting points, since the cost has local minima. Unequal split (`splitDb` = 10 log P₃/P₂, one section) follows Pozar §7.3: K² = P₃/P₂, Z₀₃ = R₀√((1+K²)/K³), Z₀₂ = K²Z₀₃, R = R₀(K + 1/K), with quarter-wave transformers from R₀K and R₀/K to R₀. |
+| `wilkinson-tree` | 2, 4, 8 or 16 ways: a tree of equal two-way stages. |
+| `branchline` | Series arms R₀/√2, shunt arms R₀, all 90°. Port 1 input, 2 through (−90°), 3 coupled (−180°), 4 isolated. |
+| `ratrace` | A 1.5 λ ring of R₀√2 with arms of 90/90/90/270°. Port 1 is Δ (2 and 4 out of phase), port 3 is Σ (2 and 4 in phase); 1 and 3 are isolated. |
+| `gysel` | From the even/odd analysis: Z₁ = √2R₀ and Z₂ = √(R·R₀), R = R₀ by default; Z₃ (the half-wave between the resistor nodes) sets only the bandwidth, R₀/√2 by default. In the even mode Z₃ is a half-wave shorted at both ends, a mode trapped exactly at f₀ that leaves the resistors unexcited. With ideal lossless lines it shows as a spike of zero width at f₀ (\|S₂₂\| = \|S₃₂\| = 0.5 within about 1e-7 of f₀); any line loss removes it. |
+
+**Compact Wilkinson in microstrip** (`js/dividers-ms.js`):
+- **Layout.** The two arms run side by side at a gap s (default 1 mm, at most what the resistor's pads can bridge). A chip resistor (`res`, §8.5) stands across the gap at each section end. After the last one each output turns away through two optimally mitred bends to the port pitch, at the port impedance.
+- **Arm model.** `--coupled true` (the default) models each section as a coupled pair (Kirschning–Jansen). The divided power travels in the even mode, so the pair's even-mode impedance is set to the arm impedance; the odd mode carries the isolation, with its own impedance and velocity. `--coupled false` models the arms as independent lines, the usual simplification, kept for comparison.
+- **Design.** It starts from the ideal design and polishes widths, lengths and resistors on the goals: return loss at all three ports and isolation over `fbw`.
+- **Not modelled.** The junction where the input line meets both arms, and the resistor body over the gap.
+
+**Branch-line in microstrip**:
+- **Layout.** A rectangle of series and shunt arms with a Hammerstad tee at each corner (§4.7). The port line and the series arm are the main arms, the shunt arm the side arm.
+- **Lengths.** Measured between the tees' reference planes.
+- **Design.** It starts from the closed form and polishes widths and lengths on return loss and isolation over `fbw` and an equal split at f₀.
+
+**Not here yet:**
+- layouts for rat-race, Gysel and the N-way tree;
+- multi-branch couplers;
+- unequal-split Wilkinsons in microstrip.
+
 ## 8. Export and sharing
 
 **Touchstone.** Exports the full S-matrix at all sweep points, with frequency in Hz, as RI (real/imaginary), MA (magnitude/angle°) or DB (dB/angle°).
@@ -798,6 +826,8 @@ Hovering a copper shape in the preview shows its net and width.
 .layout hairpin                           # hairpin filter: folded half-wave resonators (§7.7)
 .layout edgecoupled                       # edge-coupled (parallel-coupled) filter (§7.7)
 .layout duplexer                          # duplexer: two filters on a manifold (§7.8)
+.layout wilkinson [pitch=12mm]            # compact Wilkinson divider (§7.9)
+.layout branchline                        # branch-line hybrid (§7.9)
 ```
 
 | option | default | meaning |
@@ -843,6 +873,13 @@ Hovering a copper shape in the preview shows its net and width.
   - The manifold is drawn as two L-shaped branches with chamfered outer corners. The antenna feed goes to the left edge, and both output feeds run to the right edge.
 
   In the KiCad part the antenna, both outputs and GND form one net tie when the filters are DC shorts (comb-line, interdigital).
+- **Wilkinson** (§7.9). Draws the compact Wilkinson that `tools/divider.mjs` designs:
+  - The arm sections side by side at the gap s, with their inner edges kept at ±s/2.
+  - A chip resistor (a separate `RES_<pkg>` part, references RI1 …) standing across the gap at each section end. The template checks that its pads reach at least 0.3 mm onto both arms.
+  - The output routes through two mitred bends to `pitch`.
+
+  The conductor is one piece of copper, so `in`, `o1` and `o2` share a net tie.
+- **Branch-line** (§7.9). The rectangle of series and shunt arms with a corner square at each tee, and a 1 mm port stub per corner. The four pads form one net tie.
 - **Edge-coupled** (§7.7). The coupled sections form a staircase. The halves of a resonator that differ in width are aligned on the edge facing no other line, so every coupling gap is kept and no open-end corner meets a neighbour. That step is drawn one-sided, while the `step` model is symmetric. Each port line gets a linear taper to the feed width and a feed to the connector.
 
 **Checks.** The layout is checked against the substrate's fabrication limits:
@@ -1089,6 +1126,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
 | `node tools/synth.mjs SPEC.json\|JSON [--substrate ID] [--cap ideal\|smd-0603\|…\|trimmer] [--out FILE.cir]` | Filter synthesis headless: the dialog's design, and with `--substrate` its **Realise in microstrip** (§7.6). The report goes to stderr; exits with code 1 on warnings. |
 | `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |
+| `node tools/divider.mjs SPEC.json\|JSON [--substrate ID] [--coupled true\|false] [--gap MM] [--pitch MM] [--pkg 0603] [--out FILE.cir]` | Power dividers and hybrids (§7.9): the ideal design, or with `--substrate` the microstrip Wilkinson or branch-line with its layout line. |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |
 
