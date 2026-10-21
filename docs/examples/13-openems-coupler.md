@@ -2,7 +2,7 @@
 
 comb-over's models are closed forms and 2-D field solutions joined by circuit theory. A full-wave simulation solves Maxwell's equations on the actual copper and includes everything those models leave out. This example exports the 10 dB coupler on 0.508 mm RO4350B to [openEMS](https://openems.de) (an open-source FDTD solver), runs it, and compares the two.
 
-Netlist: [`examples/coupler-10dB-ro4350b.cir`](../../examples/coupler-10dB-ro4350b.cir) (from [worked example 2](02-couplers.md)) · result: [`examples/em/`](../../examples/em/) (the openEMS Touchstone file and the comparison netlist).
+Netlist: [`examples/coupler-10dB-ro4350b.cir`](../../examples/coupler-10dB-ro4350b.cir) (from [worked example 2](02-couplers.md)) · results: [`examples/em/`](../../examples/em/) (the openEMS Touchstone files and comparison netlists). Section 5 runs the same check on the compact Wilkinson of example 12, and finds a real problem.
 
 ```sh
 node tools/openems.mjs examples/coupler-10dB-ro4350b.cir --out oems/ --excite 1
@@ -69,3 +69,27 @@ These are built into the export now, but they matter if you edit the script or w
 - **The port's feed outside the PML.** openEMS silently drops a port's terminating resistor inside the absorber (the log says "Unused primitive … port_resist"). The export meshes each port end uniformly so the feed sits on the 10th line, beyond the 8 PML cells.
 - **No DC in the excitation.** The coupler's two strips are not connected at DC. A Gaussian pulse with a DC component leaves charge on them, and the field energy never falls to the end criterion. The export subtracts the DC from openEMS's pulse.
 - **Port orientation.** An openEMS microstrip port's `start` is at the strip and `stop` at the ground; the port draws its own strip at `start`.
+- **No series lumped elements.** A series R–L lumped element (a chip resistor with its ESL) gave NaN fields from the first timestep in some runs of openEMS v0.37 (development), depending on the script's memory layout, not on the model. The export uses a plain R.
+
+## 5. A second board: the compact Wilkinson
+
+The same export on the compact Wilkinson of [worked example 12](12-wilkinson-and-branch-line.md) (`--excite all`: three runs, 16 s each, 112 k cells) finds a real problem. Result: [`examples/em/wilkinson-2g4-ro4350b-1524-openems.s3p`](../../examples/em/), with its comparison netlist.
+
+The export gives the isolation resistor to openEMS as a plain 73.3 Ω, without the ESL and body capacitance in comb-over's `res` model. The comparison netlist drops them too (`esl=0 cp=0`), so the two sides have the same circuit.
+
+| at 2.4 GHz | comb-over | openEMS |
+|---|---|---|
+| S11, input match | −38.2 dB | −13.3 dB |
+| S22, output match | −25.6 dB | −14.4 dB |
+| S32, isolation | −26.7 dB | −20.7 dB |
+| S21 | −3.07 dB | −3.27 dB |
+
+Halving the mesh cell (`--fine 0.15`) changes S11 by 0.2 dB, so this is not mesh error.
+
+**Isolation: explained.** After the resistor, the two outputs run side by side for 4.9 mm, still 1 mm apart, before they turn away. The layout's netlist models these two runs as independent lines. Modelled as a coupled pair (a `cline` with W 3.29 mm and S 1 mm), comb-over's isolation becomes −32.9, −20.3 and −15.6 dB at 2.16, 2.4 and 2.64 GHz, against openEMS's −33.4, −20.7 and −15.9 dB.
+
+**Match: only partly explained.** With the output pair coupled, comb-over's input match drops to −26 dB, still well short of openEMS's −13 dB. The rest probably comes from the input junction. There, the 3.29 mm input line overlaps each 2.78 mm arm by only 1.15 mm, and the closed-form width step does not describe that shape. S21 also carries an almost frequency-independent phase offset of about −10°, which points to a lumped reactance rather than extra line length.
+
+**What this means for the design.** The compact Wilkinson's layout needs changing before it is built: model the output pair as coupled lines (or turn the outputs away at once), and design the input junction rather than butt the line against the arms. Worked example 12 now carries a warning.
+
+**Loss.** In both boards openEMS shows less loss than comb-over (0.3 % against 1.4 % here at 2.4 GHz, port 1 driven). This has not been investigated.

@@ -40,7 +40,9 @@ The board is 46.8 × 28.4 mm.
 - Designed with the coupling, the arms come out wider (2.78 against 2.05 mm), to bring the pair's even-mode impedance back up to the arm impedance.
 - The resistor polishes to 73 Ω rather than the ideal 100 Ω. It absorbs the odd mode's different velocity and the resistor's own pads, ESL and body capacitance, which the `res` model includes (manual §8.5).
 
-**As built**, with the feeds and connector pads, the coupled design keeps 20.5 dB input match and 21.1 dB isolation. With the substrate's loss the split is −3.065 dB at f0, so 0.055 dB is lost in the arms.
+**As built**, with the feeds and connector pads, the coupled design keeps 20.5 dB input match and 21.1 dB isolation in comb-over's model. With the substrate's loss the split is −3.065 dB at f0, so 0.055 dB is lost in the arms.
+
+> **A full-wave check disagrees.** In openEMS ([worked example 13](13-openems-coupler.md), section 5) this board has about 13 dB input match, 14 dB output match and 20.7 dB isolation at 2.4 GHz, against comb-over's 38, 26 and 27 dB for the same netlist. The isolation is explained by the two output lines, which run side by side 1 mm apart for 4.9 mm after the resistor and are modelled here as independent lines. Most of the match error is not yet explained. Do not order this board without fixing the layout or checking it yourself.
 
 **Not modelled:**
 - The junction where the 3.3 mm input line meets both arms.
@@ -83,4 +85,4 @@ The branch-line part is one piece of copper with its four ports in one tie. CI e
 **Before ordering:**
 - Pick the resistor value you can buy: 75 Ω is the nearest E24.
 - Check its datasheet for ESL and body capacitance. The model assumes 0.6 nH and 0.03 pF; set `esl=` and `cp=` on the `res` line from your part and re-run the polish.
-- An EM check of the input junction is worth having: `node tools/openems.mjs examples/wilkinson-2g4-ro4350b-1524.cir --out oems/` (manual §8.6).
+- Check it in EM first: `node tools/openems.mjs examples/wilkinson-2g4-ro4350b-1524.cir --out oems/` (manual §8.6). The check in worked example 13 shows the layout as it stands falls well short of the model.

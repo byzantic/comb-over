@@ -65,7 +65,9 @@ export function expandRes({ name, nodes, o, ev, sub, fail }) {
   const via = { d: o.d != null ? ev(o.d) : Math.max(0.3e-3, sub.fab?.minDrill ?? 0.3e-3), n: o.n != null ? Math.round(ev(o.n)) : 2 };
   const Cp = padC({ W: p.pads.w, L: p.pads.l, sub });
   const far = ground ? `${name}_y` : n2;
-  lines.push(`C${name}_p1 ${n1} 0 ${num(Cp)}`, `L${name}_esl ${n1} ${name}_x ${num(esl)}`, `R${name}_r ${name}_x ${far} ${num(R)}`);
+  if (!(esl >= 0)) fail('res: esl must be ≥ 0');
+  // esl=0: no inductor (the R straight from the pad)
+  lines.push(`C${name}_p1 ${n1} 0 ${num(Cp)}`, esl > 0 ? `L${name}_esl ${n1} ${name}_x ${num(esl)}` : `wire ${n1} ${name}_x`, `R${name}_r ${name}_x ${far} ${num(R)}`);
   if (cp > 0) lines.push(`C${name}_cp ${n1} ${far} ${num(cp)}`);
   if (ground) lines.push(`via V${name} ${far} d=${num(via.d)} n=${via.n}`);
   else lines.push(`C${name}_p2 ${n2} 0 ${num(Cp)}`);

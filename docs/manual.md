@@ -149,7 +149,7 @@ Unknown directives are ignored with a warning.
 | `tee <name> A B SIDE Wa=.. Wb=.. W2=..` | Microstrip T-junction on the `.substrate` (§4.7): main line A–B (arm widths Wa, Wb), side arm SIDE of width W2. Its reference planes are the edges of the crossing strips. |
 | `bend <name> A B W=.. [mitre=none\|opt]` | 90° microstrip bend on the `.substrate` (§4.7): square corner, or the optimum mitre. Reference planes at the edges of the crossing strip. |
 | `step <name> A B W1=.. W2=..` | Step in width from W1 (at A) to W2 (§4.7): the junction parasitics only. The lines either side carry the impedance change. |
-| `res <name> N1 [N2] R=.. [pkg=0402\|0603\|0805\|ideal] [esl=..] [cp=..] [d=..] [n=..]` | Chip resistor with pads, ESL and body capacitance (§8.5): between N1 and N2, or a termination to ground through `n` vias when N2 is omitted. `pkg=ideal` is a plain R. |
+| `res <name> N1 [N2] R=.. [pkg=0402\|0603\|0805\|ideal] [esl=..] [cp=..] [d=..] [n=..]` | Chip resistor with pads, ESL and body capacitance (§8.5): between N1 and N2, or a termination to ground through `n` vias when N2 is omitted. `pkg=ideal` is a plain R; `esl=0` leaves out the inductance. |
 | `cline NAME … end` | Coupled multiconductor section (§4). |
 
 Element names follow SPICE: the first letter selects the type (`C1`, `Cload`, `Lchoke`, `T5`).
@@ -1058,7 +1058,7 @@ The footprints are `RES_<pkg>` (series) and `RES_<pkg>_GND<n>V` (termination). `
 `node tools/openems.mjs FILE.cir --out DIR` writes a self-contained [openEMS](https://openems.de) Python script for the netlist's `.layout`, and `compare.cir`, the as-built netlist at the same reference planes. Running the script (it needs openEMS's Python modules) writes the S-parameters next to it as a Touchstone file; `--run` runs it straight away (`OPENEMS_PYTHON` selects the interpreter). [Worked example 13](examples/13-openems-coupler.md) checks the 10 dB coupler this way.
 
 **The model:**
-- **Copper.** The layout's core, feeds and part pads at the top of the substrate, as zero-thickness conducting sheets (copper conductivity and thickness from the `.substrate`), or PEC with `--lossless`. Vias are PEC cylinders; `res` and `cap` parts are lumped R and C across their pads.
+- **Copper.** The layout's core, feeds and part pads at the top of the substrate, as zero-thickness conducting sheets (copper conductivity and thickness from the `.substrate`), or PEC with `--lossless`. Vias are PEC cylinders; `res` and `cap` parts are lumped R and C across their pads. A `res` goes to openEMS as a plain R, without its ESL and body capacitance (series lumped elements were unreliable in openEMS v0.37 development), and `compare.cir` gives it `esl=0 cp=0` to match.
 - **Substrate.** εr from the `.substrate`; tan δ as a conductivity that matches it at the sweep centre (so dielectric loss is right only near there), or none with `--lossless`.
 - **Ports.** The layout is rebuilt with plain feeds to the board edge (connector=none). Each feed carries an openEMS microstrip port, terminated in the port impedance, with its measurement plane Lp = max(3 mm, 2W) in from the edge (at most the feed length less 0.5 mm). The feed must leave along x or y.
 - **Boundaries.** PEC under the substrate; PML (8 cells) on all other sides, at least 5h (and 3 mm) from the copper, except at the port ends, where the feeds run into the PML.
@@ -1138,6 +1138,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
   - Matthaei g-value tables;
   - the engine against the analytic pair split;
   - realised centre, bandwidth and return loss of synthesised designs, before and after polishing.
+- **Full wave.** The compact Wilkinson of example 12 against openEMS (example 13, section 5) shows the layout falls short: 13 dB input match and 20.7 dB isolation at f0, against comb-over's 38 dB and 27 dB. The isolation is explained by unmodelled coupling between the outputs; the match only in part.
 - **Full wave.** The 10 dB coupler on 0.508 mm RO4350B against openEMS ([worked example 13](examples/13-openems-coupler.md)): coupling within 0.2 dB from 1 to 5 GHz and 0.3 dB at 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout's unmodelled corners; radiation below 1 %.
 
 ---

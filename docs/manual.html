@@ -315,7 +315,7 @@
 </tr>
 <tr>
 <td><code>res &lt;name&gt; N1 [N2] R=.. [pkg=0402|0603|0805|ideal] [esl=..] [cp=..] [d=..] [n=..]</code></td>
-<td>Chip resistor with pads, ESL and body capacitance (§8.5): between N1 and N2, or a termination to ground through <code>n</code> vias when N2 is omitted. <code>pkg=ideal</code> is a plain R.</td>
+<td>Chip resistor with pads, ESL and body capacitance (§8.5): between N1 and N2, or a termination to ground through <code>n</code> vias when N2 is omitted. <code>pkg=ideal</code> is a plain R; <code>esl=0</code> leaves out the inductance.</td>
 </tr>
 <tr>
 <td><code>cline NAME … end</code></td>
@@ -1712,7 +1712,7 @@ The as-built netlist renames each tee&#39;s side node and inserts the feed line 
 <p><code>node tools/openems.mjs FILE.cir --out DIR</code> writes a self-contained <a href="https://openems.de">openEMS</a> Python script for the netlist&#39;s <code>.layout</code>, and <code>compare.cir</code>, the as-built netlist at the same reference planes. Running the script (it needs openEMS&#39;s Python modules) writes the S-parameters next to it as a Touchstone file; <code>--run</code> runs it straight away (<code>OPENEMS_PYTHON</code> selects the interpreter). <a href="examples/13-openems-coupler.html">Worked example 13</a> checks the 10 dB coupler this way.</p>
 <p><strong>The model:</strong></p>
 <ul>
-<li><strong>Copper.</strong> The layout&#39;s core, feeds and part pads at the top of the substrate, as zero-thickness conducting sheets (copper conductivity and thickness from the <code>.substrate</code>), or PEC with <code>--lossless</code>. Vias are PEC cylinders; <code>res</code> and <code>cap</code> parts are lumped R and C across their pads.</li>
+<li><strong>Copper.</strong> The layout&#39;s core, feeds and part pads at the top of the substrate, as zero-thickness conducting sheets (copper conductivity and thickness from the <code>.substrate</code>), or PEC with <code>--lossless</code>. Vias are PEC cylinders; <code>res</code> and <code>cap</code> parts are lumped R and C across their pads. A <code>res</code> goes to openEMS as a plain R, without its ESL and body capacitance (series lumped elements were unreliable in openEMS v0.37 development), and <code>compare.cir</code> gives it <code>esl=0 cp=0</code> to match.</li>
 <li><strong>Substrate.</strong> εr from the <code>.substrate</code>; tan δ as a conductivity that matches it at the sweep centre (so dielectric loss is right only near there), or none with <code>--lossless</code>.</li>
 <li><strong>Ports.</strong> The layout is rebuilt with plain feeds to the board edge (connector=none). Each feed carries an openEMS microstrip port, terminated in the port impedance, with its measurement plane Lp = max(3 mm, 2W) in from the edge (at most the feed length less 0.5 mm). The feed must leave along x or y.</li>
 <li><strong>Boundaries.</strong> PEC under the substrate; PML (8 cells) on all other sides, at least 5h (and 3 mm) from the copper, except at the port ends, where the feeds run into the PML.</li>
@@ -1826,6 +1826,7 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <li>realised centre, bandwidth and return loss of synthesised designs, before and after polishing.</li>
 </ul>
 </li>
+<li><strong>Full wave.</strong> The compact Wilkinson of example 12 against openEMS (example 13, section 5) shows the layout falls short: 13 dB input match and 20.7 dB isolation at f0, against comb-over&#39;s 38 dB and 27 dB. The isolation is explained by unmodelled coupling between the outputs; the match only in part.</li>
 <li><strong>Full wave.</strong> The 10 dB coupler on 0.508 mm RO4350B against openEMS (<a href="examples/13-openems-coupler.html">worked example 13</a>): coupling within 0.2 dB from 1 to 5 GHz and 0.3 dB at 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout&#39;s unmodelled corners; radiation below 1 %.</li>
 </ul>
 <hr>

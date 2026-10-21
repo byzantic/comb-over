@@ -96,6 +96,9 @@ export function openemsExport(text, opts = {}) {
     const [p, q] = alongX ? (cx(a) < cx(b) ? [a, b] : [b, a]) : (cy(a) < cy(b) ? [a, b] : [b, a]);
     const start = alongX ? [p.x1, Math.max(p.y0, q.y0), h] : [Math.max(p.x0, q.x0), p.y1, h];
     const stop = alongX ? [q.x0, Math.min(p.y1, q.y1), h] : [Math.min(p.x1, q.x1), q.y0, h];
+    // a chip resistor: a plain R across its pads' facing edges (the pads are copper in the model). Its ESL
+    // and body capacitance are not exported: openEMS's series R-L element gave NaN fields from the first
+    // timestep in some runs (v0.37 development), so the comparison netlist drops them too (esl=0 cp=0).
     lumped.push({ name: pt.name, ny: alongX ? 0 : 1, R: pt.kind === 'res' ? pt.R : undefined, C: pt.kind === 'cap' ? pt.C : undefined, start, stop });
   }
   // mesh
@@ -255,6 +258,8 @@ if __name__ == '__main__':
     if (i < 0) throw new Error(`openEMS export: no feed line T${p.node}_f in the as-built netlist`);
     cmp[i] = cmp[i].replace(re, (_, a, l) => `${a}${r6(+l - p.Lp)}mm`);
   }
+  // resistors as exported: no ESL or body capacitance
+  cmp = cmp.map(l => (/^res /.test(l) && !/pkg=ideal/.test(l) ? `${l.replace(/ (esl|cp)=\S+/g, '')} esl=0 cp=0` : l));
   // lossless: no line loss in comb-over either (Q → ∞)
   if (lossless) cmp = cmp.flatMap(l => /^cline /.test(l) ? [l, '  Q 1e30'] : /^T\S+ .* W=\S+ len=\S+$/.test(l) ? [`${l} Q=1e30`] : [l]);
   const ti = cmp.findIndex(l => /^\.title/.test(l));

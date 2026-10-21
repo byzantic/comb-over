@@ -18,6 +18,6 @@ Every number quoted in these pages was computed with the engine itself, and most
 | 10 | [Hairpin and edge-coupled filters from one specification](10-hairpin-and-edge-coupled.md) | The folded and the straight form of the parallel-coupled filter: synthesis, the 2f0 spurious passband, layout, size and skirts as built |
 | 11 | [A duplexer from a specification to Gerbers](11-duplexer.md) | Two filters on a synthesised manifold, open-circuit branch lengths, the isolation budget, layout with mirrored filters, KiCad |
 | 12 | [A compact Wilkinson and a branch-line hybrid, to Gerbers](12-wilkinson-and-branch-line.md) | Arm coupling in a compact Wilkinson (ignored vs modelled), chip isolation resistors, a branch-line with tee corners, KiCad |
-| 13 | [Checking a coupler in openEMS](13-openems-coupler.md) | Full-wave export, the comparison at the same reference planes, where the two differ (copper thickness, dispersion, corners, radiation), mesh convergence |
+| 13 | [Checking a coupler in openEMS](13-openems-coupler.md) | Full-wave export, the comparison at the same reference planes, where the two differ (copper thickness, dispersion, corners, radiation), mesh convergence; the compact Wilkinson's unmodelled output coupling |
 
 If you are new to the tool, do 1 → 2 → 4 → 3 in that order. Example 3 assumes you have seen how the closed form in Example 4 works.
