@@ -102,4 +102,4 @@ CI does exactly this for every pull request in the `kicad/kicad:9.0.8` container
 - Check the capacitor values against parts you can buy (section 2).
 - Look at the via lands and capacitor pads in the KiCad 3-D view.
 - Tell the fab the material and thickness. The title block and the note under the board say so.
-- Measure. The tee, open-end and via models are closed-form (manual §4.7) and have not been checked against EM simulation yet; issue #16 adds that.
+- Measure. The tee, open-end and via models are closed-form (manual §4.7) and have not been checked against EM simulation yet; the openEMS export (manual §8.6, [example 13](13-openems-coupler.md)) can.

@@ -23,7 +23,7 @@
   <aside class="side"><nav><a class="" href="../manual.html">Manual</a>
 <a class="" href="../substrates.html">Substrate presets</a>
 <a class="" href="index.html">Worked examples</a>
-<ol class="examples"><li><a class="" href="01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="current" href="12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li></ol></nav></aside>
+<ol class="examples"><li><a class="" href="01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="current" href="12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li><li><a class="" href="13-openems-coupler.html">Checking a coupler in openEMS</a></li></ol></nav></aside>
   <main class="doc">
     <h1>12. A compact Wilkinson and a branch-line hybrid, to Gerbers</h1>
 <p>Two workhorse parts at 2.4 GHz on 1.524 mm RO4350B:</p>
@@ -90,7 +90,10 @@ node tools/divider.mjs examples/branchline-2g4-ro4350b-1524.json --substrate jlc
 <li>Designed with the coupling, the arms come out wider (2.78 against 2.05 mm), to bring the pair&#39;s even-mode impedance back up to the arm impedance.</li>
 <li>The resistor polishes to 73 Ω rather than the ideal 100 Ω. It absorbs the odd mode&#39;s different velocity and the resistor&#39;s own pads, ESL and body capacitance, which the <code>res</code> model includes (manual §8.5).</li>
 </ul>
-<p><strong>As built</strong>, with the feeds and connector pads, the coupled design keeps 20.5 dB input match and 21.1 dB isolation. With the substrate&#39;s loss the split is −3.065 dB at f0, so 0.055 dB is lost in the arms.</p>
+<p><strong>As built</strong>, with the feeds and connector pads, the coupled design keeps 20.5 dB input match and 21.1 dB isolation in comb-over&#39;s model. With the substrate&#39;s loss the split is −3.065 dB at f0, so 0.055 dB is lost in the arms.</p>
+<blockquote>
+<p><strong>A full-wave check disagrees.</strong> In openEMS (<a href="13-openems-coupler.html">worked example 13</a>, section 5) this board has about 13 dB input match, 14 dB output match and 20.7 dB isolation at 2.4 GHz, against comb-over&#39;s 38, 26 and 27 dB for the same netlist. The isolation is explained by the two output lines, which run side by side 1 mm apart for 4.9 mm after the resistor and are modelled here as independent lines. Most of the match error is not yet explained. Do not order this board without fixing the layout or checking it yourself.</p>
+</blockquote>
 <p><strong>Not modelled:</strong></p>
 <ul>
 <li>The junction where the 3.3 mm input line meets both arms.</li>
@@ -150,10 +153,10 @@ node tools/divider.mjs examples/branchline-2g4-ro4350b-1524.json --substrate jlc
 <ul>
 <li>Pick the resistor value you can buy: 75 Ω is the nearest E24.</li>
 <li>Check its datasheet for ESL and body capacitance. The model assumes 0.6 nH and 0.03 pF; set <code>esl=</code> and <code>cp=</code> on the <code>res</code> line from your part and re-run the polish.</li>
-<li>An EM check (#16) of the input junction is worth having.</li>
+<li>Check it in EM first: <code>node tools/openems.mjs examples/wilkinson-2g4-ro4350b-1524.cir --out oems/</code> (manual §8.6). The check in worked example 13 shows the layout as it stands falls well short of the model.</li>
 </ul>
 
-<nav class="pager"><a href="11-duplexer.html">← 11. Duplexer: spec to Gerbers</a><a class="next" href="../manual.html">Manual →</a></nav>
+<nav class="pager"><a href="11-duplexer.html">← 11. Duplexer: spec to Gerbers</a><a class="next" href="13-openems-coupler.html">13. Checking a coupler in openEMS →</a></nav>
   </main>
 </div>
 </body>

@@ -1,0 +1,39 @@
+.title openEMS comparison: 10 dB coupled-line coupler on JLC RO4350B 0.508 mm, from physical dimensions (5 GHz) — as built (coupler layout)
+# Generated from the layout: includes the feed lines the layout adds. Bends, steps and the
+# coupling of the diverging feed sections near the coupled lines are not modelled.
+.freq 1000000000 9000000000 801
+.ref 5000000000
+.substrate jlc-ro4350b-0.508
+# ports at the openEMS measurement planes (the feeds shortened by 3/3/3/3 mm); the openEMS result overlays every S trace
+.data em coupler-10dB-ro4350b-openems.s4p overlay
+port in 50
+port thru 50
+port cpl 50
+port iso 50
+cline K geom=msl W=0.8831mm S=0.1025mm
+  len 9.0374mm
+  A in_k cpl_k
+  B thru_k iso_k
+end
+Tin_f in in_e W=1.073mm len=6.8226mm
+Tin_t1 in_e in_tp1 W=1.0414mm len=0.3577mm
+Tin_t2 in_tp1 in_tp2 W=0.9781mm len=0.3577mm
+Tin_t3 in_tp2 in_s W=0.9148mm len=0.3577mm
+Tin_d in_s in_k W=0.8831mm len=0.4786mm
+Tthru_d thru_k thru_s W=0.8831mm len=0.4786mm
+Tthru_t1 thru_s thru_tp1 W=0.9148mm len=0.3577mm
+Tthru_t2 thru_tp1 thru_tp2 W=0.9781mm len=0.3577mm
+Tthru_t3 thru_tp2 thru_e W=1.0414mm len=0.3577mm
+Tthru_f thru_e thru W=1.073mm len=6.8226mm
+Tcpl_f cpl cpl_e W=1.073mm len=6.8226mm
+Tcpl_t1 cpl_e cpl_tp1 W=1.0414mm len=0.3577mm
+Tcpl_t2 cpl_tp1 cpl_tp2 W=0.9781mm len=0.3577mm
+Tcpl_t3 cpl_tp2 cpl_s W=0.9148mm len=0.3577mm
+Tcpl_d cpl_s cpl_k W=0.8831mm len=0.4786mm
+Tiso_d iso_k iso_s W=0.8831mm len=0.4786mm
+Tiso_t1 iso_s iso_tp1 W=0.9148mm len=0.3577mm
+Tiso_t2 iso_tp1 iso_tp2 W=0.9781mm len=0.3577mm
+Tiso_t3 iso_tp2 iso_e W=1.0414mm len=0.3577mm
+Tiso_f iso_e iso W=1.073mm len=6.8226mm
+.plot ylim=-50,0 db(S11) db(S21) db(S31) db(S41)
+.plot title=Directivity_(dB) db(S31/S41)

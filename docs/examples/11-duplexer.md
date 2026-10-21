@@ -78,4 +78,4 @@ The project holds:
 
 CI reruns the synthesis from the JSON specification and requires the committed netlist byte for byte. It then exports the board, runs KiCad's DRC and writes the Gerbers.
 
-**Not modelled, and the main risk to the isolation figure:** coupling between the two filters across the 7.6 mm gap, and between the manifold and the nearest resonators. 50–70 dB of isolation is exactly where such stray coupling shows, so check it in EM (#16) or measure it before relying on the margin.
+**Not modelled, and the main risk to the isolation figure:** coupling between the two filters across the 7.6 mm gap, and between the manifold and the nearest resonators. 50–70 dB of isolation is exactly where such stray coupling shows, so check it in EM (manual §8.6) or measure it before relying on the margin.
