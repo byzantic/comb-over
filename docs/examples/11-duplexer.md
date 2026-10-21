@@ -26,7 +26,7 @@ It takes about 1.5 minutes, most of it the two interdigital syntheses (manual §
 
 ```
 ant ── tee ──┬── 8.65 mm up ── bend ── 6.58 mm ── filter A (2.30 GHz) ── port A
-             └── 4.28 mm down ── bend ── 6.58 mm ── filter B (2.53 GHz) ── port B
+             └── 4.25 mm down ── bend ── 6.58 mm ── filter B (2.53 GHz) ── port B
 ```
 
 The synthesis measures each filter's reflection at the other band's centre:
@@ -43,8 +43,8 @@ From the report (with the substrate's loss):
 |---|---|---|
 | **isolation port A ↔ port B** (spec ≥ 40 dB) | **≥ 49.6 dB** | **≥ 72.1 dB** |
 | antenna return loss, central 80 % | ≥ 15.7 dB | ≥ 15.5 dB |
-| insertion loss antenna → own port, centre / worst in the central 80 % | 2.82 / 3.96 dB | 2.58 / 3.56 dB |
-| leakage antenna → the other port | ≥ 46.6 dB down | ≥ 69.3 dB down |
+| insertion loss antenna → own port, centre / worst in the central 80 % | 2.82 / 3.96 dB | 2.58 / 3.57 dB |
+| leakage antenna → the other port | ≥ 46.7 dB down | ≥ 69.3 dB down |
 | the other filter alone rejects this band by | ≥ 39.0 dB | ≥ 62.8 dB |
 
 **Reading the budget:**
@@ -60,7 +60,7 @@ The layout panel, or `.layout duplexer`, draws both filters with the resonator-a
 
 | | |
 |---|---|
-| board | 77.2 × 61.8 mm, three edge-launch SMAs |
+| board | 77.7 × 61.7 mm, three edge-launch SMAs |
 | design rules | clean |
 | as built vs design | passband S21/S31 within 0.03 dB; isolation unchanged (49.6 / 72.1 dB) |
 

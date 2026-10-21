@@ -159,5 +159,20 @@ cline S2\n  Zeo 204.19 30.613\n  len 90deg\n  A mid q\n  B - 0\nend`;
   check('Marchand balanced at f0/2 (singular shorted-port resonance)', near(a, b, 1e-12), `${a} ${b}`);
 }
 
+// ---- regression (#50): electrically negligible lines and the DC point ----
+{
+  const S = (body, freq = '2.4G 2.4G 1') => { const r = solve(parseNetlist(`.freq ${freq}\n.substrate jlc-ro4350b-1.524\nport a 50\nport b 50\n${body}\n`)); return (i, j, k = 0) => { const s = r.S(i, j); return [s.re[k], s.im[k]]; }; };
+  const ref = S('T1 a x W=3.29mm len=10mm\nT3 x b W=3.29mm len=10mm');
+  let worst = 0;
+  for (const len of ['1e-4mm', '1e-6mm', '1e-9mm', '1e-12mm', '1e-15mm']) for (const q of ['', ' Q=1e30', ' Q=100']) {
+    const t = S(`T1 a x W=3.29mm len=10mm\nT2 x y W=3.29mm len=${len}${q}\nT3 y b W=3.29mm len=10mm`);
+    for (const [i, j] of [[1, 1], [2, 1]]) { const [a, b] = t(i, j), [c, d] = ref(i, j); worst = Math.max(worst, Number.isFinite(a + b) ? Math.hypot(a - c, b - d) : Infinity); }
+  }
+  check('a line of 1e-4 … 1e-15 mm between two lines is invisible (|ΔS| < 1e-5; it used to look open, or NaN)', worst < 1e-5, `${worst}`);
+  const dcA = S('T1 a b W=1mm len=10mm', '0 1G 3'), dcB = S('cline K geom=msl W=1mm S=0.3mm\n  len 10mm\n  A a c\n  B b d\nend\nR1 c 0 50\nR2 d 0 50', '0 1G 3');
+  const [s11r, s11i] = dcA(1, 1, 0), [s21r, s21i] = dcA(2, 1, 0), [k31r, k31i] = dcB(2, 1, 0);
+  check('the 0 Hz point of a sweep is the DC limit: a line is a through (it used to be NaN)', Math.hypot(s11r, s11i) < 1e-6 && Math.abs(Math.hypot(s21r, s21i) - 1) < 1e-6 && Number.isFinite(k31r + k31i));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

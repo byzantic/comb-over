@@ -77,13 +77,18 @@ export class Section {
 
   // Fill the 2N×2N admittance matrix at frequency f (Hz). Returns {re, im} Float64Arrays (row-major 2N×2N).
   admittance(f) {
-    const N = this.N, n2 = 2 * N, W = this.W, w = 2 * Math.PI * f;
+    const N = this.N, n2 = 2 * N, W = this.W;
+    // an electrically negligible line (a sliver of copper, or any line near DC) has Y ~ 1/θ, which swamps
+    // the nodal matrix as θ → 0: evaluate it at θ ≥ THETA_MIN, indistinguishable from a wire there (#50)
+    const ymin = 2 * Math.PI * f * this.len / Math.max(...this.v);
+    const w = 2 * Math.PI * f * (ymin < THETA_MIN ? THETA_MIN / Math.max(ymin, 1e-300) : 1);
     const cr = new Float64Array(N), ci = new Float64Array(N), sr = new Float64Array(N), si = new Float64Array(N);
     for (let k = 0; k < N; k++) {
       const beta = w / this.v[k];
       const x = (isFinite(this.Qm[k]) ? beta / (2 * this.Qm[k]) : 0) * this.len, y = beta * this.len;
-      // coth(x+jy) = [sinh 2x − j sin 2y] / [cosh 2x − cos 2y]
-      const den = Math.cosh(2 * x) - Math.cos(2 * y);
+      // coth(x+jy) = [sinh 2x − j sin 2y] / [cosh 2x − cos 2y], with cosh 2x − cos 2y = 2(sinh² x + sin² y)
+      // (the difference form cancels catastrophically on short lossless lines, #50)
+      const den = 2 * (Math.sinh(x) ** 2 + Math.sin(y) ** 2);
       cr[k] = this.v[k] * Math.sinh(2 * x) / den;
       ci[k] = -this.v[k] * Math.sin(2 * y) / den;
       // csch(x+jy) = 1/sinh(x+jy),  sinh(x+jy) = sinh x cos y + j cosh x sin y
@@ -106,6 +111,9 @@ export class Section {
     return { re, im, n: n2 };
   }
 }
+
+// smallest electrical length (rad) a section is evaluated at; see admittance()
+export const THETA_MIN = 1e-9;
 
 // ---------- constructors from common parameterisations ----------
 

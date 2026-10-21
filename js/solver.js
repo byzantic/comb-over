@@ -63,8 +63,10 @@ export function solve(d, freqs = frequencies(d.freq)) {
   for (let k = 0, retry = 0; k < nf; k++) {
     let f = freqs[k];
     if (f <= 0) f = Math.max(1e-9 * freqs[nf - 1], 1e-3);
-    // exact half-wave points of lossless lines are singular: evaluate a hair away (limit value)
-    if (retry) f *= 1 + 1e-9 * retry;
+    // exact half-wave points of lossless lines are singular: evaluate a hair away (limit value), further
+    // each retry (1e-9, 1e-7, 1e-5 relative): next to a transmission zero the network stays near-singular
+    // for a while, and the exact coth denominator (#50) no longer hides that behind rounding
+    if (retry) f *= 1 + 10 ** (2 * retry - 11);
     const w = 2 * Math.PI * f;
     const Y = new CMat(n);
     // sections

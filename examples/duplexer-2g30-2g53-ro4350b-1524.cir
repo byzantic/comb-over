@@ -1,18 +1,18 @@
 .title Duplexer 2.3 / 2.53 GHz (interdigital, n = 5) on jlc-ro4350b-1.524
 # filters: interdigital, n = 5, chebyshev 0.1 dB; band A 2.3 GHz 4 %, band B 2.53 GHz 4 %, on jlc-ro4350b-1.524
-# manifold: 50 Ω lines (3.291 mm); branch A 15.23 mm, branch B 10.87 mm from the junction (each with one mitred bend), chosen to open each filter in the other band
-# band A (2.2545–2.3465 GHz): isolation A↔B ≥ 49.6 dB over the ripple band; antenna return loss ≥ 15.7 dB and insertion loss antenna → A 2.82 dB at the centre, ≤ 3.96 dB, over the central 80 %; leakage antenna → B ≥ 46.6 dB down; filter B alone rejects this band by ≥ 39 dB
-# band B (2.4799–2.5811 GHz): isolation A↔B ≥ 72.1 dB over the ripple band; antenna return loss ≥ 15.5 dB and insertion loss antenna → B 2.58 dB at the centre, ≤ 3.56 dB, over the central 80 %; leakage antenna → A ≥ 69.3 dB down; filter A alone rejects this band by ≥ 62.8 dB
+# manifold: 50 Ω lines (3.291 mm); branch A 15.23 mm, branch B 10.84 mm from the junction (each with one mitred bend), chosen to open each filter in the other band
+# band A (2.2545–2.3465 GHz): isolation A↔B ≥ 49.6 dB over the ripple band; antenna return loss ≥ 15.7 dB and insertion loss antenna → A 2.82 dB at the centre, ≤ 3.96 dB, over the central 80 %; leakage antenna → B ≥ 46.7 dB down; filter B alone rejects this band by ≥ 39 dB
+# band B (2.4799–2.5811 GHz): isolation A↔B ≥ 72.1 dB over the ripple band; antenna return loss ≥ 15.5 dB and insertion loss antenna → B 2.58 dB at the centre, ≤ 3.57 dB, over the central 80 %; leakage antenna → A ≥ 69.3 dB down; filter A alone rejects this band by ≥ 62.8 dB
 # not modelled: coupling between the two filters and between the manifold and the filters through the layout (see #16); the filters are as their own synthesis left them
 .freq 2070000000 2783000000 1201
 .ref 2412260350
 .substrate jlc-ro4350b-1.524
 .layout duplexer
 .param va = 8.651866mm tune 6.0563mm 12.247mm   # junction to the bend, branch A
-.param vb = 4.282649mm tune 2.9979mm 6.5674mm   # junction to the bend, branch B
+.param vb = 4.253601mm tune 2.9775mm 6.5297mm   # junction to the bend, branch B
 .param h = 6.582456mm   # bend to each filter's tap junction
 .param wm = 3.291228mm   # manifold width (50 ohm)
-.param th0_A = 80.2569819
+.param th0_A = 80.2569816
 .param tt_A = 9.408
 .param wf_A = 3.28963mm
 .param hw_A = 7.84035498
@@ -21,17 +21,17 @@
 .param w3_A = 5.51432mm
 .param s12_A = 4.71089mm
 .param s23_A = 7.21481mm
-.param ext1_A = 0.539576mm
-.param th0_B = 78.6725459
+.param ext1_A = 0.539577mm
+.param th0_B = 78.6855966
 .param tt_B = 10.39
 .param wf_B = 3.28963mm
-.param hw_B = 8.65434597
-.param w1_B = 5.5704mm
-.param w2_B = 6.73237mm
-.param w3_B = 6.52225mm
-.param s12_B = 4.23317mm
-.param s23_B = 6.78763mm
-.param ext1_B = 0.762035mm
+.param hw_B = 8.66174187
+.param w1_B = 5.77285mm
+.param w2_B = 6.79721mm
+.param w3_B = 6.5856mm
+.param s12_B = 4.20487mm
+.param s23_B = 6.77859mm
+.param ext1_B = 0.722814mm
 port ant 50
 port t5_A 50
 port t5_B 50
