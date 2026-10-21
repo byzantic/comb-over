@@ -24,7 +24,7 @@
 <ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-16">Not checked yet against EM simulation or measurement: the bend, step and resistor models (#16).</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
 <a class="" href="substrates.html">Substrate presets</a>
 <a class="" href="examples/index.html">Worked examples</a>
-<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="examples/11-duplexer.html">Duplexer: spec to Gerbers</a></li></ol></nav></aside>
+<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="examples/11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="" href="examples/12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li></ol></nav></aside>
   <main class="doc">
     <h1>comb-over manual</h1>
 <p>comb-over analyses linear networks built from <strong>uniform coupled multiconductor TEM / quasi-TEM line sections</strong>, single lines and lumped R/L/C. It also synthesises tapped comb-line and interdigital band-pass filters. Everything runs in the browser, and the same engine runs under Node for scripting and tests.</p>
@@ -1289,6 +1289,55 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <li>coupling between the two filters, and between the manifold and the filters, through the layout. This is why the gap between them is generous. An EM check (#16) is the way to know.</li>
 <li>the filters themselves are as their own synthesis left them: the polish moves only the manifold.</li>
 </ul>
+<h3 id="79-power-dividers-and-hybrids"><a class="anchor" href="#79-power-dividers-and-hybrids" aria-hidden="true">#</a>7.9 Power dividers and hybrids</h3>
+<p><code>node tools/divider.mjs SPEC.json [--substrate ID]</code> designs dividers and hybrids. Without a substrate it gives an ideal TEM netlist of uniform lines; with one, a microstrip design with its layout (Wilkinson with equal split, branch-line). <a href="examples/12-wilkinson-and-branch-line.html">Worked example 12</a> builds both at 2.4 GHz.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>type</code></th>
+<th>ideal design (<code>js/dividers.js</code>)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>wilkinson</code></td>
+<td>Equal split, <code>sections</code> 1–3. Each arm is a Chebyshev quarter-wave transformer from 2R₀ to R₀ for <code>fbw</code> (small-reflection theory). One resistor per section: 2R₀ for one section; for more, the optimiser&#39;s best result from several starting points, since the cost has local minima. Unequal split (<code>splitDb</code> = 10 log P₃/P₂, one section) follows Pozar §7.3: K² = P₃/P₂, Z₀₃ = R₀√((1+K²)/K³), Z₀₂ = K²Z₀₃, R = R₀(K + 1/K), with quarter-wave transformers from R₀K and R₀/K to R₀.</td>
+</tr>
+<tr>
+<td><code>wilkinson-tree</code></td>
+<td>2, 4, 8 or 16 ways: a tree of equal two-way stages.</td>
+</tr>
+<tr>
+<td><code>branchline</code></td>
+<td>Series arms R₀/√2, shunt arms R₀, all 90°. Port 1 input, 2 through (−90°), 3 coupled (−180°), 4 isolated.</td>
+</tr>
+<tr>
+<td><code>ratrace</code></td>
+<td>A 1.5 λ ring of R₀√2 with arms of 90/90/90/270°. Port 1 is Δ (2 and 4 out of phase), port 3 is Σ (2 and 4 in phase); 1 and 3 are isolated.</td>
+</tr>
+<tr>
+<td><code>gysel</code></td>
+<td>From the even/odd analysis: Z₁ = √2R₀ and Z₂ = √(R·R₀), R = R₀ by default; Z₃ (the half-wave between the resistor nodes) sets only the bandwidth, R₀/√2 by default. In the even mode Z₃ is a half-wave shorted at both ends, a mode trapped exactly at f₀ that leaves the resistors unexcited. With ideal lossless lines it shows as a spike of zero width at f₀ (|S₂₂| = |S₃₂| = 0.5 within about 1e-7 of f₀); any line loss removes it.</td>
+</tr>
+</tbody></table></div>
+<p><strong>Compact Wilkinson in microstrip</strong> (<code>js/dividers-ms.js</code>):</p>
+<ul>
+<li><strong>Layout.</strong> The two arms run side by side at a gap s (default 1 mm, at most what the resistor&#39;s pads can bridge). A chip resistor (<code>res</code>, §8.5) stands across the gap at each section end. After the last one each output turns away through two optimally mitred bends to the port pitch, at the port impedance.</li>
+<li><strong>Arm model.</strong> <code>--coupled true</code> (the default) models each section as a coupled pair (Kirschning–Jansen). The divided power travels in the even mode, so the pair&#39;s even-mode impedance is set to the arm impedance; the odd mode carries the isolation, with its own impedance and velocity. <code>--coupled false</code> models the arms as independent lines, the usual simplification, kept for comparison.</li>
+<li><strong>Design.</strong> It starts from the ideal design and polishes widths, lengths and resistors on the goals: return loss at all three ports and isolation over <code>fbw</code>.</li>
+<li><strong>Not modelled.</strong> The junction where the input line meets both arms, and the resistor body over the gap.</li>
+</ul>
+<p><strong>Branch-line in microstrip</strong>:</p>
+<ul>
+<li><strong>Layout.</strong> A rectangle of series and shunt arms with a Hammerstad tee at each corner (§4.7). The port line and the series arm are the main arms, the shunt arm the side arm.</li>
+<li><strong>Lengths.</strong> Measured between the tees&#39; reference planes.</li>
+<li><strong>Design.</strong> It starts from the closed form and polishes widths and lengths on return loss and isolation over <code>fbw</code> and an equal split at f₀.</li>
+</ul>
+<p><strong>Not here yet:</strong></p>
+<ul>
+<li>layouts for rat-race, Gysel and the N-way tree;</li>
+<li>multi-branch couplers;</li>
+<li>unequal-split Wilkinsons in microstrip.</li>
+</ul>
 <h2 id="8-export-and-sharing"><a class="anchor" href="#8-export-and-sharing" aria-hidden="true">#</a>8. Export and sharing</h2>
 <p><strong>Touchstone.</strong> Exports the full S-matrix at all sweep points, with frequency in Hz, as RI (real/imaginary), MA (magnitude/angle°) or DB (dB/angle°).</p>
 <div class="table-wrap"><table>
@@ -1343,6 +1392,8 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 .layout hairpin                           # hairpin filter: folded half-wave resonators (§7.7)
 .layout edgecoupled                       # edge-coupled (parallel-coupled) filter (§7.7)
 .layout duplexer                          # duplexer: two filters on a manifold (§7.8)
+.layout wilkinson [pitch=12mm]            # compact Wilkinson divider (§7.9)
+.layout branchline                        # branch-line hybrid (§7.9)
 </code></pre>
 <div class="table-wrap"><table>
 <thead>
@@ -1449,6 +1500,16 @@ The as-built netlist renames each tee&#39;s side node and inserts the feed line 
 <li>The manifold is drawn as two L-shaped branches with chamfered outer corners. The antenna feed goes to the left edge, and both output feeds run to the right edge.</li>
 </ul>
 <p>In the KiCad part the antenna, both outputs and GND form one net tie when the filters are DC shorts (comb-line, interdigital).</p>
+</li>
+<li><p><strong>Wilkinson</strong> (§7.9). Draws the compact Wilkinson that <code>tools/divider.mjs</code> designs:</p>
+<ul>
+<li>The arm sections side by side at the gap s, with their inner edges kept at ±s/2.</li>
+<li>A chip resistor (a separate <code>RES_&lt;pkg&gt;</code> part, references RI1 …) standing across the gap at each section end. The template checks that its pads reach at least 0.3 mm onto both arms.</li>
+<li>The output routes through two mitred bends to <code>pitch</code>.</li>
+</ul>
+<p>The conductor is one piece of copper, so <code>in</code>, <code>o1</code> and <code>o2</code> share a net tie.</p>
+</li>
+<li><p><strong>Branch-line</strong> (§7.9). The rectangle of series and shunt arms with a corner square at each tee, and a 1 mm port stub per corner. The four pads form one net tie.</p>
 </li>
 <li><p><strong>Edge-coupled</strong> (§7.7). The coupled sections form a staircase. The halves of a resonator that differ in width are aligned on the edge facing no other line, so every coupling gap is kept and no open-end corner meets a neighbour. That step is drawn one-sided, while the <code>step</code> model is symmetric. Each port line gets a linear taper to the feed width and a feed to the connector.</p>
 </li>
@@ -1753,6 +1814,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]</code></td>
 <td>Writes the <code>.layout</code> core as a self-contained KiCad 9 library (§8.2), or with <code>--board</code> the whole KiCad project (§8.3).</td>
+</tr>
+<tr>
+<td><code>node tools/divider.mjs SPEC.json|JSON [--substrate ID] [--coupled true|false] [--gap MM] [--pitch MM] [--pkg 0603] [--out FILE.cir]</code></td>
+<td>Power dividers and hybrids (§7.9): the ideal design, or with <code>--substrate</code> the microstrip Wilkinson or branch-line with its layout line.</td>
 </tr>
 <tr>
 <td><code>npm run docs</code></td>

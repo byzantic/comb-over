@@ -59,6 +59,14 @@ jobs:
           node tools/synth.mjs examples/duplexer-2g30-2g53-ro4350b-1524.json --substrate jlc-ro4350b-1.524 --out /tmp/example11.cir
           cmp /tmp/example11.cir examples/duplexer-2g30-2g53-ro4350b-1524.cir || { echo "::error title=example11::synthesis no longer reproduces examples/duplexer-2g30-2g53-ro4350b-1524.cir"; exit 1; }
           node tools/kicad.mjs examples/duplexer-2g30-2g53-ro4350b-1524.cir --out kicad-out/duplexer-2g30-2g53 --board --date 2026-01-01
+          # worked example 12 (#39): compact Wilkinson and branch-line; the syntheses are rerun and must
+          # reproduce the committed netlists
+          node tools/divider.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-ro4350b-1.524 --out /tmp/ex12w.cir
+          node tools/divider.mjs examples/branchline-2g4-ro4350b-1524.json --substrate jlc-ro4350b-1.524 --out /tmp/ex12b.cir
+          cmp /tmp/ex12w.cir examples/wilkinson-2g4-ro4350b-1524.cir && cmp /tmp/ex12b.cir examples/branchline-2g4-ro4350b-1524.cir || { echo "::error title=example12::divider synthesis no longer reproduces the committed netlists"; exit 1; }
+          for f in wilkinson-2g4-ro4350b-1524 branchline-2g4-ro4350b-1524; do
+            node tools/kicad.mjs examples/$f.cir --out kicad-out/$f --board --date 2026-01-01
+          done
           # loading-capacitor footprints (#14), library only
           node tools/kicad.mjs --caps jlc-ro4350b-0.508 --out kicad-out/caps-lib
           # deliberately broken 1: coupled-line gap 0.06 mm, below JLC's 0.1 mm. The gap is inside the

@@ -40,6 +40,18 @@
     "name": "Duplexer 2.30 / 2.53 GHz, two interdigital filters on 1.524 mm RO4350B with layout (Example 11)"
   },
   {
+    "file": "wilkinson-2g4-ro4350b-1524.cir",
+    "name": "Compact Wilkinson 2.4 GHz, arms modelled as coupled, on 1.524 mm RO4350B (Example 12)"
+  },
+  {
+    "file": "wilkinson-2g4-ro4350b-1524-uncoupled.cir",
+    "name": "Compact Wilkinson 2.4 GHz, arms modelled as independent lines (Example 12, comparison)"
+  },
+  {
+    "file": "branchline-2g4-ro4350b-1524.cir",
+    "name": "Branch-line hybrid 2.4 GHz on 1.524 mm RO4350B (Example 12)"
+  },
+  {
     "file": "interdigital-4pole.cir",
     "name": "Interdigital bandpass, 4 resonators"
   },

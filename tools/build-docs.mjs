@@ -29,6 +29,7 @@ const EXAMPLES = [
   ['09-combline-to-gerbers', 'Comb-line: spec to Gerbers'],
   ['10-hairpin-and-edge-coupled', 'Hairpin and edge-coupled'],
   ['11-duplexer', 'Duplexer: spec to Gerbers'],
+  ['12-wilkinson-and-branch-line', 'Wilkinson and branch-line'],
 ];
 const PAGES = [
   { src: 'docs/manual.md', out: 'docs/manual.html', title: 'Manual', kind: 'manual' },

@@ -63,7 +63,8 @@ data twin of every S trace; <code>z=</code> renormalises. Interpolated in magnit
 <pre>.layout coupler K | schiffman CS TREF | marchand S1 S2  [pitch=..] [feed=..] [margin=..] [connector=..] [launch=matched|library]
 .layout comb [cap=smd-0603] [stub=1mm] | interdigital      # tapped resonator arrays from "Realise in microstrip"
 .layout hairpin | edgecoupled                            # hairpin and edge-coupled filters (#38)
-.layout duplexer                                         # two filters on a manifold, from tools/synth.mjs (#40)</pre>
+.layout duplexer                                         # two filters on a manifold, from tools/synth.mjs (#40)
+.layout wilkinson [pitch=12mm] | branchline              # dividers and hybrids, from tools/divider.mjs (#39)</pre>
 <p>Sections must be physical (<code>geom=msl W= S=</code>, <code>T… W=</code>). The layout panel above the plots offers a layout when the topology fits,
 converts impedance-defined sections to microstrip, edits these lines for you and exports KiCad 9 (manual §8).</p>
 
