@@ -20,6 +20,8 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   check('coupler: four MSL ports, one per feed, along x, measurement planes max(3 mm, 2 W) in', P.length === 4 && P.every(p => p.dir === 'x' && p.Lp === 3));
   check('coupler: ports from the strip (start, z = h; openEMS draws the port strip there) to the ground (stop, z = 0), across the feed width', P.every(p => p.start[2] === 0.508 && p.stop[2] === 0 && Math.abs(Math.abs(p.stop[1] - p.start[1]) - 1.073) < 1e-3));
   check('mesh: monotonic; a line on both sides of each coupled-strip edge (the 0.1025 mm gap resolved)', [X, Y, Z].every(a => a.every((v, i) => i === 0 || v > a[i - 1])) && Y.filter(y => y > -0.06 && y < 0.06).length >= 2);
+  { const f = g.info.fine, near = (v) => Y.some(y => Math.abs(y - v) < 1e-5);
+    check('mesh: thirds rule at the gap edges (y = ±0.05125): a line fine/3 inside the metal, one 2·fine/3 into the gap, none on the edge', [1, -1].every(sg => near(sg * (0.05125 + f / 3)) && near(sg * (0.05125 - 2 * f / 3)) && !near(sg * 0.05125))); }
   check('mesh: steps at most λ/20 in the substrate at fmax', [X, Y].every(a => a.every((v, i) => i === 0 || v - a[i - 1] <= g.info.maxStep + 1e-6)));
   const dz = (i) => Z[i + 1] - Z[i], ih = Z.findIndex(z => Math.abs(z - 0.508) < 1e-9);
   check('mesh z: a line on the strip plane, graded from `fine` either side, at most h/4 in the substrate, air to above 9 h', ih > 0 && Math.abs(dz(ih) - g.info.fine) < 1e-6 && Math.abs(dz(ih - 1) - g.info.fine) < 1e-6 && Z.slice(0, ih + 1).every((z, i) => i === 0 || z - Z[i - 1] <= 0.127 + 1e-6) && Z.at(-1) > 9 * 0.508);

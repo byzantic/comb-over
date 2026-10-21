@@ -105,23 +105,29 @@ export function openemsExport(text, opts = {}) {
   const fine = opts.fine ?? Math.max(0.02, Math.min(...widths, ...(minGap.length ? minGap : [Infinity])) / 3);
   const maxStep = C0 / fmax / Math.sqrt(er) / 20 * 1e3;
   const diag = Math.max(fine, Math.min(...widths) / 3);
-  const fixX = [], fixY = [];
-  for (const P of polys) for (let i = 0; i < P.length; i++) {
-    const a = P[i], b = P[(i + 1) % P.length];
-    if (Math.abs(a[0] - b[0]) < 1e-9) fixX.push(a[0] - fine / 2, a[0] + fine / 2);
-    else fixX.push(a[0]);
-    if (Math.abs(a[1] - b[1]) < 1e-9) fixY.push(a[1] - fine / 2, a[1] + fine / 2);
-    else fixY.push(a[1]);
+  const fixX = [], fixY = [], softX = [], softY = [], edgeX = [], edgeY = [];
+  // metal edges by openEMS's thirds rule: a line fine/3 inside the metal and one 2·fine/3 outside, so the
+  // edge sits a third into its cell (a zero-thickness strip's width then converges fast; a symmetric
+  // straddle left εeff ~4 % high at fine = W/60). The polygon's winding says which side is metal.
+  for (const P of polys) for (let i = 0, sa = P.reduce((acc, q, k) => { const r = P[(k + 1) % P.length]; return acc + q[0] * r[1] - r[0] * q[1]; }, 0), o = Math.sign(sa); i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], ex = b[0] - a[0], ey = b[1] - a[1];
+    if (Math.abs(ex) < 1e-9) { const nx = o * Math.sign(ey); fixX.push(a[0] - nx * fine / 3, a[0] + nx * 2 * fine / 3); edgeX.push(a[0]); }   // outward normal (nx, 0)
+    else softX.push(a[0]);
+    if (Math.abs(ey) < 1e-9) { const ny = -o * Math.sign(ex); fixY.push(a[1] - ny * fine / 3, a[1] + ny * 2 * fine / 3); edgeY.push(a[1]); }
+    else softY.push(a[1]);
     // a diagonal edge (45° escapes, mitres): lines along it every third of the narrowest strip, so the
     // staircase follows it
     if (Math.abs(a[0] - b[0]) > 1e-9 && Math.abs(a[1] - b[1]) > 1e-9) {
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.ceil(len / diag);
-      for (let j = 1; j < k; j++) { fixX.push(a[0] + (b[0] - a[0]) * j / k); fixY.push(a[1] + (b[1] - a[1]) * j / k); }
+      for (let j = 1; j < k; j++) { softX.push(a[0] + (b[0] - a[0]) * j / k); softY.push(a[1] + (b[1] - a[1]) * j / k); }
     }
   }
   for (const v of vias) fixX.push(v.x - v.r, v.x + v.r), fixY.push(v.y - v.r, v.y + v.r);
-  for (const p of ports) { fixX.push(p.start[0], p.stop[0]); fixY.push(p.start[1], p.stop[1]); (p.along === 'x' ? fixX : fixY).push(...p.lines); }
-  for (const l of lumped) { fixX.push(l.start[0], l.stop[0]); fixY.push(l.start[1], l.stop[1]); }
+  // ports: their run along the feed; across it the box edges are the strip's (already meshed by the thirds rule)
+  for (const p of ports) { (p.along === 'x' ? fixX : fixY).push(...p.lines, p.along === 'x' ? p.stop[0] : p.stop[1]); }
+  for (const l of lumped) { softX.push(l.start[0], l.stop[0]); softY.push(l.start[1], l.stop[1]); }
+  // vertices, diagonal-edge points and part boxes, unless they would sit on (or crowd) a metal edge
+  fixX.push(...softX.filter(x => !edgeX.some(e => Math.abs(x - e) < fine))); fixY.push(...softY.filter(y => !edgeY.some(e => Math.abs(y - e) < fine)));
   // open sides: PML (8 cells) beyond a margin of 5h (≥ 3 mm), so the absorber stays clear of the fields
   const margin = Math.max(5 * h, 3) + 8 * maxStep;
   const bx = [Math.min(...xs), Math.max(...xs)], by = [Math.min(...ys), Math.max(...ys)];
