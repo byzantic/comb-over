@@ -56,10 +56,11 @@ function smooth(fixed, maxStep, ratio = 1.4, minStep = 0) {
  */
 export function openemsExport(text, opts = {}) {
   const d0 = parseNetlist(text);
-  if (!d0.layout) throw new Error('openEMS export needs a .layout');
+  // opts.layout: a layout object built elsewhere (same shape as buildLayout's: items, parts, substrate, netlist,
+  // errors) — for checking a piece of copper (a bend, a junction) on its own
+  if (!d0.layout && !opts.layout) throw new Error('openEMS export needs a .layout');
   // the layout with plain feeds to the board edge (no edge connectors)
-  const d = { ...d0, layout: { ...d0.layout, opts: { ...(d0.layout.opts ?? {}), connector: 'none' } } };
-  const L = buildLayout(d);
+  const L = opts.layout ?? buildLayout({ ...d0, layout: { ...d0.layout, opts: { ...(d0.layout.opts ?? {}), connector: 'none' } } });
   if (L.errors.length) throw new Error(`openEMS export: the layout breaks design rules (${L.errors[0].msg})`);
   const sub = L.substrate, h = sub.dielectric.h * 1e3, er = sub.dielectric.er, tand = sub.dielectric.tand ?? 0, sigma = sub.copper.sigma ?? 5.8e7, t = sub.copper.t;
   const fmin = opts.fmin ?? d0.freq.start, fmax = opts.fmax ?? d0.freq.stop, fc = (fmin + fmax) / 2;

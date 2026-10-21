@@ -34,9 +34,11 @@ const lin = (a, b, k) => Array.from({ length: k }, (_, i) => a + (b - a) * i / (
 
 // ---------------------------------------------------------------- compact Wilkinson
 // the output route (mm, from the last resistor at x = xe): its inner edge on the arm's inner edge (±s/2,
-// so the gap stays s and the width step goes outwards), out by a, across to the port pitch, out by b
-export function wilkinsonRoute(xe, s, pitch, wf, sgn) {
-  const a = Math.max(2 * wf, 3), b = Math.max(2 * wf, 3), y0 = sgn * (s / 2 + wf / 2);
+// so the gap stays s and the width step goes outwards), out by a, across to the port pitch, out by b.
+// The first leg runs beside the other output: the netlist models it as a coupled pair (#47), which keeps
+// the bends off the resistor pads and apart from each other
+export function wilkinsonRoute(xe, s, pitch, wf, sgn, a = Math.max(2 * wf, 3)) {
+  const b = Math.max(2 * wf, 3), y0 = sgn * (s / 2 + wf / 2);
   return [[xe, y0], [xe + a, y0], [xe + a, sgn * pitch / 2], [xe + a + b, sgn * pitch / 2]];
 }
 
@@ -49,14 +51,19 @@ export function wilkinsonMsNetlist(spec, sub, st, opts = {}) {
   if (opts.layout) L.push(`.layout wilkinson pitch=${fmt(st.pitch, 5)}mm`);
   const tune = (v, lo, hi, u = '') => (opts.tune === false || opts.fixed ? '' : ` tune ${fmt(lo, 5)}${u} ${fmt(hi, 5)}${u}`);
   L.push(`.param s = ${fmt(st.s, 6)}mm   # gap between the arms (the resistor bridges it)`, `.param wf = ${fmt(st.wf, 6)}mm   # port lines (${R0} ohm)`);
+  L.push(`.param lt = ${fmt(st.lt, 6)}mm   # input taper, from wf to the arms' outer width (2 w1 + s)`, `.param lo = ${fmt(st.lo, 6)}mm   # outputs side by side after the last resistor (a coupled pair), to the first bend's corner`);
   for (let k = 0; k < n; k++) {
     L.push(`.param w${k + 1} = ${fmt(st.W[k], 7)}mm${tune(st.W[k], st.W[k] * 0.7, st.W[k] * 1.4, 'mm')}`);
     L.push(`.param l${k + 1} = ${fmt(st.L[k], 7)}mm${tune(st.L[k], st.L[k] * 0.8, st.L[k] * 1.2, 'mm')}`);
     L.push(`.param r${k + 1} = ${fmt(st.R[k], 6)}${tune(st.R[k], st.R[k] * 0.5, st.R[k] * 2)}`);
   }
   L.push(`port in ${R0}`, `port o1 ${R0}`, `port o2 ${R0}`);
+  // the input taper (#47): from the port line to the arms' outer edges, as NT stepped lines, so the junction
+  // is a modelled transformer section rather than a line butted against two arms
+  const NT = 4;
+  for (let i = 0; i < NT; i++) L.push(`Tin_t${i + 1} ${i ? `in_t${i}` : 'in'} ${i < NT - 1 ? `in_t${i + 1}` : 'in_j'} W=wf+(2*w1+s-wf)*${(i + 0.5) / NT} len=lt/${NT}${opts.lossless ? ' Q=1e30' : ''}`);
   for (let k = 0; k < n; k++) {
-    const a = k ? `a${k}` : 'in', b = k ? `b${k}` : 'in';
+    const a = k ? `a${k}` : 'in_j', b = k ? `b${k}` : 'in_j';
     if (coupled) L.push(`cline K${k + 1} geom=msl W=w${k + 1} S=s`, `  len l${k + 1}`, ...(opts.lossless ? ['  Q 1e30'] : []), `  A ${a} ${b}`, `  B a${k + 1} b${k + 1}`, 'end');
     else L.push(`T${k + 1}a ${a} a${k + 1} W=w${k + 1} len=l${k + 1}${opts.lossless ? ' Q=1e30' : ''}`, `T${k + 1}b ${b} b${k + 1} W=w${k + 1} len=l${k + 1}${opts.lossless ? ' Q=1e30' : ''}`);
     L.push(`res R${k + 1} a${k + 1} b${k + 1} R=r${k + 1} pkg=${pkg}${opts.lossless ? '' : ''}`);
@@ -66,8 +73,14 @@ export function wilkinsonMsNetlist(spec, sub, st, opts = {}) {
   for (const [arm, port, sgn] of [['a', 'o1', -1], ['b', 'o2', 1]]) {
     const from = step ? `${arm}${n}s` : `${arm}${n}`;
     if (step) L.push(`step ST${arm} ${arm}${n} ${from} W1=w${n} W2=wf`);
-    const rt = routeOrtho(wilkinsonRoute(xe, st.s, st.pitch, st.wf, sgn), { W: st.wf, mitre: 'opt', sub, name: `O${arm}`, a: from, b: port });
+    const rt = routeOrtho(wilkinsonRoute(xe, st.s, st.pitch, st.wf, sgn, st.lo), { W: st.wf, mitre: 'opt', sub, name: `O${arm}`, a: from, b: port });
     L.push(...rt.lines.map(l => (opts.lossless && /^T/.test(l) ? `${l} Q=1e30` : l)));
+  }
+  // the first legs of the two routes run side by side at the gap s: one coupled pair, not two lines (#47)
+  const ia = L.findIndex(l => /^TOa_1 /.test(l)), ib = L.findIndex(l => /^TOb_1 /.test(l));
+  if (ia >= 0 && ib >= 0) {
+    const [, na1, na2, len] = L[ia].match(/^TOa_1 (\S+) (\S+) W=\S+ len=(\S+)/), [, nb1, nb2] = L[ib].match(/^TOb_1 (\S+) (\S+)/);
+    L.splice(ib, 1); L.splice(ia, 1, `cline KO geom=msl W=wf S=s`, `  len ${len}`, ...(opts.lossless ? ['  Q 1e30'] : []), `  A ${na1} ${nb1}`, `  B ${na2} ${nb2}`, 'end');
   }
   if (opts.goals !== false) {
     const lo = f0 * (1 - st.fbw / 2), hi = f0 * (1 + st.fbw / 2);
@@ -79,7 +92,8 @@ export function wilkinsonMsNetlist(spec, sub, st, opts = {}) {
 
 /**
  * spec: { f0, R0, sections (1–3), fbw }; opts: { substrate, coupled (default true), gap (mm), pitch (mm,
- * default 12: the SMA courtyard), pkg ('0603') }. Returns { netlist, report, warnings, state, assess }.
+ * default 20: room for two well-separated bends each side), pkg ('0603'), taper (mm, input taper; default wf), outRun (mm,
+ * the coupled output run to the first bend; default max(2 wf, 3)) }. Returns { netlist, report, warnings, state, assess }.
  */
 export function realiseWilkinson(spec0, opts = {}) {
   const spec = { R0: 50, sections: 1, fbw: 0.2, ...spec0 };
@@ -95,7 +109,7 @@ export function realiseWilkinson(spec0, opts = {}) {
   // at least 0.3 mm: (W + s)/2 − W/2 ≤ x + l/2 − 0.3 → s ≤ 2x + l − 0.6
   const sMax = 2 * P.pads.x + P.pads.l - 0.6, s = opts.gap ?? Math.max(minS, Math.min(1.0, sMax));
   if (s > sMax + 1e-9) throw new Error(`wilkinson: a ${s} mm gap is wider than the ${pkg} resistor can bridge (≤ ${fmt(sMax, 3)} mm)`);
-  const st = { coupled, pkg, s, wf, pitch: opts.pitch ?? 12, fbw: spec.fbw, W: [], L: [], R: [...ideal.R] };
+  const st = { coupled, pkg, s, wf, lt: opts.taper ?? wf, lo: opts.outRun ?? Math.max(2 * wf, 3), pitch: opts.pitch ?? 20, fbw: spec.fbw, W: [], L: [], R: [...ideal.R] };
   for (const Z of ideal.Z) {
     let W;
     if (coupled) { let lo = 0.05, hi = 20; for (let i = 0; i < 60; i++) { const m = Math.sqrt(lo * hi), c = mscoupled({ W: m / 1e3, S: s / 1e3, h, t, er, f: f0 }); if (c.Ze > Z) lo = m; else hi = m; } W = Math.sqrt(lo * hi); }
@@ -122,7 +136,8 @@ export function realiseWilkinson(spec0, opts = {}) {
     `substrate ${sub.id}; arms ${coupled ? 'as coupled pairs (Kirschning–Jansen)' : 'as independent lines'} at a ${fmt(s, 3)} mm gap; ${pkg} resistors bridging it`,
     `sections: ${st.W.map((w, k) => `W ${fmt(w, 4)} mm, ${fmt(st.L[k], 4)} mm, R ${fmt(st.R[k], 4)} Ω`).join('; ')}; outputs at a ${fmt(st.pitch, 3)} mm pitch through two mitred bends each`,
     `lossless, ${fmt(lo / 1e9, 4)}–${fmt(hi / 1e9, 4)} GHz: return loss ≥ ${fmt(a.rl[0], 3)} dB (input), ≥ ${fmt(a.rl[1], 3)} dB (outputs); isolation ≥ ${fmt(a.iso, 3)} dB; split ${fmt(a.split[0], 4)} … ${fmt(a.split[1], 4)} dB`,
-    'not modelled: the junction where the input line meets both arms; the resistor body over the gap (its pads, ESL and body capacitance are)',
+    `input: a ${fmt(st.lt, 3)} mm linear taper from the port line to the arms' outer edges (as ${4} stepped lines); outputs side by side for ${fmt(st.lo, 3)} mm after the resistor (modelled as a coupled pair), then two mitred bends to the ${fmt(st.pitch, 3)} mm pitch`,
+    'not modelled: where the gap between the arms begins at the taper; the resistor body over the gap (its pads, ESL and body capacitance are)',
   ];
   if (a.iso < 20) warnings.push(`isolation only ${fmt(a.iso, 3)} dB over the band`);
   return { netlist: text({ layout: true }), report: st.report, warnings, log, state: st, assess: a, spec, sub };

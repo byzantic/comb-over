@@ -851,7 +851,7 @@ function wilkinsonT(d, _, o) {
   if (!(s > 0)) throw new Error('.layout wilkinson: the arm gap (.param s) is missing');
   const res = (d.resistors ?? []).filter(r => /^R\d+$/.test(r.name));
   if (res.length !== n) throw new Error(`.layout wilkinson: needs one resistor per section (R1…R${n})`);
-  const wfPar = d.params.find(x => x.name === 'wf'), wf = wfPar.value * 1e3;
+  const wfPar = d.params.find(x => x.name === 'wf'), wf = wfPar.value * 1e3, lt = (d.params.find(x => x.name === 'lt')?.value ?? 0) * 1e3;
   const sub = d.substrate, fenceRoom = Math.max(3 * sub.dielectric.h * 1e3, 1) + 2, given = d.layout.opts ?? {};
   // the input stub must outlast the feed track's round end cap (radius wf/2), or the cap reaches the arms
   const feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom), stub = Math.max(1, wf / 2 + 0.3);
@@ -878,23 +878,24 @@ function wilkinsonT(d, _, o) {
   const xe = xs[n];
   const routes = {};
   for (const [port, sgn] of [['o1', -1], ['o2', 1]]) {
-    const path = wilkinsonRoute(xe, s, pitch, wf, sgn);
+    const loPar = d.params.find(x => x.name === 'lo'), path = wilkinsonRoute(xe, s, pitch, wf, sgn, loPar ? loPar.value * 1e3 : undefined);
     const rt = routeOrtho(path, { W: wf, mitre: 'opt', sub });
     items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: rt.poly, width: wf, label: `route ${port}`, role: 'core' });
     polys[port].push(rt.poly); routes[port] = path.at(-1);
   }
   if (pitch / 2 - s / 2 - wf / 2 < wf) throw new Error(`.layout wilkinson: pitch ${pitch} mm leaves no room for the output bends`);
-  // input stub (part of the core) and feeds
-  const inPoly = rect(-stub, -wf / 2, 0, wf / 2);
+  // input stub (part of the core), then the taper (lt, #47) out to the arms' outer edges, and the feeds
+  const wo = s / 2 + W[0], x0 = -lt - stub;
+  const inPoly = lt > 0 ? [[x0, -wf / 2], [-lt, -wf / 2], [0, -wo], [0, wo], [-lt, wf / 2], [x0, wf / 2]] : rect(-stub, -wf / 2, 0, wf / 2);
   items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: inPoly, width: wf, label: 'input', role: 'core' });
-  const xL = -stub - feedLen, xR = routes.o1[0] + feedLen;
+  const xL = x0 - feedLen, xR = routes.o1[0] + feedLen;
   const feed = (node, x0, x1, y, dir) => {
     items.push({ type: 'poly', layer: 'F.Cu', net: NET, pts: rect(Math.min(x0, x1), y - wf / 2, Math.max(x0, x1), y + wf / 2), width: wf, label: `feed ${node}`, role: 'feed', node, path: [[x1, y], [x0, y]] });
     items.push({ type: 'port', name: node, net: NET, x: x1, y, dir, width: wf, z0: portOf(d, node).z });
     core.refs.push(refOf(d, node, [x0, y], dir, wf, wf));
   };
-  feed('in', -stub, xL, 0, [-1, 0]); feed('o1', routes.o1[0], xR, routes.o1[1], [1, 0]); feed('o2', routes.o2[0], xR, routes.o2[1], [1, 0]);
-  core.pads.push({ num: portNum(d, 'in'), node: 'in', polys: [inPoly], at: [-stub + 0.05, 0] });
+  feed('in', x0, xL, 0, [-1, 0]); feed('o1', routes.o1[0], xR, routes.o1[1], [1, 0]); feed('o2', routes.o2[0], xR, routes.o2[1], [1, 0]);
+  core.pads.push({ num: portNum(d, 'in'), node: 'in', polys: [inPoly], at: [x0 + 0.05, 0] });
   core.pads.push({ num: portNum(d, 'o1'), node: 'o1', polys: polys.o1, at: [routes.o1[0] - 0.05, routes.o1[1]] });
   core.pads.push({ num: portNum(d, 'o2'), node: 'o2', polys: polys.o2, at: [routes.o2[0] - 0.05, routes.o2[1]] });
   core.ties.push(['in', 'o1', 'o2'].map(x => portNum(d, x)));
@@ -921,7 +922,7 @@ function wilkinsonT(d, _, o) {
     return lines.join('\n') + '\n';
   };
   core.netlist = transform(false);
-  notes.push(`${n} section${n > 1 ? 's' : ''}; arms ${coupled ? 'modelled as coupled pairs' : 'modelled as independent lines (their coupling across the gap is NOT in the model)'}; ${n} ${res[0].pkg ?? '0603'} resistor${n > 1 ? 's' : ''} across the gap`, 'the input line meets both arms at x = 0: that junction is not modelled');
+  notes.push(`${n} section${n > 1 ? 's' : ''}; arms ${coupled ? 'modelled as coupled pairs' : 'modelled as independent lines (their coupling across the gap is NOT in the model)'}; ${n} ${res[0].pkg ?? '0603'} resistor${n > 1 ? 's' : ''} across the gap`, lt > 0 ? `the input line tapers out to the arms' outer edges over ${r4(lt)} mm (modelled as stepped lines); where the gap begins is not modelled` : 'the input line meets both arms at x = 0: that junction is not modelled');
   return { outline, items, dims, netlist: transform(true), core, notes, parts, fence: true };
 }
 
