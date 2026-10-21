@@ -2,7 +2,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node tests/run.mjs && node tests/synth.mjs && node tests/substrates.mjs && node tests/microstrip.mjs && node tests/geometry.mjs && node tests/layout.mjs && node tests/kicad.mjs && node tests/discontinuities.mjs && node tests/routing.mjs && node tests/resistors.mjs && node tests/netlist-edit.mjs && node tests/capacitors.mjs && node tests/touchstone.mjs && node tests/solver.mjs && node tests/fieldlines.mjs && node tests/synth-geom.mjs && node tests/tee.mjs && node tests/filter-layout.mjs && node tests/hairpin.mjs && node tests/duplexer.mjs && node tests/dividers.mjs && node tools/build-docs.mjs --check",
+    "test": "node tests/run.mjs && node tests/synth.mjs && node tests/substrates.mjs && node tests/microstrip.mjs && node tests/geometry.mjs && node tests/layout.mjs && node tests/kicad.mjs && node tests/discontinuities.mjs && node tests/routing.mjs && node tests/resistors.mjs && node tests/netlist-edit.mjs && node tests/capacitors.mjs && node tests/touchstone.mjs && node tests/solver.mjs && node tests/fieldlines.mjs && node tests/synth-geom.mjs && node tests/tee.mjs && node tests/filter-layout.mjs && node tests/hairpin.mjs && node tests/duplexer.mjs && node tests/dividers.mjs && node tests/openems.mjs && node tools/build-docs.mjs --check",
     "docs": "node tools/build-docs.mjs"
   },
   "devDependencies": {
