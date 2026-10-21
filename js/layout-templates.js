@@ -718,11 +718,126 @@ function edgecoupled(d, _, o) {
   return { outline, items, dims, netlist: transform(true), core, notes, fence: true };
 }
 
+// ---------------------------------------------------------------- duplexer (#40)
+// Two filters (comb-line, interdigital or hairpin, merged with the suffixes _A/_B by js/duplexer.js) and
+// the manifold: the antenna on the side arm of a tee, a vertical branch up to filter A and down to filter
+// B, each ending in a mitred bend and a horizontal run to the filter's input tap. The filters come from
+// the resonator-array template (their input feeds dropped), translated so that their input taps sit at
+// the ends of the branches; their output feeds run to the right-hand edge.
+function duplexer(d, _, o) {
+  const tee = (d.blocks ?? []).find(b => b.type === 'tee' && b.nodes[2] === 'ant');
+  if (!tee) throw new Error('.layout duplexer: needs the manifold tee with the antenna port "ant" on its side arm');
+  const val = (name) => { const e = d.sections.find(sc => sc.name === name); if (!e) throw new Error(`.layout duplexer: manifold line ${name} is missing`); return mm(e.len); };
+  const vA = val('TMa_v'), vB = val('TMb_v'), hRun = val('TMa_h'), wf = mm(tee.geo.W2);
+  const bendM = (d.blocks.find(b => b.name === 'BMa')?.geo.M) ?? 0;
+  const R0 = portOf(d, 'ant').z;
+  const sub = d.substrate, fenceRoom = Math.max(3 * sub.dielectric.h * 1e3, 1) + 2, given = d.layout.opts ?? {};
+  const feedLen = given.feed ?? Math.max(o.feed ?? 5, fenceRoom), margin = given.margin ?? Math.max(o.margin ?? 4, fenceRoom), stub = o.stub ?? 1;
+  const tagged = (name, X) => name.endsWith(`_${X}`);
+  const items = [], notes = [], dims = [];
+  const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
+  const G = String(d.ports.length + 1);
+  let nextNum = +G;
+  const tieUnion = new Set();
+  const outFeeds = [], parts = [];
+  for (const [X, input, sgn, v] of [['A', 'ta_in', -1, vA], ['B', 'tb_in', 1, vB]]) {
+    const outPort = d.ports.find(p => p.node !== 'ant' && tagged(p.node, X));
+    const pd = { ...d, sections: d.sections.filter(sc => tagged(sc.name, X)), blocks: (d.blocks ?? []).filter(b => tagged(b.name, X)), elements: d.elements.filter(e => tagged(e.name, X)), caps: (d.caps ?? []).filter(c => tagged(c.name, X)), ports: [{ node: input, z: R0 }, outPort], layout: { type: 'duplexer', sections: [], opts: given } };
+    const kinds = pd.blocks.some(b => b.type === 'bend') ? ['hairpin'] : ['comb', 'interdigital'];
+    let F = null, err;
+    for (const k of kinds) { try { F = resonatorArray(pd, k, { ...o, stub, feed: feedLen, margin }); break; } catch (e) { err = e; } }
+    if (!F) throw new Error(`.layout duplexer: filter ${X}: ${err.message}`);
+    // placement: the input tap's stub end, minus the stub, is the resonator edge; it goes to x = wf/2 + h,
+    // at the height of the branch's horizontal run
+    const inFeed = F.items.find(i => i.role === 'feed' && i.node === input), P = inFeed.path[1];
+    // mirror the filter top to bottom when that puts less of its copper between the two taps (A on top:
+    // little copper below its tap; B below: little above it)
+    const ys = F.items.filter(i => i.pts && i.type !== 'zone' && i.role !== 'feed').flatMap(i => i.pts.map(q => q[1]));
+    const above = P[1] - Math.min(...ys), below = Math.max(...ys) - P[1], flip = sgn < 0 ? below > above : above > below;
+    const xe = P[0] + stub, yRun = sgn * (v + wf);
+    const dx = wf / 2 + hRun - xe, dy = yRun - P[1];
+    const tr = flip ? ([x, y]) => [x + dx, 2 * P[1] - y + dy] : ([x, y]) => [x + dx, y + dy];
+    if (flip) notes.push(`filter ${X} mirrored top to bottom, so its tap faces the manifold`);
+    for (const it of F.items) {
+      if (it.type === 'zone') continue;
+      if ((it.role === 'feed' && it.node === input) || (it.type === 'port' && it.name === input)) continue;
+      const c = { ...it };
+      if (c.pts) c.pts = c.pts.map(tr);
+      if (c.path) c.path = c.path.map(tr);
+      if (c.x != null) [c.x, c.y] = tr([c.x, c.y]);
+      items.push(c);
+      if (c.role === 'feed') outFeeds.push(c);
+    }
+    // pads: input → the antenna net, output → its port, ground shared, the rest renumbered and tagged
+    const map = {};
+    for (const pad of F.core.pads) {
+      if (!(pad.num in map)) map[pad.num] = pad.node === input ? portNum(d, 'ant') : pad.node === outPort.node ? portNum(d, outPort.node) : pad.num === String(3) && pad.node === 'GND' ? G : String(++nextNum);
+      core.pads.push({ num: map[pad.num], node: pad.node === input ? 'ant' : pad.node === 'GND' || pad.node === outPort.node ? pad.node : `${pad.node}_${X}`, polys: pad.polys.map(pl => pl.map(tr)), at: tr(pad.at) });
+    }
+    for (const vi of F.core.vias) { const [x, y] = tr([vi.x, vi.y]); core.vias.push({ ...vi, num: G, x, y }); }
+    for (const t of F.core.ties) t.forEach(n => tieUnion.add(map[n] ?? n));
+    for (const r of F.core.refs) if (r.node !== input) core.refs.push({ ...r, num: portNum(d, r.node), at: tr(r.at) });
+    for (const pt of F.parts ?? []) parts.push({ ...pt, at: tr(pt.at), bbox: pt.bbox.map(tr), dir: flip ? [pt.dir[0], -pt.dir[1]] : pt.dir, node: pt.node === input ? 'ant' : pt.node === 'GND' || pt.node === outPort.node ? pt.node : `${pt.node}_${X}` });
+    notes.push(...F.notes.filter(n => !/^taps:|via lands/.test(n)).map(n => `filter ${X}: ${n}`));
+  }
+  if (tieUnion.size) { tieUnion.add(portNum(d, 'ant')); core.ties.push([...tieUnion]); }
+  // manifold: two L-shaped branches, the outer corner chamfered at the bend's optimum mitre (c = 2MW)
+  const c = 2 * bendM * wf;
+  const branch = (sgn, v) => {
+    const yo = sgn * (v + wf + wf / 2), yi = sgn * (v + wf - wf / 2), xr = wf / 2 + hRun - stub, xl = -wf / 2;
+    const pts = [[xl, -sgn * wf / 2], [xl, yo - sgn * c], [xl + c, yo], [xr, yo], [xr, yi], [wf / 2, yi], [wf / 2, -sgn * wf / 2]];
+    return pts.map(([x, y]) => [+x.toFixed(6), +y.toFixed(6)]);
+  };
+  const man = [branch(-1, vA), branch(1, vB)];
+  // preview nets as the resonator-array template: the filters are DC shorts, so all copper is GND there
+  // (the KiCad part keeps the antenna net through its pad numbers)
+  man.forEach((pts, k) => items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts, width: wf, label: `manifold branch ${'AB'[k]}`, role: 'core' }));
+  core.pads.push({ num: portNum(d, 'ant'), node: 'ant', polys: man, at: [-wf / 2 + 0.05, 0] });
+  // antenna feed to the left edge; outputs to the right edge
+  const allX = items.filter(i => i.pts).flatMap(i => i.pts.map(q => q[0]));
+  const xL = -wf / 2 - feedLen, xR = Math.max(...outFeeds.map(f => f.path[0][0]));
+  items.push({ type: 'poly', layer: 'F.Cu', net: 'GND', pts: rect(xL, -wf / 2, -wf / 2, wf / 2), width: wf, label: 'feed ant', role: 'feed', node: 'ant', path: [[xL, 0], [-wf / 2, 0]] });
+  items.push({ type: 'port', name: 'ant', net: 'GND', x: xL, y: 0, dir: [-1, 0], width: wf, z0: R0 });
+  core.refs.push(refOf(d, 'ant', [-wf / 2, 0], [-1, 0], wf, wf));
+  const extra = {};
+  for (const f of outFeeds) {
+    const [e0, e1] = f.path, add = xR - e0[0];
+    extra[f.node] = add;
+    if (add > 1e-9) {
+      f.path = [[xR, e0[1]], e1]; f.pts = rect(Math.min(e1[0], xR), e0[1] - f.width / 2, Math.max(e1[0], xR), e0[1] + f.width / 2);
+      const port = items.find(i => i.type === 'port' && i.name === f.node); port.x = xR;
+    }
+  }
+  const allPts = items.filter(i => i.pts).flatMap(i => i.pts).concat(items.filter(i => i.type === 'via').map(v => [v.x, v.y]));
+  const ymin = Math.min(...allPts.map(q => q[1])) - margin, ymax = Math.max(...allPts.map(q => q[1])) + margin;
+  const outline = rect(xL, ymin, xR, ymax);
+  items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
+  // netlists: the source with the port feeds (as built) or the output stubs only (core)
+  const transform = (asBuilt) => {
+    const lines = d.text.split(/\r?\n/).filter(l => !/^\s*\.layout\b/i.test(l));
+    const portTees = d.blocks.filter(b => b.type === 'tee' && d.ports.some(p => p.node === b.nodes[2]));
+    for (const t of portTees) {
+      const pn = t.nodes[2], ti = lines.findIndex(l => new RegExp(`^\\s*tee\\s+${t.name}\\b`, 'i').test(l));
+      const len = pn === 'ant' ? (asBuilt ? feedLen : 0) : (asBuilt ? stub + feedLen + (extra[pn] ?? 0) : stub);
+      if (!(len > 0)) continue;
+      lines[ti] = lines[ti].replace(new RegExp(`(\\s)${pn}(\\s)`), `$1${pn}_k$2`);
+      lines.splice(ti + 1, 0, `T${pn}_f ${pn} ${pn}_k W=${r4(wf)}mm len=${r4(len)}mm`);
+    }
+    const ti = lines.findIndex(l => /^\s*\.title\b/i.test(l));
+    if (ti >= 0) lines[ti] = lines[ti].replace(/^\s*\.title\s+/i, asBuilt ? '.title as built: ' : '.title core (between the part reference planes): ');
+    return lines.join('\n') + '\n';
+  };
+  core.netlist = transform(false);
+  notes.unshift(`manifold: ${r4(wf)} mm lines, branches ${r4(vA + hRun + wf / 2)} / ${r4(vB + hRun + wf / 2)} mm from the junction with one mitred bend each; the filters' input taps sit at their ends`);
+  dims.push({ a: [xL, ymin + margin / 2], b: [xR, ymin + margin / 2], text: `${r4(xR - xL)} mm` });
+  return { outline, items, dims, netlist: transform(true), core, notes, parts, fence: true };
+}
+
 const comb = (d, _, o) => resonatorArray(d, 'comb', o);
 const interdigital = (d, _, o) => resonatorArray(d, 'interdigital', o);
 const hairpin = (d, _, o) => resonatorArray(d, 'hairpin', o);
 
-const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital, hairpin, edgecoupled };
+const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital, hairpin, edgecoupled, duplexer };
 export const templateNames = Object.keys(TEMPLATES);
 
 // Build the layout for a parsed netlist with a .layout statement. Returns the layout with DRC results.

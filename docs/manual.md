@@ -719,6 +719,35 @@ A 5-pole hairpin takes 1.5–2 minutes, most of it field solves of the 10-strip 
 - width steps under 1.5:1;
 - the one-sided drawing of the edge-coupled steps (the model's step is symmetric).
 
+### 7.8 Duplexers
+
+A duplexer (diplexer) joins two bandpass filters at a common antenna port. `node tools/synth.mjs SPEC.json --substrate ID` designs one when the specification has `"bands": [{ "f0", "fbw" }, { "f0", "fbw" }]` (band A the lower) and `"isolation"` in dB. The filters are comb-line, interdigital or hairpin (`structure`), with the other fields as for a single filter. [Worked example 11](examples/11-duplexer.md) goes from specification to Gerbers.
+
+```
+ant ── tee (side arm) ──┬── vertical vA ── bend ── h ── filter A ── port A
+                        └── vertical vB ── bend ── h ── filter B ── port B
+```
+
+1. **The filters**, each synthesised on its own (§7.6, §7.7), are merged into one netlist by `tagNetlist` (`js/duplexer.js`):
+   - Every node, parameter and element name gets the suffix `_A` or `_B`, and the parameters lose their tune ranges.
+   - Each section keeps its own f0, because degree lengths and microstrip dispersion are evaluated at a section's `f0` (§4.2). A tagged filter in a netlist with another `.ref` gives exactly the original response, which the tests check.
+   - Headers, goals and plots are dropped, and the input port becomes the manifold node.
+2. **The manifold.** The antenna is on the tee's side arm, and the main arms run to the two filters. The line to filter X must make X look like an open circuit in the other band, so that it does not load the other filter there. With Γ<sub>X</sub> the reflection at X's input at the other band's centre, the branch is θ<sub>X</sub> = arg Γ<sub>X</sub>/2 + k·180°. k is chosen so that the filters, stacked one above the other, keep max(5h, 4 mm) between their copper.
+3. **The polish.** The two vertical runs are polished on the joint goals: antenna return loss 1 dB below the filters' over the central 80 % of each band, and isolation between the filter ports over each ripple band.
+
+The **isolation budget** in the report shows, for each band:
+- the isolation between the filter ports;
+- the antenna return loss;
+- the insertion loss;
+- the leakage to the other port;
+- what the other filter alone rejects there.
+
+When the isolation is short of the specification, the budget says whether the other filter's rejection limits it (raise n or move the bands apart) or the manifold does.
+
+**Not modelled:**
+- coupling between the two filters, and between the manifold and the filters, through the layout. This is why the gap between them is generous. An EM check (#16) is the way to know.
+- the filters themselves are as their own synthesis left them: the polish moves only the manifold.
+
 ## 8. Export and sharing
 
 **Touchstone.** Exports the full S-matrix at all sweep points, with frequency in Hz, as RI (real/imaginary), MA (magnitude/angle°) or DB (dB/angle°).
@@ -768,6 +797,7 @@ Hovering a copper shape in the preview shows its net and width.
 .layout interdigital                      # interdigital resonator array
 .layout hairpin                           # hairpin filter: folded half-wave resonators (§7.7)
 .layout edgecoupled                       # edge-coupled (parallel-coupled) filter (§7.7)
+.layout duplexer                          # duplexer: two filters on a manifold (§7.8)
 ```
 
 | option | default | meaning |
@@ -806,6 +836,13 @@ Hovering a copper shape in the preview shows its net and width.
     - consecutive hairpins are flipped.
   - Each U bottom is drawn as one strip under both arms, its outer corners chamfered by 2MW along each edge (the Douville–James optimum M, §4.7). Where M > 0.5 the chamfer reaches past the corner square, and the arm's outer end corner gets the matching cut. The taps are as for comb-line.
   - Every hairpin is a separate conductor. The tapped ones carry the port nets, the others nets of their own (`h2`, …), so the part needs no net tie and no vias.
+- **Duplexer** (§7.8). The two filters are laid out by the resonator-array template from their parts of the merged netlist:
+  - Their input feeds are dropped.
+  - A filter is mirrored top to bottom when that puts less of its copper between the two taps.
+  - The filters are placed so that their input taps meet the ends of the manifold branches.
+  - The manifold is drawn as two L-shaped branches with chamfered outer corners. The antenna feed goes to the left edge, and both output feeds run to the right edge.
+
+  In the KiCad part the antenna, both outputs and GND form one net tie when the filters are DC shorts (comb-line, interdigital).
 - **Edge-coupled** (§7.7). The coupled sections form a staircase. The halves of a resonator that differ in width are aligned on the edge facing no other line, so every coupling gap is kept and no open-end corner meets a neighbour. That step is drawn one-sided, while the `step` model is symmetric. Each port line gets a linear taper to the feed width and a feed to the connector.
 
 **Checks.** The layout is checked against the substrate's fabrication limits:

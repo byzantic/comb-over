@@ -505,6 +505,11 @@ export function realise(r, opts = {}) {
   const dl = parseNetlist(buildNetlist(r, st, sub, via, { bare: true, freq: `${T.f0} ${T.f0} 1` }));
   const s21 = solveNet(dl).S(2, 1), il0 = -20 * Math.log10(Math.hypot(s21.re[0], s21.im[0]));
   const Qs = dl.sections[0].Qm;
+  // a tap that could not reach the external Q in the refinement is only worth a warning if the goal
+  // polish could not make up for it; otherwise it is a note in the report
+  const tapNote = [];
+  const met = r.spec.type !== 'chebyshev' || goalReport(r, st, sub, via).every(g => g.maxViolation <= 1);
+  for (let i = warnings.length - 1; i >= 0; i--) if (met && /^the tap reaches Qe/.test(warnings[i])) tapNote.push(...warnings.splice(i, 1).map(w => `${w} in the refinement (the junction cannot move nearer the shorted end); the goal polish made up for it`));
   if (r.spec.type === 'chebyshev') {
     const miss = goalReport(r, st, sub, via).filter(g => g.maxViolation > 1);   // tolerance: 1 dB on the ideal return loss
     if (miss.length) warnings.push(`the geometry misses its goals by more than 1 dB (lossless): ${miss.map(g => `${g.goal.src} ${g.goal.op} ${g.goal.value} by up to ${fmt(g.maxViolation, 3)} dB`).join('; ')}; the non-adjacent couplings could not be fully compensated: try another θ0 or Zr, or run the optimiser`);
@@ -517,6 +522,7 @@ export function realise(r, opts = {}) {
     `realised (lossless): centre ${fmt(a.fc / 1e9, 6)} GHz, −3 dB FBW ${fmt(a.bw3 * 100, 4)} % (ideal ${fmt(a.bw3ideal * 100, 4)} %), worst return loss over the central 80 % of the ripple band ${fmt(a.rlCore, 4)} dB${isFinite(a.rlTarget) ? ` (ideal ${fmt(a.rlTarget, 4)} dB)` : ''}`,
     `insertion loss at f0 ${fmt(il0, 3)} dB with the substrate's conductor and dielectric loss (modal Q ${Qs.map(q => fmt(q, 3)).join(', ')})${st.cap?.type === 'smd' ? `, and the capacitors' Q (${SMD_DEFAULT_Q}, the default for C0G parts)` : st.cap?.type === 'trimmer' ? `, and the trimmers' Q (${TRIMMER_DEFAULTS.Q})` : ''}`,
     'tap junctions: Hammerstad tee (as Qucs); the board layout (.layout) adds the feed lines and edge connectors',
+    ...tapNote,
   ];
   // the capacitor model's own notes (from the parser): self-resonance summarised, the rest as given
   const capW = dl.warnings.map(w => w.replace(/^line \d+: /, '')).filter(w => /^C\d+: /.test(w));
