@@ -18,7 +18,7 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   const g = openemsExport(ex('coupler-10dB-ro4350b.cir'));
   const P = val(g.script, 'PORTS'), X = val(g.script, 'X'), Y = val(g.script, 'Y'), Z = val(g.script, 'Z');
   check('coupler: four MSL ports, one per feed, along x, measurement planes max(3 mm, 2 W) in', P.length === 4 && P.every(p => p.dir === 'x' && p.Lp === 3));
-  check('coupler: ports from the ground (z = 0) to the strip (z = h), across the feed width', P.every(p => p.start[2] === 0 && p.stop[2] === 0.508 && Math.abs(Math.abs(p.stop[1] - p.start[1]) - 1.073) < 1e-3));
+  check('coupler: ports from the strip (start, z = h; openEMS draws the port strip there) to the ground (stop, z = 0), across the feed width', P.every(p => p.start[2] === 0.508 && p.stop[2] === 0 && Math.abs(Math.abs(p.stop[1] - p.start[1]) - 1.073) < 1e-3));
   check('mesh: monotonic; a line on both sides of each coupled-strip edge (the 0.1025 mm gap resolved)', [X, Y, Z].every(a => a.every((v, i) => i === 0 || v > a[i - 1])) && Y.filter(y => y > -0.06 && y < 0.06).length >= 2);
   check('mesh: steps at most λ/20 in the substrate at fmax', [X, Y].every(a => a.every((v, i) => i === 0 || v - a[i - 1] <= g.info.maxStep + 1e-6)));
   check('mesh: four cells through the substrate, then graded air', Z.filter(z => z <= 0.508 + 1e-9).length === 5 && Z.at(-1) > 9 * 0.508);

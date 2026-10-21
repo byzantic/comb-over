@@ -78,7 +78,7 @@ export function openemsExport(text, opts = {}) {
     const Lp = opts.Lp ?? Math.min(len - 0.5, Math.max(3, 2 * w));
     if (len < Lp + 0.5) throw new Error(`openEMS export: the feed at ${p.node} is ${r6(len)} mm, too short for a ${Lp} mm port (give the layout a longer feed=)`);
     const along = Math.abs(ux) > 0 ? 'x' : 'y', end = [e[0] + ux * Lp, e[1] + uy * Lp];
-    const start = along === 'x' ? [e[0], e[1] - w / 2, 0] : [e[0] - w / 2, e[1], 0], stop = along === 'x' ? [end[0], e[1] + w / 2, h] : [e[0] + w / 2, end[1], h];
+    const start = along === 'x' ? [e[0], e[1] - w / 2, h] : [e[0] - w / 2, e[1], h], stop = along === 'x' ? [end[0], e[1] + w / 2, 0] : [e[0] + w / 2, end[1], 0];
     return { n: k + 1, node: p.node, z: p.z, along, start, stop, Lp, w };
   });
   // lumped parts: R / C between the two pads
@@ -167,7 +167,11 @@ FINE = ${r6(fine)}
 
 def model(exc):
     fdtd = openEMS(NrTS=${opts.nrts ?? 300000}, EndCriteria=${opts.endCriteria ?? 1e-4})
-    fdtd.SetGaussExcite((f_min + f_max) / 2, (f_max - f_min) / 2)
+    # openEMS's Gaussian pulse (same envelope and delay) less its DC: a soft source with net charge leaves it
+    # trapped in the substrate and the energy never decays to the end criterion
+    f0, fc = (f_min + f_max) / 2, (f_max - f_min) / 2
+    a = 2 * np.pi * fc / 3; t0 = 3 / a; k = np.exp(-(1.5 * f0 / fc) ** 2)
+    fdtd.SetCustomExcite('(cos(2*pi*%.17g*(t-%.17g))-%.17g)*exp(-(((t-%.17g)*%.17g)^2))' % (f0, t0, k, t0, a), f_max, f_max)  # openEMS samples the probes at the Nyquist rate of its 2nd argument
     fdtd.SetBoundaryCond(${J(bc)})
     csx = ContinuousStructure()
     fdtd.SetCSX(csx)
