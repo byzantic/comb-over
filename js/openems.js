@@ -56,10 +56,25 @@ function smooth(fixed, maxStep, ratio = 1.4, minStep = 0) {
  */
 export function openemsExport(text, opts = {}) {
   const d0 = parseNetlist(text);
-  if (!d0.layout) throw new Error('openEMS export needs a .layout');
+  // opts.layout: a layout object built elsewhere (same shape as buildLayout's: items, parts, substrate, netlist,
+  // errors) — for checking a piece of copper (a bend, a junction) on its own
+  if (!d0.layout && !opts.layout) throw new Error('openEMS export needs a .layout');
   // the layout with plain feeds to the board edge (no edge connectors)
-  const d = { ...d0, layout: { ...d0.layout, opts: { ...(d0.layout.opts ?? {}), connector: 'none' } } };
-  const L = buildLayout(d);
+  const build = (extra = {}) => buildLayout({ ...d0, layout: { ...d0.layout, opts: { ...(d0.layout.opts ?? {}), connector: 'none', ...extra } } });
+  let L = opts.layout ?? build();
+  // each port needs its measurement plane (Lp) plus a clear stretch of 3h of straight feed beyond it, or it
+  // measures inside the core's near field: lengthen every feed (for the simulation only) when one is short
+  if (!opts.layout && !opts.Lp) {
+    const hh = L.substrate.dielectric.h * 1e3, short = L.items.filter(i => i.role === 'feed').map(f => {
+      const [e, q] = f.path, len = Math.hypot(q[0] - e[0], q[1] - e[1]);
+      return Math.max(3, 2 * f.width) + 3 * hh - len;
+    });
+    const need = Math.max(0, ...short);
+    if (need > 1e-6) {
+      const lens = L.items.filter(i => i.role === 'feed').map(f => Math.hypot(f.path[1][0] - f.path[0][0], f.path[1][1] - f.path[0][1]));
+      L = build({ feed: Math.ceil((Math.min(...lens) + need) * 2) / 2 });
+    }
+  }
   if (L.errors.length) throw new Error(`openEMS export: the layout breaks design rules (${L.errors[0].msg})`);
   const sub = L.substrate, h = sub.dielectric.h * 1e3, er = sub.dielectric.er, tand = sub.dielectric.tand ?? 0, sigma = sub.copper.sigma ?? 5.8e7, t = sub.copper.t;
   const fmin = opts.fmin ?? d0.freq.start, fmax = opts.fmax ?? d0.freq.stop, fc = (fmin + fmax) / 2;

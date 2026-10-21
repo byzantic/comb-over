@@ -58,6 +58,13 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   check(`openEMS (committed result): comb-over's coupling within 0.35 dB of full wave over 1–6 GHz (worst ${worst.toFixed(2)} dB)`, worst < 0.35);
   const wc = readFileSync(new URL('../examples/em/wilkinson-2g4-ro4350b-1524-compare.cir', import.meta.url), 'utf8');
   check('the committed Wilkinson comparison netlist is the export\'s', wc.replace(/^\.data .*$/m, '') === openemsExport(ex('wilkinson-2g4-ro4350b-1524.cir')).compare.replace(/^\.data .*$/m, ''));
+  {
+    const dw = parseNetlist(wc), fw = dw.data[0].file;
+    const dsw = readTouchstone(readFileSync(new URL(`../examples/em/${fw}`, import.meta.url), 'utf8'), { nPorts: 3, name: fw });
+    const Fw = Float64Array.from({ length: 13 }, (_, k) => 2.16e9 + k * 0.04e9), e = onSweep(dsw, Fw);
+    const w = (i, j) => Math.max(...Array.from(Fw, (_, k) => db(e.S(i, j), k)));
+    check(`openEMS (committed): the trimmed Wilkinson meets 20 dB over ±10 % (S11 ${w(1, 1).toFixed(2)}, S22 ${w(2, 2).toFixed(2)}, S33 ${w(3, 3).toFixed(2)}, S32 ${w(3, 2).toFixed(2)} dB)`, w(1, 1) < -20 && w(2, 2) < -20 && w(3, 3) < -20 && w(3, 2) < -20);
+  }
   check('the comparison netlist is the export\'s, with the committed result\'s name', cmp.replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-10dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
 }
 check('a netlist without .layout is refused', throws(() => openemsExport(ex('combline-4pole.cir')), /needs a \.layout/));

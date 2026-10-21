@@ -1,0 +1,15 @@
+wilkinson-2g4-ro4350b-1524.json on jlc-ro4350b-1.524: f0 2.4 GHz, ±10 %, target -20 dB
+round 0: W 2.8731 mm, L 15.8260 mm, R 69.38 Ω, taper 3.291 mm
+  openEMS 0: 141450 cells, 66 s
+  comb-over: S11 -20.07, S22 -22.00, S32 -23.07 dB; S21 -3.140 … -3.101 dB
+  openEMS:   S11 -14.39, S22 -15.41, S32 -21.27 dB; S21 -3.192 … -3.144 dB
+  predicted next: S11 -22.90, S22 -23.08, S32 -22.94 dB; S21 -3.253 … -3.180 dB
+round 1: W 2.1941 mm, L 17.1870 mm, R 94.96 Ω, taper 1.778 mm
+  openEMS 1: 143520 cells, 70 s
+  comb-over: S11 -17.25, S22 -18.44, S32 -23.06 dB; S21 -3.182 … -3.137 dB
+  openEMS:   S11 -20.85, S22 -26.34, S32 -23.88 dB; S21 -3.120 … -3.103 dB
+E24: R 94.96 → 91 Ω
+  openEMS e24: 143520 cells, 68 s
+  comb-over: S11 -17.25, S22 -19.22, S32 -22.78 dB; S21 -3.182 … -3.137 dB
+  openEMS:   S11 -20.85, S22 -26.40, S32 -23.77 dB; S21 -3.119 … -3.102 dB
+wrote /home/claude/oems/run/trim/wilkinson-2g4-ro4350b-1524.cir; final openEMS run in /home/claude/oems/run/trim/round-e24

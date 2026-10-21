@@ -761,10 +761,21 @@ When the isolation is short of the specification, the budget says whether the ot
 | `gysel` | From the even/odd analysis: Z₁ = √2R₀ and Z₂ = √(R·R₀), R = R₀ by default; Z₃ (the half-wave between the resistor nodes) sets only the bandwidth, R₀/√2 by default. In the even mode Z₃ is a half-wave shorted at both ends, a mode trapped exactly at f₀ that leaves the resistors unexcited. With ideal lossless lines it shows as a spike of zero width at f₀ (\|S₂₂\| = \|S₃₂\| = 0.5 within about 1e-7 of f₀); any line loss removes it. |
 
 **Compact Wilkinson in microstrip** (`js/dividers-ms.js`):
-- **Layout.** The two arms run side by side at a gap s (default 1 mm, at most what the resistor's pads can bridge). A chip resistor (`res`, §8.5) stands across the gap at each section end. After the last one each output turns away through two optimally mitred bends to the port pitch, at the port impedance.
+- **Layout.**
+  - **Input.** The input line tapers out to the arms' outer edges over `lt` (default the port-line width; `.param lt`). The netlist models the taper as four stepped lines.
+  - **Arms.** The two arms run side by side at a gap s (default 1 mm, at most what the resistor's pads can bridge).
+  - **Resistors.** A chip resistor (`res`, §8.5) stands across the gap at each section end.
+  - **Outputs.** After the last resistor, the outputs (at the port impedance) run on side by side for `lo` (default max(2W, 3 mm); `.param lo`), modelled as a coupled pair. Each then turns away through two optimally mitred bends to the port pitch (`--pitch`, default 20 mm, which keeps the bends apart).
 - **Arm model.** `--coupled true` (the default) models each section as a coupled pair (Kirschning–Jansen). The divided power travels in the even mode, so the pair's even-mode impedance is set to the arm impedance; the odd mode carries the isolation, with its own impedance and velocity. `--coupled false` models the arms as independent lines, the usual simplification, kept for comparison.
 - **Design.** It starts from the ideal design and polishes widths, lengths and resistors on the goals: return loss at all three ports and isolation over `fbw`.
-- **Not modelled.** The junction where the input line meets both arms, and the resistor body over the gap.
+- **Not modelled.** The start of the gap at the end of the taper, the interaction of the two outputs' bends where they split, and the resistor body over the gap.
+- **Full-wave trim.** On 1.524 mm RO4350B, comb-over's design falls short in openEMS: 14.4 dB match against 20.1 dB in the model. The cause is the bend model and the bends' interaction at the split ([worked example 13](examples/13-openems-coupler.md), section 5). `node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]` trims a one-section design against openEMS by output space mapping:
+  1. Simulate the design in openEMS (all ports).
+  2. Take delta(f) = S_openEMS − S_comb-over at the same reference planes.
+  3. Re-optimise arm width, arm length, resistor and taper so that comb-over + delta meets the goals (3 dB inside the target).
+  4. Repeat until openEMS meets the target.
+
+  `--e24` then rounds the resistor and checks once more. The output is the trimmed netlist (no `.goal` lines, the trim recorded in its header) and the last openEMS run. It needs openEMS (`OPENEMS_PYTHON`).
 
 **Branch-line in microstrip**:
 - **Layout.** A rectangle of series and shunt arms with a Hammerstad tee at each corner (§4.7). The port line and the series arm are the main arms, the shunt arm the side arm.
@@ -1060,7 +1071,7 @@ The footprints are `RES_<pkg>` (series) and `RES_<pkg>_GND<n>V` (termination). `
 **The model:**
 - **Copper.** The layout's core, feeds and part pads at the top of the substrate, as zero-thickness conducting sheets (copper conductivity and thickness from the `.substrate`), or PEC with `--lossless`. Vias are PEC cylinders; `res` and `cap` parts are lumped R and C across their pads. A `res` goes to openEMS as a plain R, without its ESL and body capacitance (series lumped elements were unreliable in openEMS v0.37 development), and `compare.cir` gives it `esl=0 cp=0` to match.
 - **Substrate.** εr from the `.substrate`; tan δ as a conductivity that matches it at the sweep centre (so dielectric loss is right only near there), or none with `--lossless`.
-- **Ports.** The layout is rebuilt with plain feeds to the board edge (connector=none). Each feed carries an openEMS microstrip port, terminated in the port impedance, with its measurement plane Lp = max(3 mm, 2W) in from the edge (at most the feed length less 0.5 mm). The feed must leave along x or y.
+- **Ports.** The layout is rebuilt with plain feeds to the board edge (connector=none). If a feed's straight part is shorter than Lp + 3h, every feed is lengthened for the simulation, so the measurement planes stay clear of the core's near field; `compare.cir` follows. Each feed carries an openEMS microstrip port, terminated in the port impedance, with its measurement plane Lp = max(3 mm, 2W) in from the edge (at most the feed length less 0.5 mm). The feed must leave along x or y.
 - **Boundaries.** PEC under the substrate; PML (8 cells) on all other sides, at least 5h (and 3 mm) from the copper, except at the port ends, where the feeds run into the PML.
 - **Excitation.** openEMS's Gaussian pulse over the sweep, less its DC component.
 - **Mesh.** At each straight copper edge, one line fine/3 inside the metal and one 2·fine/3 outside (the "thirds rule"); along diagonal edges, lines every third of the narrowest strip; graded at ratio 1.4 to at most λ/20 in the substrate at the top frequency. In z: lines graded from the strip plane both ways, starting at `zfine` (default `fine`), at most h/nz in the substrate (nz default 4), and air to above 9h. Each port end has 12 uniform cells of Lp/20, so the feed point lies outside the PML.
@@ -1138,7 +1149,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
   - Matthaei g-value tables;
   - the engine against the analytic pair split;
   - realised centre, bandwidth and return loss of synthesised designs, before and after polishing.
-- **Full wave.** The compact Wilkinson of example 12 against openEMS (example 13, section 5) shows the layout falls short: 13 dB input match and 20.7 dB isolation at f0, against comb-over's 38 dB and 27 dB. The isolation is explained by unmodelled coupling between the outputs; the match only in part.
+- **Full wave.** The compact Wilkinson of example 12 against openEMS (example 13, section 5): the arms, taper, width step and coupled output run agree piece by piece. The Douville–James mitred-bend model does not: on 1.524 mm it predicts 6 dB more reflection than openEMS. comb-over's own design is 6 dB short in match, so the board is trimmed against openEMS (§7.9).
 - **Full wave.** The 10 dB coupler on 0.508 mm RO4350B against openEMS ([worked example 13](examples/13-openems-coupler.md)): coupling within 0.2 dB from 1 to 5 GHz and 0.3 dB at 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout's unmodelled corners; radiation below 1 %.
 
 ---
@@ -1157,6 +1168,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
 | `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |
 | `node tools/divider.mjs SPEC.json\|JSON [--substrate ID] [--coupled true\|false] [--gap MM] [--pitch MM] [--pkg 0603] [--out FILE.cir]` | Power dividers and hybrids (§7.9): the ideal design, or with `--substrate` the microstrip Wilkinson or branch-line with its layout line. |
 | `node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all\|N] [--fine MM] [--zfine MM] [--nz N] [--end X] [--lossless] [--run]` | openEMS model of the `.layout` and the comparison netlist (§8.6). `--compare DIR\|FILE.cir [--at F1,…] [--port N] [--csv FILE]` tabulates the result against comb-over. |
+| `node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]` | Trims a compact Wilkinson against openEMS by output space mapping (§7.9). Needs openEMS. |
 | `python3 tools/oemsfig.py CMP.csv OUT.png [--title T]` | Figure of an openEMS comparison from `--compare --csv` (needs matplotlib). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |

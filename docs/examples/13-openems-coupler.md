@@ -73,23 +73,42 @@ These are built into the export now, but they matter if you edit the script or w
 
 ## 5. A second board: the compact Wilkinson
 
-The same export on the compact Wilkinson of [worked example 12](12-wilkinson-and-branch-line.md) (`--excite all`: three runs, 16 s each, 112 k cells) finds a real problem. Result: [`examples/em/wilkinson-2g4-ro4350b-1524-openems.s3p`](../../examples/em/), with its comparison netlist.
+The same check on the compact Wilkinson of [worked example 12](12-wilkinson-and-branch-line.md) found a real problem, which led to #47. The export gives the isolation resistor to openEMS as a plain R, without the ESL and body capacitance in comb-over's `res` model. The comparison netlist drops them too (`esl=0 cp=0`), so both sides have the same circuit.
 
-The export gives the isolation resistor to openEMS as a plain 73.3 Ω, without the ESL and body capacitance in comb-over's `res` model. The comparison netlist drops them too (`esl=0 cp=0`), so the two sides have the same circuit.
+**The original layout** (arms 2.78 mm, R 73.3 Ω, outputs turning to a 12 mm pitch), at 2.4 GHz:
 
-| at 2.4 GHz | comb-over | openEMS |
+| | comb-over | openEMS |
 |---|---|---|
 | S11, input match | −38.2 dB | −13.3 dB |
 | S22, output match | −25.6 dB | −14.4 dB |
 | S32, isolation | −26.7 dB | −20.7 dB |
-| S21 | −3.07 dB | −3.27 dB |
 
-Halving the mesh cell (`--fine 0.15`) changes S11 by 0.2 dB, so this is not mesh error.
+Halving the mesh cell changed S11 by 0.2 dB, so this is not mesh error.
 
-**Isolation: explained.** After the resistor, the two outputs run side by side for 4.9 mm, still 1 mm apart, before they turn away. The layout's netlist models these two runs as independent lines. Modelled as a coupled pair (a `cline` with W 3.29 mm and S 1 mm), comb-over's isolation becomes −32.9, −20.3 and −15.6 dB at 2.16, 2.4 and 2.64 GHz, against openEMS's −33.4, −20.7 and −15.9 dB.
+**Where the two differ.** Each piece of the board was simulated on its own (the export can take a hand-built piece of copper) and compared with comb-over:
 
-**Match: only partly explained.** With the output pair coupled, comb-over's input match drops to −26 dB, still well short of openEMS's −13 dB. The rest probably comes from the input junction. There, the 3.29 mm input line overlaps each 2.78 mm arm by only 1.15 mm, and the closed-form width step does not describe that shape. S21 also carries an almost frequency-independent phase offset of about −10°, which points to a lumped reactance rather than extra line length.
+| piece | result |
+|---|---|
+| the outputs' 4.9 mm side-by-side run after the resistor | modelled as two independent lines. As a coupled pair, comb-over's isolation matches openEMS within 0.5 dB across the band: **this explained the isolation** |
+| the coupled arms, even and odd mode (by a magnetic or electric wall on the centre line) | Kirschning–Jansen within 1–3 % in Z and εeff |
+| an input taper into the arms, and the step to the output width | \|S11\| within 0.2 dB |
+| the resistor pads | removing them changes nothing |
+| one optimum-mitred 90° bend, 3.29 mm on 1.524 mm | Douville–James predicts S11 −26 dB, openEMS −32 dB; openEMS fits twice the model's inductance and 0.2 mm more line each side |
+| the two outputs' bends where they split, 1 mm apart | not separable from the above; the corrected bend explains about half of the remaining mismatch |
 
-**What this means for the design.** The compact Wilkinson's layout needs changing before it is built: model the output pair as coupled lines (or turn the outputs away at once), and design the input junction rather than butt the line against the arms. Worked example 12 now carries a warning.
+So the remaining error is in the bends, and in their interaction where the outputs split. No single lumped correction fits the complex response.
 
-**Loss.** In both boards openEMS shows less loss than comb-over (0.3 % against 1.4 % here at 2.4 GHz, port 1 driven). This has not been investigated.
+**The fix** (#47):
+- **Input.** A taper into the arms, modelled as stepped lines.
+- **Outputs.** The side-by-side run after the resistor is modelled as a coupled pair, and the outputs go to a 20 mm pitch so the bends sit apart and off the resistor pads.
+- **Trim.** The dimensions are trimmed against openEMS by output space mapping (`tools/emtrim.mjs`). It takes the complex difference between openEMS and comb-over, adds it to comb-over's response, and re-optimises the arms, resistor and taper. It converged after one correction.
+
+| over 2.16–2.64 GHz (worst) | comb-over alone | openEMS | openEMS, mesh halved |
+|---|---|---|---|
+| input return loss | 17.3 dB | 20.9 dB | 20.4 dB |
+| output return loss | 19.2 dB | 26.4 dB | 27.4 dB |
+| isolation | 22.8 dB | 23.8 dB | 23.3 dB |
+
+The committed result ([`examples/em/`](../../examples/em/)) is for this trimmed board, with its comparison netlist and the trim's log. Correcting comb-over's bend model so that it predicts this board on its own is left to a separate issue.
+
+**Loss.** On both boards openEMS shows less loss than comb-over (1.0 % against 1.8 % for the trimmed Wilkinson at 2.4 GHz, port 1 driven). This has not been investigated.

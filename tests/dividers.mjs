@@ -42,22 +42,30 @@ const ll = (t) => t.replace(/^(cline K\d+ geom=msl .*)$/mg, '$1\n  Q 1e30').repl
   check('Gysel, lossless, 1e-4 from f0: isolated (the trapped even-mode resonance of Z3 sits exactly at f0)', S(3, 2).db < -80 && S(2, 2).db < -90);
 }
 
-// ---- compact Wilkinson in microstrip (the example) ----
+// ---- compact Wilkinson in microstrip (the examples) ----
 {
-  const text = ex('wilkinson-2g4-ro4350b-1524.cir'), lo = 2.16e9, hi = 2.64e9;
-  const a = assessDivider(ll(text), lo, hi, 3);
+  const lo = 2.16e9, hi = 2.64e9, spec = JSON.parse(ex('wilkinson-2g4-ro4350b-1524.json'));
+  const c = realiseWilkinson(spec, { substrate: 'jlc-ro4350b-1.524' });
+  check('the synthesis reproduces the committed model netlist (comb-over only, before the openEMS trim)', c.netlist === ex('wilkinson-2g4-ro4350b-1524-model.cir'));
+  const a = assessDivider(ll(c.netlist), lo, hi, 3);
   check(`compact Wilkinson, coupled arms, ±10 %: return loss ≥ 20 dB at every port, isolation ≥ 20 dB, split within 0.06 dB of −3.01 (${a.rl.map(x => x.toFixed(2))}, ${a.iso.toFixed(2)})`, a.rl[0] >= 20 && a.rl[1] >= 20 && a.iso >= 20 && a.split[0] > -3.07 && a.split[1] < -2.95);
+  check('the netlist models the input taper (4 stepped lines to the arms\' outer width) and the outputs\' side-by-side run as a coupled pair', (c.netlist.match(/^Tin_t\d in\S* \S+ W=wf\+\(2\*w1\+s-wf\)\*[\d.]+ len=lt\/4$/mg) || []).length === 4 && /^cline KO geom=msl W=wf S=s\n  len [\d.]+mm\n  A a1 b1\n  B Oa_1e Ob_1e\nend$/m.test(c.netlist));
   // the coupling matters: the design that ignores it, evaluated with it
-  const u = realiseWilkinson({ f0, sections: 1, fbw: 0.2 }, { substrate: 'jlc-ro4350b-1.524', coupled: false });
+  const u = realiseWilkinson(spec, { substrate: 'jlc-ro4350b-1.524', coupled: false });
   check('the uncoupled-arm design is the committed comparison example', u.netlist === ex('wilkinson-2g4-ro4350b-1524-uncoupled.cir'));
   const asCoupled = assessDivider(wilkinsonMsNetlist(u.spec, u.sub, { ...u.state, coupled: true }, { lossless: true, goals: false }), lo, hi, 3);
-  check(`ignoring the arm coupling costs input match (${u.assess.rl[0].toFixed(2)} → ${asCoupled.rl[0].toFixed(2)} dB) and isolation (${u.assess.iso.toFixed(2)} → ${asCoupled.iso.toFixed(2)} dB)`, asCoupled.rl[0] < u.assess.rl[0] - 5 && asCoupled.iso < u.assess.iso - 2);
+  check(`ignoring the arm coupling costs input match (${u.assess.rl[0].toFixed(2)} → ${asCoupled.rl[0].toFixed(2)} dB) and output match (${u.assess.rl[1].toFixed(2)} → ${asCoupled.rl[1].toFixed(2)} dB)`, asCoupled.rl[0] < u.assess.rl[0] - 5 && asCoupled.rl[1] < u.assess.rl[1] - 5);
+  // the board: the design trimmed against openEMS (tools/emtrim.mjs; its full-wave result is checked in tests/openems.mjs)
+  const text = ex('wilkinson-2g4-ro4350b-1524.cir');
+  check('the board example is the openEMS-trimmed design: E24 resistor, no goals, the trim recorded in its header', /^\.param r1 = 91 /m.test(text) && !/^\.goal/m.test(text) && /^# trimmed against openEMS/m.test(text));
   const L = buildLayout(parseNetlist(text));
   check('layout: DRC clean, no warnings; one 0603 resistor part across the gap; in/o1/o2 tied', L.errors.length === 0 && L.warnings.length === 0 && L.parts.length === 1 && L.parts[0].kind === 'res' && L.core.ties[0].length === 3, JSON.stringify(L.errors));
   const inPad = L.core.pads.find(pd => pd.node === 'in').polys[0], wfIn = L.items.find(i => i.role === 'feed' && i.node === 'in').width;
   check('the input stub outlasts the feed track\'s round end cap (KiCad would short it to the arms)', Math.max(...inPad.map(q => q[0])) - Math.min(...inPad.map(q => q[0])) > wfIn / 2 + 0.1);
-  const b = assessDivider(ll(L.netlist), lo, hi, 3);
-  check('as built ≈ design: return loss and isolation within 0.2 dB', Math.abs(b.rl[0] - a.rl[0]) < 0.2 && Math.abs(b.iso - a.iso) < 0.2, JSON.stringify([a, b]));
+  const lt = 1.77756, W1 = 2.194099, wo = 0.5 + W1;
+  check('the input taper is drawn: from the port line at x = −lt to the arms\' outer edges at x = 0', inPad.some(q => Math.abs(q[0]) < 1e-6 && Math.abs(Math.abs(q[1]) - wo) < 1e-4) && inPad.some(q => Math.abs(q[0] + lt) < 1e-4 && Math.abs(Math.abs(q[1]) - wfIn / 2) < 1e-4));
+  const d0 = assessDivider(ll(text.replace(/^\.layout .*$/m, '')), lo, hi, 3), b = assessDivider(ll(L.netlist), lo, hi, 3);
+  check('as built ≈ design in comb-over: return loss and isolation within 0.2 dB', Math.abs(b.rl[0] - d0.rl[0]) < 0.2 && Math.abs(b.iso - d0.iso) < 0.2, JSON.stringify([d0, b]));
   const pcb = boardProject(L, { source: text, date: '2026-01-01' });
   const fp = pcb.board.split(/\n\t\(footprint /).find(f => /"Reference" "RI1"/.test(f));
   check('KiCad: RES_0603 RI1 with pad 1 on o1 and pad 2 on o2; courtyard rule for RI*; no via-hole rule', /RES_0603"/.test(fp) && /\(pad "1"[\s\S]*?\(net \d+ "o1"\)/.test(fp) && /\(pad "2"[\s\S]*?\(net \d+ "o2"\)/.test(fp) && /Reference == 'RI\*'/.test(pcb.files[Object.keys(pcb.files).find(k => k.endsWith('.kicad_dru'))]) && !/hole_clearance/.test(pcb.files[Object.keys(pcb.files).find(k => k.endsWith('.kicad_dru'))]));
