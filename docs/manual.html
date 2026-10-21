@@ -1818,7 +1818,8 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 </code></pre>
 <p>This is valid for real reference impedances.</p>
 <p>The terminated form stays well conditioned where a Kron reduction onto the ports would not. An example is a resonance of the network with its ports shorted: the Marchand balun has one at f0/2.</p>
-<p>At exact half-wave frequencies a lossless line&#39;s admittance is singular. Such points are evaluated 1 ppb away from the requested frequency, which gives the limiting value. Points that still fail are shown as gaps and counted in the status line.</p>
+<p>At exact half-wave frequencies a lossless line&#39;s admittance is singular. Such points are evaluated a little away from the requested frequency, which gives the limiting value: 1 ppb first, then 0.1 ppm and 10 ppm if the network is still near-singular, as next to a transmission zero. Points that still fail are shown as gaps and counted in the status line.</p>
+<p>Line admittances use coth and csch of γℓ, written so that they lose no precision as ℓ → 0. A line shorter than 1e-9 rad at the frequency in question, whether a sliver left by rounding or any line at 0 Hz, is evaluated at 1e-9 rad, where it is indistinguishable from a wire. So a sweep that starts at 0 Hz gives the DC limit there (#50).</p>
 <h3 id="93-not-modelled"><a class="anchor" href="#93-not-modelled" aria-hidden="true">#</a>9.3 Not modelled</h3>
 <ul>
 <li>Dispersion; the quasi-TEM ε<sub>eff</sub> is constant.</li>
