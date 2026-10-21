@@ -189,7 +189,7 @@ def model(exc):
     ports = []
     for p in PORTS:
         ports.append(fdtd.AddMSLPort(p['n'], pec, p['start'], p['stop'], p['dir'], 'z', excite=(1 if p['n'] == exc else 0),
-                                     FeedShift=min(10 * FINE, p['Lp'] / 3), MeasPlaneShift=p['Lp'], priority=20))
+                                     FeedShift=min(10 * FINE, p['Lp'] / 3), MeasPlaneShift=p['Lp'], Feed_R=p['z'], priority=20))
     return fdtd, ports
 
 def run():

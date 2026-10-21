@@ -23,6 +23,7 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   check('mesh: steps at most λ/20 in the substrate at fmax', [X, Y].every(a => a.every((v, i) => i === 0 || v - a[i - 1] <= g.info.maxStep + 1e-6)));
   check('mesh: four cells through the substrate, then graded air', Z.filter(z => z <= 0.508 + 1e-9).length === 5 && Z.at(-1) > 9 * 0.508);
   check('boundaries: PML on every open side, PEC ground', JSON.stringify(g.info.bc) === JSON.stringify(['PML_8', 'PML_8', 'PML_8', 'PML_8', 'PEC', 'PML_8']));
+  check('ports terminated in their impedance (Feed_R), so the DC-isolated strips discharge and the energy decays', /Feed_R=p\['z'\]/.test(g.script) && P.every(p => p.z === 50));
   check('the script compiles (python3 -m py_compile)', (() => { const dir = mkdtempSync(join(tmpdir(), 'oems-')), f = join(dir, 'm.py'); writeFileSync(f, g.script); const r = spawnSync('python3', ['-m', 'py_compile', f]); return r.status === 0; })());
   // the comparison netlist: the as-built feeds shortened by Lp — same as the core netlist with feeds of the remaining length
   const d = parseNetlist(g.compare);

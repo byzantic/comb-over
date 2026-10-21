@@ -4,12 +4,36 @@
 //                          [--end 1e-4] [--run]
 // Writes DIR/<name>.py (self-contained openEMS/CSXCAD Python script; it writes DIR/<name>.sNp) and
 // DIR/compare.cir (the as-built netlist at the same reference planes, overlaying the result). --run
-// runs the script with python3 (openEMS's Python modules must be importable).
+// runs the script with python3 (openEMS's Python modules must be importable; set OPENEMS_PYTHON to use
+// another interpreter, e.g. openEMS's venv).
+//   node tools/openems.mjs --compare DIR [--at F1,F2,…] [--port N]   tabulate the result against comb-over
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { openemsExport } from '../js/openems.js';
 
+// --compare DIR [--at F1,F2,…] [--port N]: the openEMS result in DIR against comb-over's comparison netlist
+if (process.argv[2] === '--compare') {
+  const { readdirSync } = await import('node:fs');
+  const { parseNetlist } = await import('../js/netlist.js');
+  const { solve } = await import('../js/solver.js');
+  const { readTouchstone, onSweep } = await import('../js/touchstone.js');
+  const dir = process.argv[3], args = process.argv.slice(4), get = (k) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : null; };
+  const cmp = readFileSync(join(dir, 'compare.cir'), 'utf8'), d = parseNetlist(cmp), P = d.ports.length;
+  const tsName = readdirSync(dir).find(f => new RegExp(`\\.s${P}p$`, 'i').test(f));
+  if (!tsName) { console.error(`no .s${P}p in ${dir} (run the script first)`); process.exit(2); }
+  const ds = readTouchstone(readFileSync(join(dir, tsName), 'utf8'), { nPorts: P, name: tsName });
+  const F = Float64Array.from((get('at') ?? '').split(',').filter(Boolean).map(Number).length ? get('at').split(',').map(Number) : Array.from({ length: 9 }, (_, k) => d.freq.start + (d.freq.stop - d.freq.start) * k / 8));
+  const r = solve(d, F), em = onSweep(ds, F), j = Number(get('port') ?? 1);
+  const db = (x, k) => 20 * Math.log10(Math.hypot(x.re[k], x.im[k])), deg = (x, k) => Math.atan2(x.im[k], x.re[k]) * 180 / Math.PI;
+  console.log(`excitation port ${j} (${d.ports[j - 1].node}); comb-over | openEMS, dB (and phase of the transmission, °)`);
+  console.log(['f (GHz)', ...d.ports.map((p, i) => `S${i + 1}${j}`)].map(x => x.padEnd(24)).join(''));
+  for (let k = 0; k < F.length; k++) {
+    const cells = d.ports.map((_, i) => { const a = r.S(i + 1, j), b = em.S(i + 1, j); return `${db(a, k).toFixed(2)} | ${db(b, k).toFixed(2)}`; });
+    console.log([(F[k] / 1e9).toFixed(3), ...cells].map(x => String(x).padEnd(24)).join(''));
+  }
+  process.exit(0);
+}
 const [, , file, ...rest] = process.argv;
 const usage = 'usage: node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all|N] [--fine MM] [--nz N] [--end 1e-4] [--run]';
 if (!file) { console.error(usage); process.exit(2); }
@@ -31,7 +55,7 @@ console.log(`wrote ${py} (${g.info.cells} cells: ${g.info.X - 1} × ${g.info.Y -
 console.log(`wrote ${join(opt.out, 'compare.cir')}`);
 if (opt.run) {
   const t0 = Date.now();
-  const r = spawnSync('python3', [py], { stdio: 'inherit' });
+  const r = spawnSync(process.env.OPENEMS_PYTHON || 'python3', [py], { stdio: 'inherit' });
   console.log(`openEMS: exit ${r.status} after ${((Date.now() - t0) / 1000).toFixed(0)} s`);
   process.exit(r.status ?? 1);
 }
