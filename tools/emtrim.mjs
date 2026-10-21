@@ -98,7 +98,7 @@ if (e24) {
 }
 // the trimmed design: no goals (comb-over alone does not predict its match); the trim recorded in the header
 st.report = [
-  ...R0.state.report.filter(l => !/^lossless/.test(l)),
+  ...R0.state.report.filter(l => !/^lossless/.test(l)).map(l => (/^sections:/.test(l) ? l.replace(/^sections: [^;]*;/, `sections: W ${st.W[0].toFixed(4)} mm, ${st.L[0].toFixed(4)} mm, R ${st.R[0]} Ω (trimmed);`) : /^input: a [\d.]+ mm/.test(l) ? l.replace(/^input: a [\d.]+ mm/, `input: a ${st.lt.toFixed(3)} mm`) : l)),
   `trimmed against openEMS by output space mapping (tools/emtrim.mjs, ${history.length} simulations): arms, resistor and input taper chosen so that openEMS meets the goals`,
   `openEMS, ${(lo / 1e9).toFixed(3)}–${(hi / 1e9).toFixed(3)} GHz (worst): ${fmtW(final.em)}`,
   `comb-over alone predicts ${fmtW(final.comb)}: its bend and output-split models miss part of what openEMS sees (#47)`,

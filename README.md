@@ -141,7 +141,7 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 - a cascade of two sections against one;
 - the Q loss model.
 
-Full wave: the 10 dB microstrip coupler agrees with openEMS to 0.2 dB in coupling from 1 to 5 GHz (0.3 dB at 6 GHz) (worked example 13).
+Full wave: the 10 dB microstrip coupler agrees with openEMS to 0.2 dB in coupling from 1 to 5 GHz (0.3 dB at 6 GHz) (worked example 13). The compact Wilkinson is trimmed against openEMS, which shows comb-over's mitred-bend model to be off on 1.524 mm material (#47).
 
 ## Tools
 
@@ -151,6 +151,7 @@ Full wave: the 10 dB microstrip coupler agrees with openEMS to 0.2 dB in couplin
 
 - `node tools/mscalc.mjs --sub ID --z0 50 [--f F]`: microstrip calculator. It gives the width for a target Z0, W and S for even/odd impedances (`--ze`/`--zo`), or analyses a geometry (`--w`, `--s`), including losses.
 
+- `node tools/emtrim.mjs SPEC.json --substrate ID --out DIR --e24`: trim a compact Wilkinson against openEMS (manual §7.9).
 - `node tools/openems.mjs FILE.cir --out DIR`: an openEMS (full-wave FDTD) model of the layout and a comparison netlist at the same reference planes; `--compare DIR` tabulates the two (manual §8.6, worked example 13).
 - `node tools/synth.mjs SPEC.json --substrate ID [--cap smd-0603] --out filter.cir`: filter synthesis headless, including the physical geometry in microstrip (manual §7.6).
 - `node tools/opt.mjs file.cir [iters] [rounds]`: run the optimiser headless and write the tuned values back to the file.
