@@ -34,7 +34,7 @@ Port 1 driven, comb-over's as-built model against openEMS:
 | ∠S21, openEMS − comb-over | −1.1° | −3.3° | −6.0° | −9.3° | −13.4° |
 | power lost (%) | 0.6 / 1.9 | 1.6 / 1.9 | 2.6 / 1.8 | 3.7 / 2.1 | 4.8 / 2.0 |
 
-**Coupling** agrees to 0.2 dB from 1 to 6 GHz. Above that openEMS falls off faster, because its coupler is electrically a little longer (next point).
+**Coupling** agrees to 0.2 dB from 1 to 5 GHz (0.17 dB at the 5 GHz centre, 0.29 dB at 6 GHz). Above that openEMS falls off faster, because its coupler is electrically a little longer (next point).
 
 **Phase.** openEMS's transmission lags by 6° at 5 GHz, over a 26 mm path. The parts of that, found by simulating a straight 50 Ω line of the same width on its own:
 - **Copper thickness, about 2°.** The openEMS strips are zero-thickness sheets; comb-over includes the 35 µm copper, which lowers εeff. With `.substrate … t=0` in the comparison netlist, the lag at 5 GHz is 4.8°.

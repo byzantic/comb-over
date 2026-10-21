@@ -1138,7 +1138,7 @@ At exact half-wave frequencies a lossless line's admittance is singular. Such po
   - Matthaei g-value tables;
   - the engine against the analytic pair split;
   - realised centre, bandwidth and return loss of synthesised designs, before and after polishing.
-- **Full wave.** The 10 dB coupler on 0.508 mm RO4350B against openEMS ([worked example 13](examples/13-openems-coupler.md)): coupling within 0.2 dB from 1 to 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout's unmodelled corners; radiation below 1 %.
+- **Full wave.** The 10 dB coupler on 0.508 mm RO4350B against openEMS ([worked example 13](examples/13-openems-coupler.md)): coupling within 0.2 dB from 1 to 5 GHz and 0.3 dB at 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout's unmodelled corners; radiation below 1 %.
 
 ---
 

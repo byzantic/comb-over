@@ -96,7 +96,7 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 <td>4.8 / 2.0</td>
 </tr>
 </tbody></table></div>
-<p><strong>Coupling</strong> agrees to 0.2 dB from 1 to 6 GHz. Above that openEMS falls off faster, because its coupler is electrically a little longer (next point).</p>
+<p><strong>Coupling</strong> agrees to 0.2 dB from 1 to 5 GHz (0.17 dB at the 5 GHz centre, 0.29 dB at 6 GHz). Above that openEMS falls off faster, because its coupler is electrically a little longer (next point).</p>
 <p><strong>Phase.</strong> openEMS&#39;s transmission lags by 6° at 5 GHz, over a 26 mm path. The parts of that, found by simulating a straight 50 Ω line of the same width on its own:</p>
 <ul>
 <li><strong>Copper thickness, about 2°.</strong> The openEMS strips are zero-thickness sheets; comb-over includes the 35 µm copper, which lowers εeff. With <code>.substrate … t=0</code> in the comparison netlist, the lag at 5 GHz is 4.8°.</li>
