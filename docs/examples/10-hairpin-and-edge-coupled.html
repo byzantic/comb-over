@@ -167,7 +167,7 @@ node tools/synth.mjs examples/edgecoupled-5pole-2g4-ro4350b-1524.json --substrat
 <pre><code class="language-sh">node tools/kicad.mjs examples/hairpin-5pole-2g4-ro4350b-1524.cir --out hairpin-board/ --board
 </code></pre>
 <p>CI reruns both syntheses from their JSON specifications. It requires each to reproduce the committed netlist byte for byte, exports both boards, runs KiCad&#39;s DRC and writes the Gerbers and drill files, as in example 9.</p>
-<p><strong>Not modelled, so worth an EM check (#16) before ordering:</strong></p>
+<p><strong>Not modelled, so worth an EM check (manual §8.6) before ordering:</strong></p>
 <ul>
 <li>the coupling of the U bottoms to their neighbours;</li>
 <li>the radiation of the open ends;</li>

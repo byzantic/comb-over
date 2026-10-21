@@ -83,4 +83,4 @@ The branch-line part is one piece of copper with its four ports in one tie. CI e
 **Before ordering:**
 - Pick the resistor value you can buy: 75 Ω is the nearest E24.
 - Check its datasheet for ESL and body capacitance. The model assumes 0.6 nH and 0.03 pF; set `esl=` and `cp=` on the `res` line from your part and re-run the polish.
-- An EM check (#16) of the input junction is worth having.
+- An EM check of the input junction is worth having: `node tools/openems.mjs examples/wilkinson-2g4-ro4350b-1524.cir --out oems/` (manual §8.6).

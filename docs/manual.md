@@ -424,7 +424,7 @@ The line model is pure TEM, so it has no parasitics of its own (§9.3). The layo
 
 Every model warns, on the netlist's line, when it is used outside its published range.
 
-**Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (`tests/tee.mjs`); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement; issues #16 and #17 cover that.
+**Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (`tests/tee.mjs`); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement yet; the openEMS export (§8.6) can do the first, and #17 covers measurement.
 
 
 ## 5. Plots and trace expressions
@@ -745,7 +745,7 @@ The **isolation budget** in the report shows, for each band:
 When the isolation is short of the specification, the budget says whether the other filter's rejection limits it (raise n or move the bands apart) or the manifold does.
 
 **Not modelled:**
-- coupling between the two filters, and between the manifold and the filters, through the layout. This is why the gap between them is generous. An EM check (#16) is the way to know.
+- coupling between the two filters, and between the manifold and the filters, through the layout. This is why the gap between them is generous. An EM check (§8.6) is the way to know.
 - the filters themselves are as their own synthesis left them: the polish moves only the manifold.
 
 ### 7.9 Power dividers and hybrids
@@ -1050,7 +1050,7 @@ The ESL and body capacitance are typical values, not from a particular part; set
 
 The footprints are `RES_<pkg>` (series) and `RES_<pkg>_GND<n>V` (termination). `node tools/kicad.mjs --caps SUBSTRATE --out DIR` writes them with the capacitor footprints, and CI checks them in KiCad.
 
-**Not checked yet** against EM simulation or measurement: the bend, step and resistor models (#16).
+**Not checked yet** against EM simulation or measurement: the bend, step and resistor models. The openEMS export (§8.6) includes them as drawn.
 ---
 
 ### 8.6 openEMS export (full-wave check)

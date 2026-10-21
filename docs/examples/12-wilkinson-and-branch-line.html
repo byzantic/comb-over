@@ -150,7 +150,7 @@ node tools/divider.mjs examples/branchline-2g4-ro4350b-1524.json --substrate jlc
 <ul>
 <li>Pick the resistor value you can buy: 75 Ω is the nearest E24.</li>
 <li>Check its datasheet for ESL and body capacitance. The model assumes 0.6 nH and 0.03 pF; set <code>esl=</code> and <code>cp=</code> on the <code>res</code> line from your part and re-run the polish.</li>
-<li>An EM check (#16) of the input junction is worth having.</li>
+<li>An EM check of the input junction is worth having: <code>node tools/openems.mjs examples/wilkinson-2g4-ro4350b-1524.cir --out oems/</code> (manual §8.6).</li>
 </ul>
 
 <nav class="pager"><a href="11-duplexer.html">← 11. Duplexer: spec to Gerbers</a><a class="next" href="13-openems-coupler.html">13. Checking a coupler in openEMS →</a></nav>

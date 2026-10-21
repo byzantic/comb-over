@@ -74,7 +74,7 @@ node tools/kicad.mjs examples/hairpin-5pole-2g4-ro4350b-1524.cir --out hairpin-b
 
 CI reruns both syntheses from their JSON specifications. It requires each to reproduce the committed netlist byte for byte, exports both boards, runs KiCad's DRC and writes the Gerbers and drill files, as in example 9.
 
-**Not modelled, so worth an EM check (#16) before ordering:**
+**Not modelled, so worth an EM check (manual §8.6) before ordering:**
 - the coupling of the U bottoms to their neighbours;
 - the radiation of the open ends;
 - the one-sided width steps of the edge-coupled resonators (the model's step is symmetric, and steps under 1.5:1 are not modelled at all).
