@@ -25,15 +25,15 @@ It takes about 1.5 minutes, most of it the two interdigital syntheses (manual §
 ## 2. The manifold
 
 ```
-ant ── tee ──┬── 8.65 mm up ── bend ── 6.58 mm ── filter A (2.30 GHz) ── port A
-             └── 4.25 mm down ── bend ── 6.58 mm ── filter B (2.53 GHz) ── port B
+ant ── tee ──┬── 9.52 mm up ── bend ── 6.58 mm ── filter A (2.30 GHz) ── port A
+             └── 5.08 mm down ── bend ── 6.58 mm ── filter B (2.53 GHz) ── port B
 ```
 
 The synthesis measures each filter's reflection at the other band's centre:
-- **Filter A at 2.53 GHz:** |Γ| 0.987. It looks open after 97.8° of line.
-- **Filter B at 2.30 GHz:** |Γ| 0.990. It looks open after 65.1°.
+- **Filter A at 2.53 GHz:** |Γ| 0.988. It looks open after 95.9° of line.
+- **Filter B at 2.30 GHz:** |Γ| 0.991. It looks open after 63.1°.
 
-Those angles, less the horizontal runs and the tee, give the starting vertical runs (k = 0: the filters fit without adding half-waves). The polish then trims them on the joint goals, from a goal cost of 3.2 to 0.
+Those angles, less the horizontal runs and the tee, give the starting vertical runs (k = 0: the filters fit without adding half-waves). The polish then trims them on the joint goals, from a goal cost of 1.3 to 0.
 
 ## 3. The isolation budget
 
@@ -41,10 +41,10 @@ From the report (with the substrate's loss):
 
 | | band A (2.30 GHz) | band B (2.53 GHz) |
 |---|---|---|
-| **isolation port A ↔ port B** (spec ≥ 40 dB) | **≥ 49.6 dB** | **≥ 72.1 dB** |
-| antenna return loss, central 80 % | ≥ 15.7 dB | ≥ 15.5 dB |
-| insertion loss antenna → own port, centre / worst in the central 80 % | 2.82 / 3.96 dB | 2.58 / 3.57 dB |
-| leakage antenna → the other port | ≥ 46.7 dB down | ≥ 69.3 dB down |
+| **isolation port A ↔ port B** (spec ≥ 40 dB) | **≥ 49.6 dB** | **≥ 72.3 dB** |
+| antenna return loss, central 80 % | ≥ 15.5 dB | ≥ 15.4 dB |
+| insertion loss antenna → own port, centre / worst in the central 80 % | 2.86 / 3.93 dB | 2.59 / 3.56 dB |
+| leakage antenna → the other port | ≥ 46.5 dB down | ≥ 69.6 dB down |
 | the other filter alone rejects this band by | ≥ 39.0 dB | ≥ 62.8 dB |
 
 **Reading the budget:**
@@ -60,9 +60,9 @@ The layout panel, or `.layout duplexer`, draws both filters with the resonator-a
 
 | | |
 |---|---|
-| board | 77.7 × 61.7 mm, three edge-launch SMAs |
+| board | 77.7 × 63.4 mm, three edge-launch SMAs |
 | design rules | clean |
-| as built vs design | passband S21/S31 within 0.03 dB; isolation unchanged (49.6 / 72.1 dB) |
+| as built vs design | passband S21/S31 within 0.03 dB; isolation unchanged (49.6 / 72.3 dB) |
 
 ## 5. KiCad and Gerbers
 

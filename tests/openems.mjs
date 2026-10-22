@@ -36,7 +36,7 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
 {
   const g = openemsExport(ex('wilkinson-2g4-ro4350b-1524.cir'));
   const Lm = val(g.script, 'LUMPED');
-  check('Wilkinson: the isolation resistor as a plain lumped R across the gap (no ESL on either side) (its pads\' facing edges), along y', Lm.length === 1 && Lm[0].R > 50 && Lm[0].R < 100 && Lm[0].L === undefined && /^res .* esl=0 cp=0$/m.test(g.compare) && Lm[0].ny === 1 && Lm[0].start[1] < 0 && Lm[0].stop[1] > 0);
+  check('Wilkinson: the isolation resistor as a plain lumped R across the gap (no ESL on either side) (its pads\' facing edges), along y', Lm.length === 1 && Lm[0].R > 50 && Lm[0].R <= 120 && Lm[0].L === undefined && /^res .* esl=0 cp=0$/m.test(g.compare) && Lm[0].ny === 1 && Lm[0].start[1] < 0 && Lm[0].stop[1] > 0);
 }
 {
   const g = openemsExport(ex('combline-5pole-2g-ro4350b-1524.cir'));

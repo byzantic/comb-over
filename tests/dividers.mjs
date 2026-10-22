@@ -57,12 +57,12 @@ const ll = (t) => t.replace(/^(cline K\d+ geom=msl .*)$/mg, '$1\n  Q 1e30').repl
   check(`ignoring the arm coupling costs input match (${u.assess.rl[0].toFixed(2)} → ${asCoupled.rl[0].toFixed(2)} dB) and output match (${u.assess.rl[1].toFixed(2)} → ${asCoupled.rl[1].toFixed(2)} dB)`, asCoupled.rl[0] < u.assess.rl[0] - 5 && asCoupled.rl[1] < u.assess.rl[1] - 5);
   // the board: the design trimmed against openEMS (tools/emtrim.mjs; its full-wave result is checked in tests/openems.mjs)
   const text = ex('wilkinson-2g4-ro4350b-1524.cir');
-  check('the board example is the openEMS-trimmed design: E24 resistor, no goals, the trim recorded in its header', /^\.param r1 = 91 /m.test(text) && !/^\.goal/m.test(text) && /^# trimmed against openEMS/m.test(text));
+  check('the board example is the openEMS-trimmed design: E24 resistor, no goals, the trim recorded in its header', /^\.param r1 = 100 /m.test(text) && !/^\.goal/m.test(text) && /^# trimmed against openEMS/m.test(text));
   const L = buildLayout(parseNetlist(text));
   check('layout: DRC clean, no warnings; one 0603 resistor part across the gap; in/o1/o2 tied', L.errors.length === 0 && L.warnings.length === 0 && L.parts.length === 1 && L.parts[0].kind === 'res' && L.core.ties[0].length === 3, JSON.stringify(L.errors));
   const inPad = L.core.pads.find(pd => pd.node === 'in').polys[0], wfIn = L.items.find(i => i.role === 'feed' && i.node === 'in').width;
   check('the input stub outlasts the feed track\'s round end cap (KiCad would short it to the arms)', Math.max(...inPad.map(q => q[0])) - Math.min(...inPad.map(q => q[0])) > wfIn / 2 + 0.1);
-  const lt = 1.77756, W1 = 2.194099, wo = 0.5 + W1;
+  const lt = 2.03023, W1 = 2.182868, wo = 0.5 + W1;
   check('the input taper is drawn: from the port line at x = −lt to the arms\' outer edges at x = 0', inPad.some(q => Math.abs(q[0]) < 1e-6 && Math.abs(Math.abs(q[1]) - wo) < 1e-4) && inPad.some(q => Math.abs(q[0] + lt) < 1e-4 && Math.abs(Math.abs(q[1]) - wfIn / 2) < 1e-4));
   const d0 = assessDivider(ll(text.replace(/^\.layout .*$/m, '')), lo, hi, 3), b = assessDivider(ll(L.netlist), lo, hi, 3);
   check('as built ≈ design in comb-over: return loss and isolation within 0.2 dB', Math.abs(b.rl[0] - d0.rl[0]) < 0.2 && Math.abs(b.iso - d0.iso) < 0.2, JSON.stringify([d0, b]));

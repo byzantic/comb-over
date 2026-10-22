@@ -1,22 +1,22 @@
 .title Compact Wilkinson, 1 section, f0 = 2.4 GHz on jlc-ro4350b-1.524 (arms modelled as coupled pairs)
 # substrate jlc-ro4350b-1.524; arms as coupled pairs (Kirschning–Jansen) at a 1 mm gap; 0603 resistors bridging it
-# sections: W 2.1941 mm, 17.1870 mm, R 91 Ω (trimmed); outputs at a 20 mm pitch through two mitred bends each
-# input: a 1.778 mm linear taper from the port line to the arms' outer edges (as 4 stepped lines); outputs side by side for 6.58 mm after the resistor (modelled as a coupled pair), then two mitred bends to the 20 mm pitch
+# sections: W 2.1829 mm, 16.8821 mm, R 100 Ω (trimmed); outputs at a 20 mm pitch through two mitred bends each
+# input: a 2.030 mm linear taper from the port line to the arms' outer edges (as 4 stepped lines); outputs side by side for 6.58 mm after the resistor (modelled as a coupled pair), then two mitred bends to the 20 mm pitch
 # not modelled: where the gap between the arms begins at the taper; the resistor body over the gap (its pads, ESL and body capacitance are)
 # trimmed against openEMS by output space mapping (tools/emtrim.mjs, 3 simulations): arms, resistor and input taper chosen so that openEMS meets the goals
-# openEMS, 2.160–2.640 GHz (worst): S11 -20.85, S22 -26.40, S32 -23.77 dB; S21 -3.119 … -3.102 dB
-# comb-over alone predicts S11 -17.25, S22 -19.22, S32 -22.78 dB; S21 -3.182 … -3.137 dB: its bend and output-split models miss part of what openEMS sees (#47)
+# openEMS, 2.160–2.640 GHz (worst): S11 -21.02, S22 -24.90, S32 -23.73 dB; S21 -3.119 … -3.106 dB
+# comb-over alone predicts S11 -20.57, S22 -21.76, S32 -24.06 dB; S21 -3.135 … -3.104 dB for this board
 .freq 1200000000 3600000000 401
 .ref 2400000000
 .substrate jlc-ro4350b-1.524
 .layout wilkinson pitch=20mm
 .param s = 1mm   # gap between the arms (the resistor bridges it)
 .param wf = 3.29115mm   # port lines (50 ohm)
-.param lt = 1.77756mm   # input taper, from wf to the arms' outer width (2 w1 + s)
+.param lt = 2.03023mm   # input taper, from wf to the arms' outer width (2 w1 + s)
 .param lo = 6.5823mm   # outputs side by side after the last resistor (a coupled pair), to the first bend's corner
-.param w1 = 2.194099mm tune 1.5359mm 3.0717mm
-.param l1 = 17.18699mm tune 13.75mm 20.624mm
-.param r1 = 91 tune 45.5 182
+.param w1 = 2.182868mm tune 1.528mm 3.056mm
+.param l1 = 16.88211mm tune 13.506mm 20.259mm
+.param r1 = 100 tune 50 200
 port in 50
 port o1 50
 port o2 50

@@ -21,10 +21,10 @@ The edge-coupled design takes about 2 s and the hairpin about 2 minutes, most of
 
 | | edge-coupled | hairpin |
 |---|---|---|
-| geometry | 6 coupled sections: W 2.43 / 3.38 / 3.65 mm, gaps 0.295 / 1.52 / 1.99 mm, about 17.7–18.1 mm long | 5 U's: arm W 3.61 / 3.14 / 3.67 mm, arm length 13.95 mm, inner gaps 6.06 / 6.82 / 6.18 mm, gaps between hairpins 0.756 / 1.265 mm; taps 2.26 mm from the bends |
-| lossless response | centre 2.3976 GHz, −3 dB 11.23 % (ideal 11.35 %), return loss 16.41 dB | centre 2.3997 GHz, −3 dB 11.68 %, return loss 16.52 dB |
-| insertion loss at f0 | 1.43 dB | 1.07 dB |
-| spurious passband (lossless) | 2.07 f0, −0.02 dB | 1.94 f0, −0.25 dB |
+| geometry | 6 coupled sections: W 2.43 / 3.38 / 3.65 mm, gaps 0.295 / 1.52 / 1.99 mm, about 17.7–18.1 mm long | 5 U's: arm W 3.92 / 3.17 / 3.47 mm, arm length 13.49 mm, inner gaps 4.96 / 6.57 / 6.01 mm, gaps between hairpins 0.664 / 1.231 mm; taps 2.29 mm from the bends |
+| lossless response | centre 2.3976 GHz, −3 dB 11.23 % (ideal 11.35 %), return loss 16.41 dB | centre 2.3997 GHz, −3 dB 11.73 %, return loss 16.21 dB |
+| insertion loss at f0 | 1.43 dB | 1.02 dB |
+| spurious passband (lossless) | 2.07 f0, −0.02 dB | 1.98 f0, −0.29 dB |
 
 Both meet the goals within 1 dB with no warnings. The hairpin's widths and inner gaps are not those of a textbook design. The polish uses them to trim each resonator and to absorb the coupling between a hairpin's own two arms and between non-adjacent arms. The field-solved array includes both.
 
@@ -38,8 +38,8 @@ Both meet the goals within 1 dB with no warnings. The hairpin's widths and inner
 
 | | edge-coupled | hairpin |
 |---|---|---|
-| filter copper | 112.2 × 31.0 mm | 72.3 × 20.8 mm (43 % of the area) |
-| board, with the SMA launches and the fence margin | 125.4 × 44.2 mm | 85.4 × 33.9 mm |
+| filter copper | 112.2 × 31.0 mm | 70.1 × 20.6 mm (41 % of the area) |
+| board, with the SMA launches and the fence margin | 125.4 × 44.2 mm | 83.3 × 33.7 mm |
 | conductors | 2 port lines + 5 resonators, each its own net | 5 hairpins: two on the port nets, three on nets of their own |
 | comb-over DRC | clean | clean |
 
@@ -51,17 +51,17 @@ The as-built netlists add the feeds, tapers and connector pads. With the substra
 
 | | edge-coupled design | edge-coupled as built | hairpin design | hairpin as built |
 |---|---|---|---|---|
-| S21 at f0 | −1.43 dB | −1.46 dB | −1.07 dB | −1.10 dB |
-| −3 dB below the peak | 2.2714–2.5315 GHz | 2.2716–2.5320 GHz | 2.2653–2.5423 GHz | 2.2654–2.5423 GHz |
-| worst S11, 2.29–2.51 GHz | −17.61 dB | −16.31 dB | −17.33 dB | −17.34 dB |
-| worst insertion loss, 2.29–2.51 GHz | 2.25 dB | 2.31 dB | 1.66 dB | 1.68 dB |
-| S21 at 2.0 / 2.2 / 2.6 / 2.8 GHz | −65.7 / −29.1 / −23.7 / −52.5 dB | −65.7 / −29.3 / −23.5 / −52.6 dB | −51.1 / −19.7 / −16.7 / −45.1 dB | −51.1 / −19.8 / −16.8 / −45.1 dB |
-| spurious peak | −5.7 dB at 4.87 GHz | −5.7 dB at 4.87 GHz | −1.5 dB at 4.66 GHz | −1.5 dB at 4.66 GHz |
+| S21 at f0 | −1.43 dB | −1.46 dB | −1.02 dB | −1.04 dB |
+| −3 dB below the peak | 2.2714–2.5315 GHz | 2.2716–2.5320 GHz | 2.2646–2.5431 GHz | 2.2647–2.5431 GHz |
+| worst S11, 2.29–2.51 GHz | −17.61 dB | −16.31 dB | −16.97 dB | −16.97 dB |
+| worst insertion loss, 2.29–2.51 GHz | 2.25 dB | 2.31 dB | 1.58 dB | 1.60 dB |
+| S21 at 2.0 / 2.2 / 2.6 / 2.8 GHz | −65.7 / −29.1 / −23.7 / −52.5 dB | −65.7 / −29.3 / −23.5 / −52.6 dB | −49.7 / −19.1 / −16.0 / −43.7 dB | −49.7 / −19.1 / −16.0 / −43.8 dB |
+| spurious peak | −5.7 dB at 4.87 GHz | −5.7 dB at 4.87 GHz | −1.6 dB at 4.76 GHz | −1.6 dB at 4.76 GHz |
 
 **Trade-offs:**
 - **Size and loss.** The hairpin is less than half the size and loses less: its resonators are wider strips at 50 Ω.
-- **Skirts.** Its skirts are about 10 dB softer at ±8 % from f0, because its realised band is 4 % wider and the folded geometry adds cross-couplings.
-- **Spurious passband.** Its spurious passband is stronger and closer to f0, at 1.94 f0.
+- **Skirts.** Its skirts are 8–10 dB softer at ±8 % from f0, because its realised band is 4 % wider and the folded geometry adds cross-couplings.
+- **Spurious passband.** Its spurious passband is stronger and closer to f0, at 1.98 f0.
 - **Edge-coupled filter.** It is long and narrow, but its skirts are steeper here. Its first gaps (0.295 mm) are the tightest dimension of either board.
 
 ## 5. KiCad and Gerbers
