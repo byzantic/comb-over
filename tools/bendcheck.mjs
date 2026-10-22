@@ -28,16 +28,21 @@ const subOf = (S) => (S.id ? makeSubstrate('custom', { h: S.h, er: S.er }) : mak
 const r4 = (x) => +x.toFixed(4);
 
 function gen() {
-  for (const S of SUBS) for (const u of [0.5, 1, 2, 4]) for (const mitre of ['opt', 'none']) {
+  for (const S of SUBS) for (const u of [0.5, 1, 2, 4]) for (const mitre of ['opt', 'none', 'straight']) {
     const sub = subOf(S), h = sub.dielectric.h * 1e3, er = sub.dielectric.er, w = r4(u * h);
     const fmax = Math.min(10e9, 9e9 / h), fmin = fmax / 8;
     const Lc = r4(3 * h + 2 * w), Lp = Math.max(3, 2 * w), Lf = r4(Lp + 3 * h + 1);
-    const rt = routeOrtho([[-Lc, 0], [0, 0], [0, Lc]], { W: w, mitre, sub, name: 'R', a: 'p1_k', b: 'p2_k' });
+    // 'straight': the reference, the same centreline length without the bend (separates the lines' own
+    // εeff error from the bend's)
+    const st = mitre === 'straight';
+    const rt = st ? { poly: [[-Lc, -w / 2], [Lc, -w / 2], [Lc, w / 2], [-Lc, w / 2]], lines: [`TR_1 p1_k p2_k W=${w}mm len=${r4(2 * Lc)}mm`] }
+      : routeOrtho([[-Lc, 0], [0, 0], [0, Lc]], { W: w, mitre, sub, name: 'R', a: 'p1_k', b: 'p2_k' });
     const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
     const items = [
       { type: 'poly', role: 'core', pts: rt.poly },
       { type: 'poly', role: 'feed', node: 'p1', width: w, pts: rect(-Lc - Lf, -w / 2, -Lc, w / 2), path: [[-Lc - Lf, 0], [-Lc, 0]] },
-      { type: 'poly', role: 'feed', node: 'p2', width: w, pts: rect(-w / 2, Lc, w / 2, Lc + Lf), path: [[0, Lc + Lf], [0, Lc]] },
+      st ? { type: 'poly', role: 'feed', node: 'p2', width: w, pts: rect(Lc, -w / 2, Lc + Lf, w / 2), path: [[Lc + Lf, 0], [Lc, 0]] }
+        : { type: 'poly', role: 'feed', node: 'p2', width: w, pts: rect(-w / 2, Lc, w / 2, Lc + Lf), path: [[0, Lc + Lf], [0, Lc]] },
     ];
     const name = `${S.id ?? S.line}_u${u}_${mitre}`;
     // ports at the strip's own impedance (comb-over's model at the band centre), so S11 is the bend, not the line
@@ -69,26 +74,40 @@ export function withBend(text, c, { kL = 1, kC = 1, dl = 0 } = {}) {
   const m = bendLC({ W: c.w * 1e-3, h: c.h * 1e-3, er: c.er, mitre: c.mitre });
   const Lf = m.L1;                     // the published L (bendLC puts it in each arm)
   return text.replace(/^bend (\S+) (\S+) (\S+) W=\S+ mitre=\S+$/m, (_, n, a, b) => [
-    dl > 0 ? `T${n}_xa ${a} ${n}_a W=${c.w}mm len=${dl}mm Q=1e30` : `wire ${a} ${n}_a`,
+    dl > 1e-9 ? `T${n}_xa ${a} ${n}_a W=${c.w}mm len=${dl}mm Q=1e30` : `wire ${a} ${n}_a`,
     `L${n}_1 ${n}_a ${n}_m ${Math.max(Lf * kL, 1e-15)}`, `C${n}_c ${n}_m 0 ${Math.max(m.C * kC, 1e-18)}`, `L${n}_2 ${n}_m ${n}_b ${Math.max(Lf * kL, 1e-15)}`,
     dl > 0 ? `T${n}_xb ${n}_b ${b} W=${c.w}mm len=${dl}mm Q=1e30` : `wire ${n}_b ${b}`].join('\n'));
 }
 
 function report() {
-  const rows = [];
-  for (const name of readdirSync(dir).sort()) {
+  const rows = [], lineErr = {};
+  // the straight references first: their phase error at fmax is the lines' own (openEMS vs comb-over εeff)
+  for (const name of readdirSync(dir).sort().filter(n => /_straight$/.test(n))) {
     const d = join(dir, name);
     if (!existsSync(join(d, 'bend.s2p'))) continue;
+    const c = JSON.parse(readFileSync(join(d, 'case.json'), 'utf8')), text = readFileSync(join(d, 'compare.cir'), 'utf8').replace(/^\.data .*$/m, '');
+    const ds = readTouchstone(readFileSync(join(d, 'bend.s2p'), 'utf8'), { nPorts: 2, name: 'b' }), f = Float64Array.from([c.fmax * 0.999]);
+    const r = solve(parseNetlist(text), f), em = onSweep(ds, f), p = r.S(2, 1), q = em.S(2, 1);
+    let x = (Math.atan2(q.im[0], q.re[0]) - Math.atan2(p.im[0], p.re[0])) * 180 / Math.PI; x = ((x + 540) % 360) - 180;
+    const len = text.match(/len=([\d.]+)mm/g).map(m => +m.slice(4, -2)).reduce((a, b) => a + b, 0);
+    lineErr[name.replace(/_straight$/, '')] = { deg: x, perMm: x / len };
+  }
+  for (const name of readdirSync(dir).sort()) {
+    const d = join(dir, name);
+    if (/_straight$/.test(name) || !existsSync(join(d, 'bend.s2p'))) continue;
     const c = JSON.parse(readFileSync(join(d, 'case.json'), 'utf8')), text = readFileSync(join(d, 'compare.cir'), 'utf8').replace(/^\.data .*$/m, '');
     const ds = readTouchstone(readFileSync(join(d, 'bend.s2p'), 'utf8'), { nPorts: 2, name: 'b' });
     // just inside the band (the Touchstone file rounds the end frequencies)
     const a = c.fmin * 1.001, b = c.fmax * 0.999, F = Float64Array.from({ length: 9 }, (_, k) => a + (b - a) * k / 8), em = onSweep(ds, F);
+    // the lines' share of the phase error, from the straight reference (per mm of modelled line)
+    const lineLen = text.match(/len=([\d.]+)mm/g).map(m => +m.slice(4, -2)).reduce((a, b) => a + b, 0);
+    const ref = lineErr[name.replace(/_(opt|none)$/, '')], dLine = ref ? ref.perMm * lineLen : 0;
     const metrics = (txt) => {
       const r = solve(parseNetlist(txt), F); let e11 = 0, dph = 0;
       for (let k = 0; k < F.length; k++) {
         const a = r.S(1, 1), b = em.S(1, 1); e11 = Math.max(e11, Math.hypot(a.re[k] - b.re[k], a.im[k] - b.im[k]));
         const p = r.S(2, 1), q = em.S(2, 1); let x = (Math.atan2(q.im[k], q.re[k]) - Math.atan2(p.im[k], p.re[k])) * 180 / Math.PI; x = ((x + 540) % 360) - 180;
-        if (k === F.length - 1) dph = x;
+        if (k === F.length - 1) dph = x - dLine;
       }
       return { e11, dph };
     };
@@ -98,11 +117,12 @@ function report() {
     let best = [Infinity, 0];
     for (let dl = 0; dl <= 1.5 * c.w; dl += c.w / 100) { const m = metrics(withBend(text, c, { kL: 1, dl })); if (Math.abs(m.dph) < best[0]) best = [Math.abs(m.dph), dl]; }
     const fitted = metrics(withBend(text, c, { kL: 1, dl: best[1] }));
-    rows.push({ ...c, emS11, half, full, dl: best[1], fitted });
+    rows.push({ ...c, emS11, half, full, dl: best[1], fitted, dLine });
   }
-  console.log('case'.padEnd(34), 'W/h', ' εr  ', 'f·h GHz·mm', 'EM max S11', '| L/2 per arm: max|ΔS11| ∠S21 err | L per arm: max|ΔS11| ∠S21 err | dl/W  then max|ΔS11|');
+  console.log('∠S21 errors are the bend\'s: the lines\' own error (straight reference) removed');
+  console.log('case'.padEnd(34), 'W/h', ' εr  ', 'f·h GHz·mm', 'EM max S11', '| L/2 per arm: max|ΔS11| ∠S21 err | L per arm: max|ΔS11| ∠S21 err | dl/W  then max|ΔS11|  (line err removed)');
   for (const r of rows) console.log(r.name.padEnd(34), String(r.u).padEnd(4), String(r.er).padEnd(5), (r.fmax / 1e9 * r.h).toFixed(1).padEnd(10), r.emS11.toFixed(1).padEnd(10),
-    '|', r.half.e11.toFixed(3).padEnd(6), `${r.half.dph.toFixed(1)}°`.padEnd(8), '|', r.full.e11.toFixed(3).padEnd(6), `${r.full.dph.toFixed(1)}°`.padEnd(8), '|', (r.dl / r.w).toFixed(3).padEnd(6), r.fitted.e11.toFixed(3));
+    '|', r.half.e11.toFixed(3).padEnd(6), `${r.half.dph.toFixed(1)}°`.padEnd(8), '|', r.full.e11.toFixed(3).padEnd(6), `${r.full.dph.toFixed(1)}°`.padEnd(8), '|', (r.dl / r.w).toFixed(3).padEnd(6), r.fitted.e11.toFixed(3).padEnd(7), `${r.dLine.toFixed(1)}°`);
   writeFileSync(join(dir, 'report.json'), JSON.stringify(rows, null, 1));
 }
 
