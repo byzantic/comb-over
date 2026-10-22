@@ -15,6 +15,7 @@ import { parseNetlist } from '../js/netlist.js';
 import { solve } from '../js/solver.js';
 import { readTouchstone, onSweep } from '../js/touchstone.js';
 import { bendLC } from '../js/discontinuities.js';
+import { msline } from '../js/microstrip.js';
 
 const [cmd, dir] = process.argv.slice(2);
 if (!cmd || !dir) { console.error('usage: node tools/bendcheck.mjs gen|run|report DIR'); process.exit(2); }
@@ -39,13 +40,15 @@ function gen() {
       { type: 'poly', role: 'feed', node: 'p2', width: w, pts: rect(-w / 2, Lc, w / 2, Lc + Lf), path: [[0, Lc + Lf], [0, Lc]] },
     ];
     const name = `${S.id ?? S.line}_u${u}_${mitre}`;
-    const net = [`.title bend check ${name}`, `.freq ${fmin} ${fmax} 201`, `.substrate ${S.line}`, 'port p1 50', 'port p2 50',
+    // ports at the strip's own impedance (comb-over's model at the band centre), so S11 is the bend, not the line
+    const z0 = +msline({ W: w * 1e-3, h: h * 1e-3, t: sub.copper.t, er, f: (fmin + fmax) / 2 }).Z0.toFixed(3);
+    const net = [`.title bend check ${name}`, `.freq ${fmin} ${fmax} 201`, `.substrate ${S.line}`, `port p1 ${z0}`, `port p2 ${z0}`,
       `Tp1_f p1 p1_k W=${w}mm len=${Lf}mm`, `Tp2_f p2 p2_k W=${w}mm len=${Lf}mm`, ...rt.lines].join('\n') + '\n';
     const g = openemsExport(net, { layout: { items, parts: [], substrate: sub, netlist: net, errors: [], title: name }, excite: '1', lossless: true, fine: Math.min(w, h) / 4 });
     const d = join(dir, name); mkdirSync(d, { recursive: true });
     writeFileSync(join(d, 'bend.py'), g.script.replace(/'[^']*\.s%dp'/, "'bend.s%dp'"));
     writeFileSync(join(d, 'compare.cir'), g.compare.replace(/^\.data .*$/m, '.data em bend.s2p overlay'));
-    writeFileSync(join(d, 'case.json'), JSON.stringify({ name, sub: S.line, h, er, w, u, mitre, fmin, fmax, cells: g.info.cells }));
+    writeFileSync(join(d, 'case.json'), JSON.stringify({ name, sub: S.line, h, er, w, u, mitre, fmin, fmax, z0, cells: g.info.cells }));
     console.log(name, g.info.cells, 'cells');
   }
 }
@@ -67,7 +70,7 @@ export function withBend(text, c, { kL = 1, kC = 1, dl = 0 } = {}) {
   const Lf = m.L1;                     // the published L (bendLC puts it in each arm)
   return text.replace(/^bend (\S+) (\S+) (\S+) W=\S+ mitre=\S+$/m, (_, n, a, b) => [
     dl > 0 ? `T${n}_xa ${a} ${n}_a W=${c.w}mm len=${dl}mm Q=1e30` : `wire ${a} ${n}_a`,
-    `L${n}_1 ${n}_a ${n}_m ${Lf * kL}`, `C${n}_c ${n}_m 0 ${Math.max(m.C * kC, 1e-18)}`, `L${n}_2 ${n}_m ${n}_b ${Lf * kL}`,
+    `L${n}_1 ${n}_a ${n}_m ${Math.max(Lf * kL, 1e-15)}`, `C${n}_c ${n}_m 0 ${Math.max(m.C * kC, 1e-18)}`, `L${n}_2 ${n}_m ${n}_b ${Math.max(Lf * kL, 1e-15)}`,
     dl > 0 ? `T${n}_xb ${n}_b ${b} W=${c.w}mm len=${dl}mm Q=1e30` : `wire ${n}_b ${b}`].join('\n'));
 }
 
@@ -78,7 +81,8 @@ function report() {
     if (!existsSync(join(d, 'bend.s2p'))) continue;
     const c = JSON.parse(readFileSync(join(d, 'case.json'), 'utf8')), text = readFileSync(join(d, 'compare.cir'), 'utf8').replace(/^\.data .*$/m, '');
     const ds = readTouchstone(readFileSync(join(d, 'bend.s2p'), 'utf8'), { nPorts: 2, name: 'b' });
-    const F = Float64Array.from({ length: 9 }, (_, k) => c.fmin + (c.fmax - c.fmin) * k / 8), em = onSweep(ds, F);
+    // just inside the band (the Touchstone file rounds the end frequencies)
+    const a = c.fmin * 1.001, b = c.fmax * 0.999, F = Float64Array.from({ length: 9 }, (_, k) => a + (b - a) * k / 8), em = onSweep(ds, F);
     const metrics = (txt) => {
       const r = solve(parseNetlist(txt), F); let e11 = 0, dph = 0;
       for (let k = 0; k < F.length; k++) {
