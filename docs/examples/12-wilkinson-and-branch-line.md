@@ -46,7 +46,7 @@ The board is 47.2 × 36.4 mm.
 
 Ignoring the coupling costs about 6 dB of input match and 10 dB of output match. Designed with the coupling, the arms come out wider, to bring the pair's even-mode impedance back up to the arm impedance.
 
-**Full wave.** In openEMS the third design gives 18.1 dB input match, 23.8 dB output match and 21.7 dB isolation over the band, against comb-over's 20.3, 22.2 and 22.0 dB (as built). The isolation and output match agree; the input match is about 2 dB short.
+**Full wave.** In openEMS the third design gives 18.1 dB input match, 24.6 dB output match and 22.5 dB isolation over the band, against comb-over's 20.3, 22.2 and 22.0 dB (as built). The isolation and output match agree; the input match is about 2 dB short.
 
 Before #49 comb-over put only half of each bend's inductance in the model. The same design flow then gave 14.4 dB in openEMS against 20.1 dB in comb-over. Worked example 13 (section 5) traces the difference:
 - The taper, the coupled arms, the step to the output width and the coupled output run each agree with openEMS on their own.
@@ -62,12 +62,12 @@ Here it took one correction, then a final check with the resistor rounded to E24
 
 | over 2.16–2.64 GHz, as built (worst) | comb-over alone | openEMS | openEMS, mesh halved |
 |---|---|---|---|
-| input return loss | 20.6 dB | **21.0 dB** | 20.9 dB |
-| output return loss | 21.8 dB | **24.9 dB** | 25.9 dB |
-| isolation | 24.1 dB | **23.7 dB** | 23.9 dB |
-| split | −3.10 … −3.14 dB | −3.11 … −3.12 dB | −3.04 … −3.05 dB |
+| input return loss | 20.6 dB | **21.6 dB** | 21.6 dB |
+| output return loss | 21.8 dB | **25.1 dB** | 25.8 dB |
+| isolation | 24.1 dB | **23.0 dB** | 23.6 dB |
+| split | −3.10 … −3.14 dB | −3.10 … −3.11 dB | −3.03 … −3.04 dB |
 
-The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within 0.5 dB on input match and isolation. The board netlist still has no `.goal` lines, because its dimensions come from the trim. The input match has the least margin, 0.9 dB at 2.64 GHz on the finer mesh.
+The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within about 1 dB on input match and isolation. The board netlist still has no `.goal` lines, because its dimensions come from the trim. The input match has the least margin, 1.6 dB on either mesh.
 
 **Not modelled in comb-over:** the bends' interaction where the outputs split, the start of the gap at the end of the taper, and the resistor body over the gap (its pads, ESL and body capacitance are). The openEMS model has the resistor as a plain 100 Ω, without its ESL.
 

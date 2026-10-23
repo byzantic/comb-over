@@ -251,23 +251,24 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 <tbody><tr>
 <td>input return loss</td>
 <td>20.6 dB</td>
-<td>21.0 dB</td>
-<td>20.9 dB</td>
+<td>21.6 dB</td>
+<td>21.6 dB</td>
 </tr>
 <tr>
 <td>output return loss</td>
 <td>21.8 dB</td>
-<td>24.9 dB</td>
-<td>25.9 dB</td>
+<td>25.1 dB</td>
+<td>25.8 dB</td>
 </tr>
 <tr>
 <td>isolation</td>
 <td>24.1 dB</td>
-<td>23.7 dB</td>
-<td>23.9 dB</td>
+<td>23.0 dB</td>
+<td>23.6 dB</td>
 </tr>
 </tbody></table></div>
-<p>The committed result (<a href="../../examples/em/"><code>examples/em/</code></a>) is for this trimmed board, with its comparison netlist and the trim&#39;s log. With the corrected bend model, comb-over alone agrees with openEMS on it within 0.5 dB on input match and isolation.</p>
+<p>The committed result (<a href="../../examples/em/"><code>examples/em/</code></a>) is for this trimmed board, with its comparison netlist and the trim&#39;s log. With the corrected bend model, comb-over alone agrees with openEMS on it within about 1 dB on input match and isolation.</p>
+<p><em>Post-processing.</em> Since #41, when every port is driven the export computes S = B·A⁻¹ from the incident and reflected waves at all ports, so a port&#39;s termination needs no match to the reference. The figures in this section from before that change used b_i/a_exc. For these 50 Ω ports the difference is under 1 dB. The committed result and the trimmed board&#39;s figures are re-processed.</p>
 <p><strong>Loss.</strong> On both boards openEMS shows less loss than comb-over (about 1 % against 1.8 % for the trimmed Wilkinson at 2.4 GHz, port 1 driven). This has not been investigated.</p>
 
 <nav class="pager"><a href="12-wilkinson-and-branch-line.html">← 12. Wilkinson and branch-line</a><a class="next" href="../manual.html">Manual →</a></nav>

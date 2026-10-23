@@ -120,10 +120,12 @@ The square corner's phase error grows with W/h, from about 1° to 35°. The mode
 
 | over 2.16–2.64 GHz (worst) | comb-over alone | openEMS | openEMS, mesh halved |
 |---|---|---|---|
-| input return loss | 20.6 dB | 21.0 dB | 20.9 dB |
-| output return loss | 21.8 dB | 24.9 dB | 25.9 dB |
-| isolation | 24.1 dB | 23.7 dB | 23.9 dB |
+| input return loss | 20.6 dB | 21.6 dB | 21.6 dB |
+| output return loss | 21.8 dB | 25.1 dB | 25.8 dB |
+| isolation | 24.1 dB | 23.0 dB | 23.6 dB |
 
-The committed result ([`examples/em/`](../../examples/em/)) is for this trimmed board, with its comparison netlist and the trim's log. With the corrected bend model, comb-over alone agrees with openEMS on it within 0.5 dB on input match and isolation.
+The committed result ([`examples/em/`](../../examples/em/)) is for this trimmed board, with its comparison netlist and the trim's log. With the corrected bend model, comb-over alone agrees with openEMS on it within about 1 dB on input match and isolation.
+
+*Post-processing.* Since #41, when every port is driven the export computes S = B·A⁻¹ from the incident and reflected waves at all ports, so a port's termination needs no match to the reference. The figures in this section from before that change used b_i/a_exc. For these 50 Ω ports the difference is under 1 dB. The committed result and the trimmed board's figures are re-processed.
 
 **Loss.** On both boards openEMS shows less loss than comb-over (about 1 % against 1.8 % for the trimmed Wilkinson at 2.4 GHz, port 1 driven). This has not been investigated.

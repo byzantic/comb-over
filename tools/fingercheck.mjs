@@ -23,9 +23,10 @@ const r6 = (x) => +x.toFixed(6);
 function gen() {
   const P = { W: +opt('W', 0.6), G: +opt('G', 1), wf: +opt('wf', 0.2), lf: +opt('lf', 0.7), p: +opt('p', 0.8) }, subId = opt('sub', 'jlc-ro4350b-0.508');
   const sub = makeSubstrate(subId), h = sub.dielectric.h * 1e3, fmin = 0.5e9, fmax = 6e9;
+  const bareCase = rest.includes('--bare');   // control: the backbones alone (no fingers), same ports
   for (const n of opt('n', '12,24').split(',').map(Number)) {
     const Lp = 3, Lf = r6(Lp + 3 * h + 1.5);                     // feeds: port plane, then 3h + 1.5 mm to the section
-    const fp = fingerPair({ ...P, n }), len = fp.len, y1 = -P.G / 2 - P.W / 2, y2 = P.G / 2 + P.W / 2;
+    const fp0 = fingerPair({ ...P, n }), fp = bareCase ? { ...fp0, polys: [[[0, -P.G / 2 - P.W], [fp0.len, -P.G / 2 - P.W], [fp0.len, -P.G / 2], [0, -P.G / 2]], [[0, P.G / 2], [fp0.len, P.G / 2], [fp0.len, P.G / 2 + P.W], [0, P.G / 2 + P.W]]] } : fp0, len = fp.len, y1 = -P.G / 2 - P.W / 2, y2 = P.G / 2 + P.W / 2;
     const rect = (a, b, c, d) => [[a, b], [c, b], [c, d], [a, d]];
     const items = [
       { type: 'poly', role: 'core', pts: fp.polys[0] }, { type: 'poly', role: 'core', pts: fp.polys[1] },
@@ -39,9 +40,9 @@ function gen() {
     const fine = +(opt('fine', Math.min(P.wf, fp.side, fp.tip, Math.max(fp.overlap, P.wf)) / 3));
     const g = openemsExport(exportNet, { layout: { items, parts: [], substrate: sub, netlist: exportNet, errors: [], title: `fingers n${n}` }, lossless: true, fine });
     const Lps = Object.fromEntries(g.info.ports.map(q => [q.node, q.Lp]));
-    const name = `n${n}`, d = join(dir, name); mkdirSync(d, { recursive: true });
+    const name = `${bareCase ? 'bare' : 'n'}${n}`, d = join(dir, name); mkdirSync(d, { recursive: true });
     writeFileSync(join(d, 'f.py'), g.script.replace(/'[^']*\.s%dp'/, "'f.s%dp'"));
-    writeFileSync(join(d, 'case.json'), JSON.stringify({ ...P, n, len, sub: subId, h, fmin, fmax, Lf, Lp: Lps.p1, cells: g.info.cells, overlap: fp.overlap, side: fp.side, tip: fp.tip }));
+    writeFileSync(join(d, 'case.json'), JSON.stringify({ ...P, n, len, bare: bareCase, sub: subId, h, fmin, fmax, Lf, Lp: Lps.p1, cells: g.info.cells, overlap: fp.overlap, side: fp.side, tip: fp.tip }));
     console.log(name, `${len} mm section, ${g.info.cells} cells; overlap ${fp.overlap} mm, side gap ${fp.side} mm, tip gap ${fp.tip} mm`);
   }
 }
@@ -89,7 +90,7 @@ function nm(fn, x0, iters = 400, step = 0.1) {
 }
 
 function fit() {
-  const cases = readdirSync(dir).filter(n => existsSync(join(dir, n, 'f.s4p'))).map(n => ({ name: n, c: JSON.parse(readFileSync(join(dir, n, 'case.json'), 'utf8')) })).sort((a, b) => a.c.n - b.c.n);
+  const cases = readdirSync(dir).filter(n => existsSync(join(dir, n, 'f.s4p'))).map(n => ({ name: n, c: JSON.parse(readFileSync(join(dir, n, 'case.json'), 'utf8')) })).filter(x => !x.c.bare === !rest.includes('--bare')).sort((a, b) => a.c.n - b.c.n);
   if (!cases.length) { console.error('no results'); process.exit(2); }
   const load = (k) => { const c = cases[k].c, ds = readTouchstone(readFileSync(join(dir, cases[k].name, 'f.s4p'), 'utf8'), { nPorts: 4, name: 'f' }), F = Float64Array.from({ length: 12 }, (_, i) => c.fmin * 1.01 + (c.fmax * 0.99 - c.fmin * 1.01) * i / 11); return { c, F, em: onSweep(ds, F) }; };
   const A = load(0), c = A.c, sub = makeSubstrate(c.sub);
