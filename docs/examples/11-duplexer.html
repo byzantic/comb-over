@@ -62,15 +62,15 @@
 <p>It takes about 1.5 minutes, most of it the two interdigital syntheses (manual §7.6).</p>
 <p><strong>Why Zr 35 Ω and interdigital.</strong> At 4 % bandwidth each filter needs an external Q of 28.7. On 1.524 mm the 50 Ω feed is 3.3 mm wide, so the tap junction cannot get close enough to the shorted end to reach it. The refinement stops at about 20, whatever the resonator impedance or type (comb-line reaches 18.6). The goal polish then makes up for it, and the report records that as a note. At Zr 50 Ω filter B&#39;s band came out 1 dB too wide. At 35 Ω both filters meet their goals.</p>
 <h2 id="2-the-manifold"><a class="anchor" href="#2-the-manifold" aria-hidden="true">#</a>2. The manifold</h2>
-<pre><code>ant ── tee ──┬── 8.65 mm up ── bend ── 6.58 mm ── filter A (2.30 GHz) ── port A
-             └── 4.25 mm down ── bend ── 6.58 mm ── filter B (2.53 GHz) ── port B
+<pre><code>ant ── tee ──┬── 9.52 mm up ── bend ── 6.58 mm ── filter A (2.30 GHz) ── port A
+             └── 5.08 mm down ── bend ── 6.58 mm ── filter B (2.53 GHz) ── port B
 </code></pre>
 <p>The synthesis measures each filter&#39;s reflection at the other band&#39;s centre:</p>
 <ul>
-<li><strong>Filter A at 2.53 GHz:</strong> |Γ| 0.987. It looks open after 97.8° of line.</li>
-<li><strong>Filter B at 2.30 GHz:</strong> |Γ| 0.990. It looks open after 65.1°.</li>
+<li><strong>Filter A at 2.53 GHz:</strong> |Γ| 0.988. It looks open after 95.9° of line.</li>
+<li><strong>Filter B at 2.30 GHz:</strong> |Γ| 0.991. It looks open after 63.1°.</li>
 </ul>
-<p>Those angles, less the horizontal runs and the tee, give the starting vertical runs (k = 0: the filters fit without adding half-waves). The polish then trims them on the joint goals, from a goal cost of 3.2 to 0.</p>
+<p>Those angles, less the horizontal runs and the tee, give the starting vertical runs (k = 0: the filters fit without adding half-waves). The polish then trims them on the joint goals, from a goal cost of 1.3 to 0.</p>
 <h2 id="3-the-isolation-budget"><a class="anchor" href="#3-the-isolation-budget" aria-hidden="true">#</a>3. The isolation budget</h2>
 <p>From the report (with the substrate&#39;s loss):</p>
 <div class="table-wrap"><table>
@@ -84,22 +84,22 @@
 <tbody><tr>
 <td><strong>isolation port A ↔ port B</strong> (spec ≥ 40 dB)</td>
 <td><strong>≥ 49.6 dB</strong></td>
-<td><strong>≥ 72.1 dB</strong></td>
+<td><strong>≥ 72.3 dB</strong></td>
 </tr>
 <tr>
 <td>antenna return loss, central 80 %</td>
-<td>≥ 15.7 dB</td>
 <td>≥ 15.5 dB</td>
+<td>≥ 15.4 dB</td>
 </tr>
 <tr>
 <td>insertion loss antenna → own port, centre / worst in the central 80 %</td>
-<td>2.82 / 3.96 dB</td>
-<td>2.58 / 3.57 dB</td>
+<td>2.86 / 3.93 dB</td>
+<td>2.59 / 3.56 dB</td>
 </tr>
 <tr>
 <td>leakage antenna → the other port</td>
-<td>≥ 46.7 dB down</td>
-<td>≥ 69.3 dB down</td>
+<td>≥ 46.5 dB down</td>
+<td>≥ 69.6 dB down</td>
 </tr>
 <tr>
 <td>the other filter alone rejects this band by</td>
@@ -125,7 +125,7 @@
 </thead>
 <tbody><tr>
 <td>board</td>
-<td>77.7 × 61.7 mm, three edge-launch SMAs</td>
+<td>77.7 × 63.4 mm, three edge-launch SMAs</td>
 </tr>
 <tr>
 <td>design rules</td>
@@ -133,7 +133,7 @@
 </tr>
 <tr>
 <td>as built vs design</td>
-<td>passband S21/S31 within 0.03 dB; isolation unchanged (49.6 / 72.1 dB)</td>
+<td>passband S21/S31 within 0.03 dB; isolation unchanged (49.6 / 72.3 dB)</td>
 </tr>
 </tbody></table></div>
 <h2 id="5-kicad-and-gerbers"><a class="anchor" href="#5-kicad-and-gerbers" aria-hidden="true">#</a>5. KiCad and Gerbers</h2>

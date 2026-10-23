@@ -743,7 +743,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </tr>
 <tr>
 <td><strong>90° bend</strong></td>
-<td>Series L / shunt C / series L (T network), as Qucs <code>mscorner</code> and <code>msmbend</code>. <strong>Square corner</strong>: C/W = (10.35εr + 2.5)W/h + (2.6εr + 5.64) pF/m, L/h = 220[1 − 1.35 e<sup>−0.18(W/h)^1.39</sup>] nH/m (Kirschning, Jansen &amp; Koster, MTT-S 1983; 0.2 ≤ W/h ≤ 6, 2.36 ≤ εr ≤ 10.4). <strong>Optimum mitre</strong>: C/W = (3.93εr + 0.62)W/h + (7.6εr + 3.80) pF/m, L/h = 440[1 − 1.062 e<sup>−0.177(W/h)^0.947</sup>] nH/m, mitre M = 52 + 65 e<sup>−1.35 W/h</sup> % of the corner diagonal (Douville &amp; James, <em>IEEE MTT</em> 1978; 0.2 ≤ W/h ≤ 6, 2.5 ≤ εr ≤ 25). Other angles are not modelled.</td>
+<td>Series L / shunt C / series L (T network), with the L below in <strong>each</strong> arm, as Qucs <code>mscorner</code> and <code>msmbend</code> (before #49 comb-over put L/2 in each arm, and openEMS showed that to be wrong). <strong>Square corner</strong>: C/W = (10.35εr + 2.5)W/h + (2.6εr + 5.64) pF/m, L/h = 220[1 − 1.35 e<sup>−0.18(W/h)^1.39</sup>] nH/m (Kirschning, Jansen &amp; Koster, MTT-S 1983; 0.2 ≤ W/h ≤ 6, 2.36 ≤ εr ≤ 10.4). <strong>Optimum mitre</strong>: C/W = (3.93εr + 0.62)W/h + (7.6εr + 3.80) pF/m, L/h = 440[1 − 1.062 e<sup>−0.177(W/h)^0.947</sup>] nH/m, mitre M = 52 + 65 e<sup>−1.35 W/h</sup> % of the corner diagonal (Douville &amp; James, <em>IEEE MTT</em> 1978; 0.2 ≤ W/h ≤ 6, 2.5 ≤ εr ≤ 25). Other angles are not modelled.</td>
 <td><code>bend</code> element; routed and meandered lines (§8.5).</td>
 </tr>
 <tr>
@@ -775,7 +775,13 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <p><strong>Effect on the Marchand demo.</strong> On 1.524 mm RO4350B, the 2 × 0.3 mm vias at each grounded end (0.25 nH, j1.6 Ω at 1 GHz) and the 0.52 mm open-end extension move the outputs by less than 0.1 dB at f0.</p>
 <p><strong>The tee as a network.</strong> The transformers are folded into the main-arm lines (Y′ = TᵀY<sub>line</sub>T with T = diag(1, 1/T<sub>x</sub>)), so the junction is a 4-node admittance block over the three arms and the internal junction node, stamped like a line section. It is lossless; the arms&#39; conductor and dielectric loss over a few hundred micrometres is ignored. At low frequency it reduces to the ideal three-way junction (S11 = −1/3, S21 = 2/3).</p>
 <p>Every model warns, on the netlist&#39;s line, when it is used outside its published range.</p>
-<p><strong>Checks.</strong> The KJK Δl agrees with Hammerstad&#39;s older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (<code>tests/tee.mjs</code>); like the other models here it has not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (<code>tests/discontinuities.mjs</code>). Neither model has been checked here against EM simulation or measurement yet; the openEMS export (§8.6) can do the first, and #17 covers measurement.</p>
+<p><strong>Checks.</strong> The KJK Δl agrees with Hammerstad&#39;s older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (<code>tests/tee.mjs</code>). The bends are also checked against openEMS (<code>tools/bendcheck.mjs</code>, #49). The sweep covers five substrates (εr 2.55–10.2, h 0.508–1.6 mm), W/h 0.5–4 and f·h up to 9 GHz·mm, with ports at the strip impedance and the lines&#39; own error removed by a straight reference.</p>
+<ul>
+<li><strong>Optimum mitre, W/h ≤ 2:</strong> transmission-phase error within 2° in 13 of 15 cases (4° in the other two); complex S11 error mostly below 0.1.</li>
+<li><strong>Optimum mitre, W/h 4:</strong> phase error −3° to −17°, largest at high εr and f·h.</li>
+<li><strong>Square corner:</strong> phase error growing with W/h, about 1–35°.</li>
+</ul>
+<p>  The tee and step have not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (<code>tests/discontinuities.mjs</code>). Neither model has been checked here against EM simulation or measurement yet; the openEMS export (§8.6) can do the first, and #17 covers measurement.</p>
 <h2 id="5-plots-and-trace-expressions"><a class="anchor" href="#5-plots-and-trace-expressions" aria-hidden="true">#</a>5. Plots and trace expressions</h2>
 <p>A trace is an expression evaluated at every sweep point. It is complex unless it passes through a real function.</p>
 <p><strong>Variables</strong></p>
@@ -1335,7 +1341,7 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 </li>
 <li><p><strong>Not modelled.</strong> The start of the gap at the end of the taper, the interaction of the two outputs&#39; bends where they split, and the resistor body over the gap.</p>
 </li>
-<li><p><strong>Full-wave trim.</strong> On 1.524 mm RO4350B, comb-over&#39;s design falls short in openEMS: 14.4 dB match against 20.1 dB in the model. The cause is the bend model and the bends&#39; interaction at the split (<a href="examples/13-openems-coupler.html">worked example 13</a>, section 5). <code>node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]</code> trims a one-section design against openEMS by output space mapping:</p>
+<li><p><strong>Full-wave trim.</strong> On 1.524 mm RO4350B, comb-over&#39;s design gives 18.1 dB input match in openEMS against 20.3 dB in the model. The remaining difference is in the bends at W/h 2.2 and their interaction where the outputs split (<a href="examples/13-openems-coupler.html">worked example 13</a>, section 5; it was 6 dB before the bend fix of #49). <code>node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]</code> trims a one-section design against openEMS by output space mapping:</p>
 <ol>
 <li>Simulate the design in openEMS (all ports).</li>
 <li>Take delta(f) = S_openEMS − S_comb-over at the same reference planes.</li>
@@ -1846,7 +1852,7 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <li>realised centre, bandwidth and return loss of synthesised designs, before and after polishing.</li>
 </ul>
 </li>
-<li><strong>Full wave.</strong> The compact Wilkinson of example 12 against openEMS (example 13, section 5): the arms, taper, width step and coupled output run agree piece by piece. The Douville–James mitred-bend model does not: on 1.524 mm it predicts 6 dB more reflection than openEMS. comb-over&#39;s own design is 6 dB short in match, so the board is trimmed against openEMS (§7.9).</li>
+<li><strong>Full wave.</strong> The compact Wilkinson of example 12 against openEMS (example 13, section 5): the arms, taper, width step and coupled output run agree piece by piece. The bends did not until #49 put the whole published L in each arm (§4.7, with a 40-case openEMS sweep). comb-over&#39;s own design is now 2 dB short in input match in openEMS (6 dB before). The board is trimmed against openEMS (§7.9), and comb-over then predicts it within 0.5 dB.</li>
 <li><strong>Full wave.</strong> The 10 dB coupler on 0.508 mm RO4350B against openEMS (<a href="examples/13-openems-coupler.html">worked example 13</a>): coupling within 0.2 dB from 1 to 5 GHz and 0.3 dB at 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout&#39;s unmodelled corners; radiation below 1 %.</li>
 </ul>
 <hr>
@@ -1901,6 +1907,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]</code></td>
 <td>Trims a compact Wilkinson against openEMS by output space mapping (§7.9). Needs openEMS.</td>
+</tr>
+<tr>
+<td><code>node tools/bendcheck.mjs gen|run|report DIR</code></td>
+<td>The openEMS check of the bend models (§4.7): writes, runs and reports 60 single-bend and straight-line cases. Needs openEMS.</td>
 </tr>
 <tr>
 <td><code>python3 tools/oemsfig.py CMP.csv OUT.png [--title T]</code></td>

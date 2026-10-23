@@ -1,27 +1,27 @@
 .title Hairpin chebyshev n=5 0.1dB, f0 = 2.4 GHz, FBW = 10 % on jlc-ro4350b-1.524 (synthesised geometry)
 # substrate jlc-ro4350b-1.524: h 1.524 mm, εr 3.66, copper 34.79 µm; all 10 arms one field-solved array
-# arm widths 3.605 3.137 3.668 3.137 3.605 mm; inner gaps 6.064 6.819 6.183 6.819 6.064 mm; gaps between hairpins 0.7561 1.265 1.265 0.7561 mm
-# arm length 13.948 mm (67.286° at f0); tap 2.256 mm from the bend end of the outer arms
+# arm widths 3.921 3.165 3.465 3.165 3.921 mm; inner gaps 4.959 6.568 6.014 6.568 4.959 mm; gaps between hairpins 0.6643 1.231 1.231 0.6643 mm
+# arm length 13.494 mm (65.132° at f0); tap 2.294 mm from the bend end of the outer arms
 # U bottoms: two optimally mitred bends and the inner-gap line; open ends: KJK Δl as a capacitance; taps: Hammerstad tee
-# realised (lossless): centre 2.39974 GHz, −3 dB FBW 11.68 % (ideal 11.35 %), worst return loss over the central 80 % of the ripple band 16.52 dB (ideal 16.43 dB)
-# insertion loss at f0 1.07 dB with the substrate's conductor and dielectric loss
-# spurious passband near 2f0: peak S21 -0.253 dB at 4.658 GHz (1.941 f0)
+# realised (lossless): centre 2.39967 GHz, −3 dB FBW 11.73 % (ideal 11.35 %), worst return loss over the central 80 % of the ripple band 16.21 dB (ideal 16.43 dB)
+# insertion loss at f0 1.02 dB with the substrate's conductor and dielectric loss
+# spurious passband near 2f0: peak S21 -0.287 dB at 4.759 GHz (1.983 f0)
 .freq 1680000000 3120000000 801
 .ref 2400000000
 .substrate jlc-ro4350b-1.524
 .layout hairpin
-.param la = 67.2860764 tune 60.5575 74.0147   # arm length, degrees at f0 (mean modal velocity of the array)
-.param tt = 10.882548 tune 9.52628 15.2356   # tap from the bend end of the outer arms, degrees
+.param la = 65.1324534 tune 58.6192 71.6457   # arm length, degrees at f0 (mean modal velocity of the array)
+.param tt = 11.073206 tune 9.53103 15.5025   # tap from the bend end of the outer arms, degrees
 .param wf = 3.29115mm   # tap feed width (50 ohm)
-.param hw = 7.93856314   # half the feed width in degrees at f0
-.param w1 = 3.604563mm tune 3.06388mm 4.14525mm
-.param w2 = 3.137494mm tune 2.66687mm 3.60812mm
-.param w3 = 3.667521mm tune 3.11739mm 4.21765mm
-.param s12 = 0.7561063mm tune 0.453664mm 1.20977mm
-.param s23 = 1.265352mm tune 0.759211mm 2.02456mm
-.param g1 = 6.063613mm tune 3.03181mm 9.09542mm   # inner gap of hairpin 1
-.param g2 = 6.819326mm tune 3.40966mm 10.229mm   # inner gap of hairpin 2
-.param g3 = 6.182905mm tune 3.09145mm 9.27436mm   # inner gap of hairpin 3
+.param hw = 7.94252719   # half the feed width in degrees at f0
+.param w1 = 3.921453mm tune 3.33324mm 4.50967mm
+.param w2 = 3.164934mm tune 2.69019mm 3.63967mm
+.param w3 = 3.465404mm tune 2.94559mm 3.98521mm
+.param s12 = 0.6642987mm tune 0.398579mm 1.06288mm
+.param s23 = 1.230906mm tune 0.738543mm 1.96945mm
+.param g1 = 4.959237mm tune 2.47962mm 7.43886mm   # inner gap of hairpin 1
+.param g2 = 6.568082mm tune 3.28404mm 9.85212mm   # inner gap of hairpin 2
+.param g3 = 6.014294mm tune 3.00715mm 9.02144mm   # inner gap of hairpin 3
 port t1 50
 port t5 50
 cline S1
@@ -65,16 +65,16 @@ bend U4b v4b u4b W=w2 mitre=opt
 bend U5a u5a v5a W=w1 mitre=opt
 T5_u v5a v5b W=w1 len=g1
 bend U5b v5b u5b W=w1 mitre=opt
-Coe1 o1 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
-Coe2 o2 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
-Coe3 o3 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
-Coe4 o4 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
-Coe5 o5 0 0.0806025p   # open-end fringing (Δl 0.6672 mm)
-Coe6 o6 0 0.0806025p   # open-end fringing (Δl 0.6672 mm)
-Coe7 o7 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
-Coe8 o8 0 0.0701565p   # open-end fringing (Δl 0.6439 mm)
-Coe9 o9 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
-Coe10 o10 0 0.0793545p   # open-end fringing (Δl 0.6646 mm)
+Coe1 o1 0 0.0856546p   # open-end fringing (Δl 0.6773 mm)
+Coe2 o2 0 0.0856546p   # open-end fringing (Δl 0.6773 mm)
+Coe3 o3 0 0.070694p   # open-end fringing (Δl 0.6452 mm)
+Coe4 o4 0 0.070694p   # open-end fringing (Δl 0.6452 mm)
+Coe5 o5 0 0.0766029p   # open-end fringing (Δl 0.6587 mm)
+Coe6 o6 0 0.0766029p   # open-end fringing (Δl 0.6587 mm)
+Coe7 o7 0 0.070694p   # open-end fringing (Δl 0.6452 mm)
+Coe8 o8 0 0.070694p   # open-end fringing (Δl 0.6452 mm)
+Coe9 o9 0 0.0856546p   # open-end fringing (Δl 0.6773 mm)
+Coe10 o10 0 0.0856546p   # open-end fringing (Δl 0.6773 mm)
 .goal db(S11) < -16.43 2287798100 2518198100
 .goal db(S21) < -3 1680000000 2263608500   # −3 dB band at most 3 % wider than ideal
 .goal db(S21) < -3 2544110800 3120000000

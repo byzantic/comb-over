@@ -75,8 +75,8 @@ const ex = (f) => readFileSync(new URL(`../examples/${f}`, import.meta.url), 'ut
 {
   const h = 1.524e-3, er = 3.66, W = 3.3e-3, u = W / h;
   const b = bendLC({ W, h, er }), m = bendLC({ W, h, er, mitre: 'opt' });
-  check('square bend: KJK C/W and L/h evaluated by hand', Math.abs(b.C - W * ((10.35 * er + 2.5) * u + 2.6 * er + 5.64) * 1e-12) < 1e-20 && Math.abs(b.L1 + b.L2 - 220e-9 * h * (1 - 1.35 * Math.exp(-0.18 * u ** 1.39))) < 1e-20 && b.L1 === b.L2);
-  check('mitred bend: Douville–James C/W, L/h and optimum mitre by hand', Math.abs(m.C - W * ((3.93 * er + 0.62) * u + 7.6 * er + 3.8) * 1e-12) < 1e-20 && Math.abs(m.L1 + m.L2 - 440e-9 * h * (1 - 1.062 * Math.exp(-0.177 * u ** 0.947))) < 1e-20 && Math.abs(m.mitre - (0.52 + 0.65 * Math.exp(-1.35 * u))) < 1e-12);
+  check('square bend: KJK C/W and L/h by hand; L in each arm (as Qucs mscorner)', Math.abs(b.C - W * ((10.35 * er + 2.5) * u + 2.6 * er + 5.64) * 1e-12) < 1e-20 && Math.abs(b.L1 - 220e-9 * h * (1 - 1.35 * Math.exp(-0.18 * u ** 1.39))) < 1e-20 && b.L1 === b.L2);
+  check('mitred bend: Douville–James C/W, L/h (in each arm) and optimum mitre by hand', Math.abs(m.C - W * ((3.93 * er + 0.62) * u + 7.6 * er + 3.8) * 1e-12) < 1e-20 && Math.abs(m.L1 - 440e-9 * h * (1 - 1.062 * Math.exp(-0.177 * u ** 0.947))) < 1e-20 && m.L1 === m.L2 && Math.abs(m.mitre - (0.52 + 0.65 * Math.exp(-1.35 * u))) < 1e-12);
   const st = stepLC({ W1: W, W2: W / 3, h, er, f: 2e9 }), r = 3, lg = Math.log10(er);
   check('step: Gupta C and L by hand; L split towards the higher-impedance side', Math.abs(st.C - Math.sqrt(W * W / 3) * ((10.1 * lg + 2.33) * r - 12.6 * lg - 3.17) * 1e-12) < 1e-20 && Math.abs(st.L1 + st.L2 - h * (40.5 * (r - 1) - 75 * Math.log10(r) + 0.2 * (r - 1) ** 2) * 1e-9) < 1e-20 && st.L2 > st.L1);
   const sr = stepLC({ W1: W / 3, W2: W, h, er, f: 2e9 });

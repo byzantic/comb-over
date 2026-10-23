@@ -51,7 +51,7 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 <p><figure><img src="../img/ex12-wilkinson.png" alt="Compact Wilkinson" loading="lazy"><figcaption>Compact Wilkinson</figcaption></figure></p>
 <p><strong>The layout:</strong></p>
 <ul>
-<li><strong>Input.</strong> The 50 Ω input line tapers out over 1.78 mm to the arms&#39; outer edges. The netlist models the taper as four stepped lines.</li>
+<li><strong>Input.</strong> The 50 Ω input line tapers out over 2.03 mm to the arms&#39; outer edges. The netlist models the taper as four stepped lines.</li>
 <li><strong>Arms.</strong> The two quarter-wave arms run side by side, 1 mm apart.</li>
 <li><strong>Resistor.</strong> A 0603 resistor stands across that gap at the arms&#39; far ends. Its pads land on both arms, so no extra copper is needed to reach it.</li>
 <li><strong>Outputs.</strong> After the resistor the 50 Ω outputs run on side by side for 6.6 mm, still 1 mm apart. The netlist models this run as a coupled pair. They then turn away through two mitred bends each, to a 20 mm pitch, which keeps the bends well apart and clear of the resistor.</li>
@@ -70,35 +70,36 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 </tr>
 </thead>
 <tbody><tr>
-<td>2.01 mm × 16.98 mm, R 91.1 Ω</td>
+<td>1.96 mm × 17.71 mm, R 88.0 Ω</td>
 <td>as independent lines</td>
 <td>as independent lines</td>
-<td>21.1 dB</td>
-<td>24.8 dB</td>
-<td>21.9 dB</td>
+<td>21.4 dB</td>
+<td>30.9 dB</td>
+<td>20.8 dB</td>
 </tr>
 <tr>
 <td>the same copper</td>
 <td>as independent lines</td>
 <td><strong>as coupled (what is built)</strong></td>
-<td><strong>14.5 dB</strong></td>
-<td><strong>17.2 dB</strong></td>
-<td>22.0 dB</td>
+<td><strong>15.5 dB</strong></td>
+<td><strong>20.7 dB</strong></td>
+<td>20.9 dB</td>
 </tr>
 <tr>
-<td>2.87 mm × 15.83 mm, R 69.4 Ω</td>
+<td>2.43 mm × 16.70 mm, R 105.3 Ω</td>
 <td><strong>as coupled</strong></td>
 <td>as coupled</td>
-<td><strong>20.1 dB</strong></td>
-<td><strong>21.3 dB</strong></td>
-<td>20.7 dB</td>
+<td><strong>20.3 dB</strong></td>
+<td><strong>22.2 dB</strong></td>
+<td>22.0 dB</td>
 </tr>
 </tbody></table></div>
-<p>Ignoring the coupling costs about 7 dB of match at both the input and the outputs. Designed with the coupling, the arms come out wider, to bring the pair&#39;s even-mode impedance back up to the arm impedance.</p>
-<p><strong>Full wave.</strong> openEMS does not agree with the third design. Over the band it gives 14.4 dB input match, 15.4 dB output match and 21.3 dB isolation, against comb-over&#39;s 20.1, 21.3 and 20.7 dB. Worked example 13 (section 5) traces where the two differ:</p>
+<p>Ignoring the coupling costs about 6 dB of input match and 10 dB of output match. Designed with the coupling, the arms come out wider, to bring the pair&#39;s even-mode impedance back up to the arm impedance.</p>
+<p><strong>Full wave.</strong> In openEMS the third design gives 18.1 dB input match, 23.8 dB output match and 21.7 dB isolation over the band, against comb-over&#39;s 20.3, 22.2 and 22.0 dB (as built). The isolation and output match agree; the input match is about 2 dB short.</p>
+<p>Before #49 comb-over put only half of each bend&#39;s inductance in the model. The same design flow then gave 14.4 dB in openEMS against 20.1 dB in comb-over. Worked example 13 (section 5) traces the difference:</p>
 <ul>
 <li>The taper, the coupled arms, the step to the output width and the coupled output run each agree with openEMS on their own.</li>
-<li>The difference is at the mitred bends and where the two outputs split. Douville and James&#39;s bend model misjudges an isolated bend on this substrate: it predicts S11 −26 dB where openEMS gives −32 dB, and about 2° too little phase. The two bends at the split also interact.</li>
+<li>The rest was the mitred bends: half the inductance in the model, and the two bends interacting where the outputs split. With the bend model corrected (manual §4.7), what remains is about 2 dB of input match. That is consistent with bends just above W/h 2, where the model&#39;s phase error starts to grow, and with the bends&#39; interaction.</li>
 </ul>
 <p><strong>The trim.</strong> <code>tools/emtrim.mjs</code> corrects for this by output space mapping:</p>
 <ol>
@@ -107,7 +108,7 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 <li>Re-optimise the arm width, arm length, resistor and taper so that comb-over plus that difference meets the goals.</li>
 <li>Repeat until openEMS itself meets them.</li>
 </ol>
-<p>Here it took one correction, then a final check with the resistor rounded to E24 (95.0 → 91 Ω): three openEMS runs of about 70 s each. The log is in <a href="../../examples/em/"><code>examples/em/</code></a>.</p>
+<p>Here it took one correction, then a final check with the resistor rounded to E24 (102.3 → 100 Ω): three openEMS runs of about 70 s each. The log is in <a href="../../examples/em/"><code>examples/em/</code></a>.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -119,31 +120,31 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 </thead>
 <tbody><tr>
 <td>input return loss</td>
-<td>17.3 dB</td>
-<td><strong>20.9 dB</strong></td>
-<td>20.4 dB</td>
+<td>20.6 dB</td>
+<td><strong>21.0 dB</strong></td>
+<td>20.9 dB</td>
 </tr>
 <tr>
 <td>output return loss</td>
-<td>19.2 dB</td>
-<td><strong>26.4 dB</strong></td>
-<td>27.4 dB</td>
+<td>21.8 dB</td>
+<td><strong>24.9 dB</strong></td>
+<td>25.9 dB</td>
 </tr>
 <tr>
 <td>isolation</td>
-<td>22.8 dB</td>
-<td><strong>23.8 dB</strong></td>
-<td>23.3 dB</td>
+<td>24.1 dB</td>
+<td><strong>23.7 dB</strong></td>
+<td>23.9 dB</td>
 </tr>
 <tr>
 <td>split</td>
-<td>−3.14 … −3.18 dB</td>
-<td>−3.10 … −3.12 dB</td>
-<td>−3.10 … −3.12 dB</td>
+<td>−3.10 … −3.14 dB</td>
+<td>−3.11 … −3.12 dB</td>
+<td>−3.04 … −3.05 dB</td>
 </tr>
 </tbody></table></div>
-<p>The trimmed arms are 2.19 mm × 17.19 mm, with 91 Ω across them. The board netlist has no <code>.goal</code> lines: comb-over alone predicts it 3.6 dB short at the input, and the trim is what makes it work. The input match has the least margin, 0.4 dB at 2.64 GHz on the finer mesh.</p>
-<p><strong>Not modelled in comb-over:</strong> the bends&#39; interaction where the outputs split, the start of the gap at the end of the taper, and the resistor body over the gap (its pads, ESL and body capacitance are). The openEMS model has the resistor as a plain 91 Ω, without its ESL.</p>
+<p>The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within 0.5 dB on input match and isolation. The board netlist still has no <code>.goal</code> lines, because its dimensions come from the trim. The input match has the least margin, 0.9 dB at 2.64 GHz on the finer mesh.</p>
+<p><strong>Not modelled in comb-over:</strong> the bends&#39; interaction where the outputs split, the start of the gap at the end of the taper, and the resistor body over the gap (its pads, ESL and body capacitance are). The openEMS model has the resistor as a plain 100 Ω, without its ESL.</p>
 <h2 id="2-the-branch-line-hybrid"><a class="anchor" href="#2-the-branch-line-hybrid" aria-hidden="true">#</a>2. The branch-line hybrid</h2>
 <p><figure><img src="../img/ex12-branchline.png" alt="Branch-line hybrid" loading="lazy"><figcaption>Branch-line hybrid</figcaption></figure></p>
 <p><strong>The layout:</strong></p>
@@ -196,7 +197,7 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 <p>The branch-line part is one piece of copper with its four ports in one tie. CI exports both boards, runs KiCad&#39;s DRC and writes the Gerbers.</p>
 <p><strong>Before ordering:</strong></p>
 <ul>
-<li>The resistor is already an E24 value (91 Ω). Check its datasheet for ESL and body capacitance: comb-over assumes 0.6 nH and 0.03 pF (set <code>esl=</code> and <code>cp=</code> on the <code>res</code> line), and the openEMS check has none. In comb-over the ESL is worth about 4 dB of isolation, so a part with much more than 0.6 nH deserves a second look.</li>
+<li>The resistor is already an E24 value (100 Ω). Check its datasheet for ESL and body capacitance: comb-over assumes 0.6 nH and 0.03 pF (set <code>esl=</code> and <code>cp=</code> on the <code>res</code> line), and the openEMS check has none. In comb-over the ESL is worth about 4 dB of isolation, so a part with much more than 0.6 nH deserves a second look.</li>
 <li>The full-wave check is committed in <a href="../../examples/em/"><code>examples/em/</code></a>. After changing anything, rerun it (<code>node tools/openems.mjs examples/wilkinson-2g4-ro4350b-1524.cir --out oems/</code>, manual §8.6) or the trim.</li>
 </ul>
 

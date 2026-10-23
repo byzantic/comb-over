@@ -65,7 +65,8 @@ export function viaL({ d, h, n = 1 }) {
  *   compensation", IEEE Trans. MTT 26(3), 1978, at the optimum mitre:
  *   C/W = (3.93 εr + 0.62) W/h + (7.6 εr + 3.80) pF/m,  L/h = 440 [1 − 1.062 exp(−0.177 (W/h)^0.947)] nH/m;
  *   optimum mitre M = 52 + 65 exp(−1.35 W/h) % of the corner diagonal W√2; range 0.2 ≤ W/h ≤ 6, 2.5 ≤ εr ≤ 25.
- * Equivalent circuit: L/2 – C – L/2 (the L above is the total series inductance).
+ * Equivalent circuit: L – C – L, the L above in EACH arm, as in Qucs (msmbend, mscorner: z11 = jωL + 1/jωC,
+ *   z21 = 1/jωC). Until #49 this was split L/2 – C – L/2, which openEMS showed to be wrong.
  * Returns { L1, C, L2, mitre (fraction of the diagonal, 0 for none), warnings }.
  */
 export function bendLC({ W, h, er, mitre = 'none' }) {
@@ -84,7 +85,7 @@ export function bendLC({ W, h, er, mitre = 'none' }) {
     if (er < 2.5 || er > 25) warnings.push(`mitred bend εr = ${er} outside the model range 2.5–25`);
   } else throw new Error(`bend: mitre=${mitre} (use none or opt)`);
   if (!(L > 0)) { warnings.push('bend inductance not positive at this W/h; set to zero'); L = 0; }
-  return { L1: L / 2, C, L2: L / 2, mitre: M, warnings };
+  return { L1: L, C, L2: L, mitre: M, warnings };
 }
 
 /**

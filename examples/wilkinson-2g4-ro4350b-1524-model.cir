@@ -1,7 +1,7 @@
 .title Compact Wilkinson, 1 section, f0 = 2.4 GHz on jlc-ro4350b-1.524 (arms modelled as coupled pairs)
 # substrate jlc-ro4350b-1.524; arms as coupled pairs (Kirschning–Jansen) at a 1 mm gap; 0603 resistors bridging it
-# sections: W 2.873 mm, 15.83 mm, R 69.38 Ω; outputs at a 20 mm pitch through two mitred bends each
-# lossless, 2.16–2.64 GHz: return loss ≥ 20.1 dB (input), ≥ 21.3 dB (outputs); isolation ≥ 20.7 dB; split -3.053 … -3.023 dB
+# sections: W 2.43 mm, 16.7 mm, R 105.3 Ω; outputs at a 20 mm pitch through two mitred bends each
+# lossless, 2.16–2.64 GHz: return loss ≥ 20.3 dB (input), ≥ 22.2 dB (outputs); isolation ≥ 22 dB; split -3.051 … -3.01 dB
 # input: a 3.29 mm linear taper from the port line to the arms' outer edges (as 4 stepped lines); outputs side by side for 6.58 mm after the resistor (modelled as a coupled pair), then two mitred bends to the 20 mm pitch
 # not modelled: where the gap between the arms begins at the taper; the resistor body over the gap (its pads, ESL and body capacitance are)
 .freq 1200000000 3600000000 401
@@ -12,9 +12,9 @@
 .param wf = 3.29115mm   # port lines (50 ohm)
 .param lt = 3.29115mm   # input taper, from wf to the arms' outer width (2 w1 + s)
 .param lo = 6.5823mm   # outputs side by side after the last resistor (a coupled pair), to the first bend's corner
-.param w1 = 2.873088mm tune 2.0112mm 4.0223mm
-.param l1 = 15.82599mm tune 12.661mm 18.991mm
-.param r1 = 69.3827 tune 34.691 138.77
+.param w1 = 2.429534mm tune 1.7007mm 3.4013mm
+.param l1 = 16.7027mm tune 13.362mm 20.043mm
+.param r1 = 105.333 tune 52.667 210.67
 port in 50
 port o1 50
 port o2 50

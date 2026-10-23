@@ -93,22 +93,37 @@ Halving the mesh cell changed S11 by 0.2 dB, so this is not mesh error.
 | the coupled arms, even and odd mode (by a magnetic or electric wall on the centre line) | Kirschning–Jansen within 1–3 % in Z and εeff |
 | an input taper into the arms, and the step to the output width | \|S11\| within 0.2 dB |
 | the resistor pads | removing them changes nothing |
-| one optimum-mitred 90° bend, 3.29 mm on 1.524 mm | Douville–James predicts S11 −26 dB, openEMS −32 dB; openEMS fits twice the model's inductance and 0.2 mm more line each side |
+| one optimum-mitred 90° bend, 3.29 mm on 1.524 mm | as comb-over then had it, S11 −26 dB against openEMS's −32 dB; openEMS fits twice the model's inductance. comb-over had put half the published L in each arm, where the published circuit (and Qucs) has the whole L in each: fixed in #49 |
 | the two outputs' bends where they split, 1 mm apart | not separable from the above; the corrected bend explains about half of the remaining mismatch |
 
-So the remaining error is in the bends, and in their interaction where the outputs split. No single lumped correction fits the complex response.
+So the remaining error was in the bends, and in their interaction where the outputs split.
 
-**The fix** (#47):
+**Bends against openEMS (#49).** `tools/bendcheck.mjs` simulates single 90° bends:
+- **Range:** five substrates (εr 2.55–10.2, 0.508–1.6 mm), W/h 0.5–4, mitred and square.
+- **Ports:** at the strip's own impedance.
+- **Lines:** a straight reference of the same length takes out the lines' own εeff error.
+
+With the whole L in each arm, the S11 error is the same or smaller in all 40 cases.
+
+| optimum mitre | W/h ≤ 2 | W/h 4 |
+|---|---|---|
+| transmission-phase error at the top frequency | within 2° in 13 of 15 cases (4° in the other two) | −3° to −17°, largest at high εr and f·h |
+| complex S11 error | mostly below 0.1 | mostly below 0.1 |
+
+The square corner's phase error grows with W/h, from about 1° to 35°. The models are otherwise used as published (manual §4.7).
+
+**The fix** (#47, then #49):
 - **Input.** A taper into the arms, modelled as stepped lines.
 - **Outputs.** The side-by-side run after the resistor is modelled as a coupled pair, and the outputs go to a 20 mm pitch so the bends sit apart and off the resistor pads.
+- **Bend model.** The whole L in each arm (#49). comb-over's own design then gives 18.1 dB input match in openEMS, against 14.4 dB before.
 - **Trim.** The dimensions are trimmed against openEMS by output space mapping (`tools/emtrim.mjs`). It takes the complex difference between openEMS and comb-over, adds it to comb-over's response, and re-optimises the arms, resistor and taper. It converged after one correction.
 
 | over 2.16–2.64 GHz (worst) | comb-over alone | openEMS | openEMS, mesh halved |
 |---|---|---|---|
-| input return loss | 17.3 dB | 20.9 dB | 20.4 dB |
-| output return loss | 19.2 dB | 26.4 dB | 27.4 dB |
-| isolation | 22.8 dB | 23.8 dB | 23.3 dB |
+| input return loss | 20.6 dB | 21.0 dB | 20.9 dB |
+| output return loss | 21.8 dB | 24.9 dB | 25.9 dB |
+| isolation | 24.1 dB | 23.7 dB | 23.9 dB |
 
-The committed result ([`examples/em/`](../../examples/em/)) is for this trimmed board, with its comparison netlist and the trim's log. Correcting comb-over's bend model so that it predicts this board on its own is left to a separate issue.
+The committed result ([`examples/em/`](../../examples/em/)) is for this trimmed board, with its comparison netlist and the trim's log. With the corrected bend model, comb-over alone agrees with openEMS on it within 0.5 dB on input match and isolation.
 
-**Loss.** On both boards openEMS shows less loss than comb-over (1.0 % against 1.8 % for the trimmed Wilkinson at 2.4 GHz, port 1 driven). This has not been investigated.
+**Loss.** On both boards openEMS shows less loss than comb-over (about 1 % against 1.8 % for the trimmed Wilkinson at 2.4 GHz, port 1 driven). This has not been investigated.
