@@ -14,7 +14,7 @@ import { solve as solve2d, microstrip, stripsFromWS } from '../solver/mtl2d.js';
 const C0 = 299792458;
 const r6 = (x) => +x.toFixed(6);
 
-// write case DIR/NAME: P = { W, G, wf, lf, p } (mm), n cells; opts { sub, bare, full, fine, fmin, fmax }
+// write case DIR/NAME: P = { W, G, wf, lf, p } (mm), n cells; opts { sub, bare, full, fine, fmin, fmax, lossy }
 export function genCase(dir, name, P, n, opts = {}) {
   const subId = opts.sub ?? 'jlc-ro4350b-0.508', sub = makeSubstrate(subId), h = sub.dielectric.h * 1e3;
   const fmin = opts.fmin ?? 0.5e9, fmax = opts.fmax ?? 6e9, Lp = 3, Lf = r6(Lp + 3 * h + 1.5);   // feeds: port plane, then 3h + 1.5 mm to the section
@@ -33,7 +33,7 @@ export function genCase(dir, name, P, n, opts = {}) {
   const fine = opts.fine ?? Math.min(P.wf, fp0.side, fp0.tip, Math.max(fp0.overlap, P.wf), P.G) / 3;
   // the pair is unchanged by a 180° rotation (p1 ↔ p4, p2 ↔ p3): driving p1 and p2 is enough (full: all four)
   const sym = opts.full ? {} : { excite: '1,2', perm: [4, 3, 2, 1] };
-  const g = openemsExport(exportNet, { layout: { items, parts: [], substrate: sub, netlist: exportNet, errors: [], title: `fingers ${name}` }, lossless: true, fine, ...sym });
+  const g = openemsExport(exportNet, { layout: { items, parts: [], substrate: sub, netlist: exportNet, errors: [], title: `fingers ${name}` }, lossless: !opts.lossy, fine, ...sym });
   const d = join(dir, name); mkdirSync(d, { recursive: true });
   writeFileSync(join(d, 'f.py'), g.script.replace(/'[^']*\.s%dp'/, "'f.s%dp'"));
   const c = { ...P, n, len, bare: !!opts.bare, sub: subId, h, fmin, fmax, Lf, Lp: g.info.ports[0].Lp, cells: g.info.cells, overlap: fp0.overlap, side: fp0.side, tip: fp0.tip, fine };
