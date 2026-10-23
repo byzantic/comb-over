@@ -96,3 +96,25 @@ export function fitCase(d) {
   const [Cc, Lc] = toCL([fC.x[0], fC.x[1], x0[2], x0[3]]), [C, L] = toCL(fA.x);
   return { c: A.c, bare, fitC: { C: Cc, L: Lc, rms: fC.v }, C, L, rms: fA.v, modes: modes(C, L), A };
 }
+
+// de-embedded even/odd εeff from two cases that differ only in cell count (same ends): the median over fmin..fmax
+// of the Bloch phase of T_A·T_B⁻¹ (tools/fingerbloch.py, with OPENEMS_PYTHON's numpy)
+export function bloch(dA, dB, fmin = 1e9, fmax = 6e9) {
+  const a = JSON.parse(readFileSync(join(dA, 'case.json'), 'utf8')), b = JSON.parse(readFileSync(join(dB, 'case.json'), 'utf8'));
+  const r = spawnSync(process.env.OPENEMS_PYTHON || 'python3', [new URL('./fingerbloch.py', import.meta.url).pathname, join(dA, 'f.s4p'), join(dB, 'f.s4p'), String(a.n - b.n), String(a.p), String(fmin), String(fmax)], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`fingerbloch: ${r.stderr}`);
+  const o = JSON.parse(r.stdout), med = (v) => { const s = [...v].sort((x, y) => x - y); return s[s.length >> 1]; };
+  if (!o.f.length) throw new Error('fingerbloch: no frequency gave two even and two odd eigenvalues');
+  return { ee: med(o.ee), eo: med(o.eo), f: o.f, eeF: o.ee, eoF: o.eo };
+}
+// per-length C, L of a symmetric pair from Ze, Zo and εe, εo
+export function clFromModes(Ze, Zo, ee, eo) {
+  const Ce = Math.sqrt(ee) / (C0 * Ze), Co = Math.sqrt(eo) / (C0 * Zo), Le = Ze * Math.sqrt(ee) / C0, Lo = Zo * Math.sqrt(eo) / C0;
+  return [[[(Ce + Co) / 2, (Ce - Co) / 2], [(Ce - Co) / 2, (Ce + Co) / 2]], [[(Le + Lo) / 2, (Le - Lo) / 2], [(Le - Lo) / 2, (Le + Lo) / 2]]];
+}
+// Ze, Zo fitted to a case with εe, εo held at the de-embedded values
+export function fitZ(d, ee, eo, Z0 = [69, 37]) {
+  const A = loadCase(d), f = nm((x) => errOf(A.c, A.F, A.em, ...clFromModes(Math.exp(x[0]), Math.exp(x[1]), ee, eo)), Z0.map(Math.log), 200, 0.05);
+  const [Ze, Zo] = f.x.map(Math.exp), [C, L] = clFromModes(Ze, Zo, ee, eo);
+  return { Ze, Zo, ee, eo, C, L, rms: f.v };
+}
