@@ -1,0 +1,98 @@
+// Shared code for the finger-loaded coupled-line tools (issue #41): one openEMS case of a finger pair
+// between coupled feeds, running it, and fitting per-length C and L to its 4-port result.
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fingerPair } from '../js/fingers.js';
+import { makeSubstrate } from '../js/substrates.js';
+import { openemsExport } from '../js/openems.js';
+import { parseNetlist } from '../js/netlist.js';
+import { solve } from '../js/solver.js';
+import { readTouchstone, onSweep } from '../js/touchstone.js';
+import { solve as solve2d, microstrip, stripsFromWS } from '../solver/mtl2d.js';
+
+const C0 = 299792458;
+const r6 = (x) => +x.toFixed(6);
+
+// write case DIR/NAME: P = { W, G, wf, lf, p } (mm), n cells; opts { sub, bare, full, fine, fmin, fmax }
+export function genCase(dir, name, P, n, opts = {}) {
+  const subId = opts.sub ?? 'jlc-ro4350b-0.508', sub = makeSubstrate(subId), h = sub.dielectric.h * 1e3;
+  const fmin = opts.fmin ?? 0.5e9, fmax = opts.fmax ?? 6e9, Lp = 3, Lf = r6(Lp + 3 * h + 1.5);   // feeds: port plane, then 3h + 1.5 mm to the section
+  const fp0 = fingerPair({ ...P, n });
+  const fp = opts.bare ? { ...fp0, polys: [[[0, -P.G / 2 - P.W], [fp0.len, -P.G / 2 - P.W], [fp0.len, -P.G / 2], [0, -P.G / 2]], [[0, P.G / 2], [fp0.len, P.G / 2], [fp0.len, P.G / 2 + P.W], [0, P.G / 2 + P.W]]] } : fp0;
+  const len = fp.len, y1 = -P.G / 2 - P.W / 2, y2 = P.G / 2 + P.W / 2, rect = (a, b, c, d) => [[a, b], [c, b], [c, d], [a, d]];
+  const items = [
+    { type: 'poly', role: 'core', pts: fp.polys[0] }, { type: 'poly', role: 'core', pts: fp.polys[1] },
+    ...[['p1', -Lf, 0, y1], ['p3', -Lf, 0, y2], ['p2', len + Lf, len, y1], ['p4', len + Lf, len, y2]].map(([node, xe, xi, y]) => (
+      { type: 'poly', role: 'feed', node, width: P.W, pts: rect(Math.min(xe, xi), y - P.W / 2, Math.max(xe, xi), y + P.W / 2), path: [[xe, y], [xi, y]] })),
+  ];
+  // the export needs a T…_f line per port (it shortens them to the planes); the fit writes its own comparison
+  const exportNet = ['.title finger pair', `.freq ${fmin} ${fmax} 201`, `.substrate ${subId}`, ...['p1', 'p2', 'p3', 'p4'].map(q => `port ${q} 50`),
+    ...['p1', 'p2', 'p3', 'p4'].map(q => `T${q}_f ${q} ${q}_k W=${P.W}mm len=${Lf}mm`)].join('\n') + '\n';
+  // the edge cell from the smallest finger feature (finger width, side gap, tip gap, overlap), not the backbone
+  const fine = opts.fine ?? Math.min(P.wf, fp0.side, fp0.tip, Math.max(fp0.overlap, P.wf), P.G) / 3;
+  // the pair is unchanged by a 180° rotation (p1 ↔ p4, p2 ↔ p3): driving p1 and p2 is enough (full: all four)
+  const sym = opts.full ? {} : { excite: '1,2', perm: [4, 3, 2, 1] };
+  const g = openemsExport(exportNet, { layout: { items, parts: [], substrate: sub, netlist: exportNet, errors: [], title: `fingers ${name}` }, lossless: true, fine, ...sym });
+  const d = join(dir, name); mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, 'f.py'), g.script.replace(/'[^']*\.s%dp'/, "'f.s%dp'"));
+  const c = { ...P, n, len, bare: !!opts.bare, sub: subId, h, fmin, fmax, Lf, Lp: g.info.ports[0].Lp, cells: g.info.cells, overlap: fp0.overlap, side: fp0.side, tip: fp0.tip, fine };
+  writeFileSync(join(d, 'case.json'), JSON.stringify(c));
+  return c;
+}
+
+export function runCase(d) {
+  if (existsSync(join(d, 'f.s4p'))) return { ok: true, cached: true, s: 0 };
+  const t0 = Date.now(), r = spawnSync(process.env.OPENEMS_PYTHON || 'python3', ['f.py'], { cwd: d, encoding: 'utf8', maxBuffer: 1 << 28 });
+  writeFileSync(join(d, 'run.log'), r.stdout + r.stderr);
+  return { ok: r.status === 0 && !/-nan/.test(r.stdout) && existsSync(join(d, 'f.s4p')), s: (Date.now() - t0) / 1000 };
+}
+
+// comb-over's model of a case: plain coupled feeds (from the port planes) + the section as a cline with C, L (SI)
+export function model(c, C, L, freq = `${c.fmin} ${c.fmax} 11`) {
+  const fl = r6(c.Lf - c.Lp), m = (x) => x.toPrecision(8);
+  return ['.title finger pair model', `.freq ${freq}`, `.substrate ${c.sub}`, ...['p1', 'p2', 'p3', 'p4'].map(q => `port ${q} 50`),
+    `cline FA geom=msl W=${c.W}mm S=${c.G}mm`, `  len ${fl}mm`, '  Q 1e30', '  A p1 p3', '  B a1 a3', 'end',
+    'cline K', `  C [${m(C[0][0])} ${m(C[0][1])}; ${m(C[1][0])} ${m(C[1][1])}]`, `  L [${m(L[0][0])} ${m(L[0][1])}; ${m(L[1][0])} ${m(L[1][1])}]`, `  len ${c.len}mm`, '  Q 1e30', '  A a1 a3', '  B b1 b3', 'end',
+    `cline FB geom=msl W=${c.W}mm S=${c.G}mm`, `  len ${fl}mm`, '  Q 1e30', '  A b1 b3', '  B p2 p4', 'end'].join('\n') + '\n';
+}
+const PAIRS = [1, 2, 3, 4].flatMap(i => [1, 2, 3, 4].map(j => [i, j]));
+export function errOf(c, F, em, C, L) {
+  const r = solve(parseNetlist(model(c, C, L)), F); let e = 0;
+  for (const [i, j] of PAIRS) { const a = r.S(i, j), b = em.S(i, j); for (let k = 0; k < F.length; k++) e += (a.re[k] - b.re[k]) ** 2 + (a.im[k] - b.im[k]) ** 2; }
+  return Math.sqrt(e / F.length / PAIRS.length);
+}
+// symmetric pair: even/odd impedance and εeff from per-length C and L
+export function modes(C, L) {
+  const Ce = C[0][0] + C[0][1], Co = C[0][0] - C[0][1], Le = L[0][0] + L[0][1], Lo = L[0][0] - L[0][1];
+  return { Ze: Math.sqrt(Le / Ce), Zo: Math.sqrt(Lo / Co), ee: Le * Ce * C0 * C0, eo: Lo * Co * C0 * C0 };
+}
+export function nm(fn, x0, iters = 400, step = 0.1) {
+  const n = x0.length; let P = [x0]; for (let i = 0; i < n; i++) { const q = [...x0]; q[i] += step; P.push(q); }
+  let V = P.map(fn);
+  for (let it = 0; it < iters; it++) {
+    const o = V.map((_, i) => i).sort((a, b) => V[a] - V[b]); P = o.map(i => P[i]); V = o.map(i => V[i]);
+    const c = Array.from({ length: n }, (_, j) => P.slice(0, n).reduce((s, q) => s + q[j], 0) / n), at = (t) => c.map((v, j) => v + t * (P[n][j] - v));
+    const r = at(-1), fr = fn(r);
+    if (fr < V[0]) { const e = at(-2), fe = fn(e); if (fe < fr) { P[n] = e; V[n] = fe; } else { P[n] = r; V[n] = fr; } }
+    else if (fr < V[n - 1]) { P[n] = r; V[n] = fr; }
+    else { const k = at(0.5), fk = fn(k); if (fk < V[n]) { P[n] = k; V[n] = fk; } else for (let i = 1; i <= n; i++) { P[i] = P[i].map((v, j) => P[0][j] + 0.5 * (v - P[0][j])); V[i] = fn(P[i]); } }
+  }
+  const b = V.indexOf(Math.min(...V)); return { x: P[b], v: V[b] };
+}
+export function loadCase(d) {
+  const c = JSON.parse(readFileSync(join(d, 'case.json'), 'utf8')), ds = readTouchstone(readFileSync(join(d, 'f.s4p'), 'utf8'), { nPorts: 4, name: 'f' });
+  const F = Float64Array.from({ length: 12 }, (_, i) => c.fmin * 1.01 + (c.fmax * 0.99 - c.fmin * 1.01) * i / 11);
+  return { c, F, em: onSweep(ds, F) };
+}
+export const bareCL = (c) => { const sub = makeSubstrate(c.sub); return solve2d(stripsFromWS([c.W * 1e-3, c.W * 1e-3], c.G * 1e-3, 0), microstrip({ h: sub.dielectric.h, er: sub.dielectric.er })); };
+const toCL = (x) => [[[Math.exp(x[0]), -Math.exp(x[1])], [-Math.exp(x[1]), Math.exp(x[0])]], [[Math.exp(x[2]), Math.exp(x[3])], [Math.exp(x[3]), Math.exp(x[2])]]];
+// fit per-length C and L to a case: first C with L of the bare backbones, then all four (log parameters)
+export function fitCase(d) {
+  const A = loadCase(d), bare = bareCL(A.c);
+  const x0 = [Math.log(bare.C[0][0]), Math.log(-bare.C[0][1]), Math.log(bare.L[0][0]), Math.log(bare.L[0][1])];
+  const fC = nm((x) => errOf(A.c, A.F, A.em, ...toCL([x[0], x[1], x0[2], x0[3]])), x0.slice(0, 2));
+  const fA = nm((x) => errOf(A.c, A.F, A.em, ...toCL(x)), [fC.x[0], fC.x[1], x0[2], x0[3]], 600, 0.05);
+  const [Cc, Lc] = toCL([fC.x[0], fC.x[1], x0[2], x0[3]]), [C, L] = toCL(fA.x);
+  return { c: A.c, bare, fitC: { C: Cc, L: Lc, rms: fC.v }, C, L, rms: fA.v, modes: modes(C, L), A };
+}

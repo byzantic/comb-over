@@ -180,7 +180,11 @@ export function openemsExport(text, opts = {}) {
     return 'PML_8';
   }));
   bc.push('PEC', 'PML_8');
-  const nPort = ports.length, exc = opts.excite && opts.excite !== 'all' ? [Number(opts.excite)] : ports.map(p => p.n);
+  // excite: 'all' (default), a port number, or a list ('1,2'); perm: a symmetry of the structure as a port
+  // permutation (port i ↔ perm[i−1]), which fills in the excitations not run (#41)
+  const nPort = ports.length, exc = opts.excite && opts.excite !== 'all' ? String(opts.excite).split(',').map(Number) : ports.map(p => p.n);
+  const perm = opts.perm ?? null;
+  if (perm && (perm.length !== nPort || [...perm].sort((a, b) => a - b).some((v, i) => v !== i + 1))) throw new Error('openEMS export: perm must be a permutation of the ports');
   const name = (L.title || 'layout').replace(/[^\w.-]+/g, '_').slice(0, 60);
   const J = (x) => JSON.stringify(x);
   const script = `#!/usr/bin/env python3
@@ -246,6 +250,7 @@ def run():
     # incident (A) and reflected (B) waves at every port, one column per excitation
     A = np.zeros((len(f), n, n), dtype=complex); B = np.zeros((len(f), n, n), dtype=complex)
     exc_list = ${J(exc)}
+    PERM = ${perm ? J(perm) : "None"}            # a symmetry: port i maps to PERM[i-1] (1-based), or None
     for exc in exc_list:
         path = os.path.join(here, 'sim_p%d' % exc)
         fdtd, ports = model(exc)
@@ -258,7 +263,17 @@ def run():
         a = ports[exc - 1].uf_inc
         for i, p in enumerate(ports):
             S[:, i, exc - 1] = p.uf_ref / a
-    if sorted(exc_list) == list(range(1, n + 1)):
+    done = set(exc_list)
+    if PERM:
+        # an excitation not run is the image of one that was: driving PERM[r-1] gives the waves of driving r,
+        # with every port i moved to PERM[i-1]
+        for r in list(exc_list):
+            e = PERM[r - 1]
+            if e not in done:
+                for i in range(n):
+                    A[:, PERM[i] - 1, e - 1] = A[:, i, r - 1]; B[:, PERM[i] - 1, e - 1] = B[:, i, r - 1]
+                done.add(e)
+    if sorted(done) == list(range(1, n + 1)):
         # every port driven: S = B A^-1, exact whatever the ports' terminations reflect (a port terminated
         # off its line's impedance sends a wave back in, which b_i / a_exc alone would count as S, #41)
         S = np.array([B[k] @ np.linalg.inv(A[k]) for k in range(len(f))])
