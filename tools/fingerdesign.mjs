@@ -57,7 +57,10 @@ let x = project([opt('W', 0.9), opt('G', 0.3), opt('lf', 0.2)]), h = evaluate(x)
 const steps = [0.05, 0.04, 0.03];
 let J = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
 for (let j = 0; j < 3; j++) {
-  const xs = [...x]; xs[j] += steps[j]; const xp = project(xs), dx = xp[j] - x[j];
+  // forward step, or backward if a limit blocks it (the start may sit on one)
+  let xs = [...x]; xs[j] += steps[j]; let xp = project(xs);
+  if (Math.abs(xp[j] - x[j]) < steps[j] / 2) { xs = [...x]; xs[j] -= steps[j]; xp = project(xs); }
+  const dx = xp[j] - x[j]; if (Math.abs(dx) < 1e-4) throw new Error(`no room to step variable ${j} from ${x}`);
   const hj = evaluate(xp); for (let i = 0; i < 3; i++) J[i][j] = (hj.res[i] - h.res[i]) / dx;
 }
 for (let it = 0; it < opt('iters', 12) && norm(h.res) > 0.005; it++) {
