@@ -1913,6 +1913,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <td>The openEMS check of the bend models (§4.7): writes, runs and reports 60 single-bend and straight-line cases. Needs openEMS.</td>
 </tr>
 <tr>
+<td><code>node tools/fingercheck.mjs gen|run|fit DIR [--W --G --wf --lf --p --n 12,24 --sub ID --bare]</code></td>
+<td>Finger-loaded coupled lines against openEMS (#41, stage 1): writes and runs a finger-loaded pair (or the bare backbones, <code>--bare</code>) between coupled feeds, fits per-length C and L to the shortest section and predicts the others. Needs openEMS.</td>
+</tr>
+<tr>
 <td><code>python3 tools/oemsfig.py CMP.csv OUT.png [--title T]</code></td>
 <td>Figure of an openEMS comparison from <code>--compare --csv</code> (needs matplotlib).</td>
 </tr>
