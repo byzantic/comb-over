@@ -31,9 +31,11 @@ function smooth(fixed, maxStep, ratio = 1.4, minStep = 0) {
   const out = [merged[0]];
   for (let i = 1; i < merged.length; i++) {
     const a = merged[i - 1], b = merged[i], gap = b - a;
-    if (gap <= maxStep) { out.push(b); continue; }
     // grow from both ends: left step sl (the previous step), right step sr (the next one)
     const sl = i > 1 ? Math.min(maxStep, merged[i - 1] - merged[i - 2]) : maxStep, sr = i < merged.length - 1 ? Math.min(maxStep, merged[i + 1] - merged[i]) : maxStep;
+    // a gap is left as one cell only if it is within the max step and the grading ratio of both neighbours (a strip
+    // between its two edge-line pairs was otherwise one cell, up to 25× its neighbours)
+    if (gap <= maxStep && gap <= ratio * Math.min(sl, sr)) { out.push(b); continue; }
     const fill = []; let x = a, y = b, dl = sl, dr = sr;
     const left = [], right = [];
     for (let guard = 0; guard < 10000; guard++) {
