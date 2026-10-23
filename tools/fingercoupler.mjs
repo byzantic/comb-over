@@ -22,15 +22,24 @@ function gen() {
   // the plain coupler's netlist with the backbones' W, gap and the section length
   const geomNet = src.replace(/^\.param w = \S+/m, `.param w = ${c.W}mm`).replace(/^\.param s = \S+/m, `.param s = ${c.G}mm`).replace(/len 90deg/, `len ${len}mm`);
   const d = parseNetlist(geomNet), L = buildLayout({ ...d, layout: { ...d.layout, opts: { ...(d.layout.opts ?? {}), connector: 'none' } } });
-  // fingers as rectangles on the backbones' inner edges (line 1, in–thru, at y < 0), section from x = 0
-  const rect = (x0, x1, y0, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], h = c.wf / 2, e = c.G / 2;
-  const fingers = [];
-  for (let k = 0; k < n; k++) {
-    const a = (k + 0.25) * c.p, b = (k + 0.75) * c.p;
-    fingers.push({ type: 'poly', role: 'core', pts: rect(r6(a - h), r6(a + h), -e, r6(-e + c.lf)) });
-    fingers.push({ type: 'poly', role: 'core', pts: rect(r6(b - h), r6(b + h), r6(e - c.lf), e) });
+  // fingers spliced into each backbone's outline along its inner edge (y = ∓G/2), section from x = 0: one outline
+  // per line, as in the extraction (separate rectangles butted against the backbone put an edge inside the copper,
+  // and the mesh's thirds rule then placed the backbone edge's lines the wrong way round)
+  const h = c.wf / 2, e = c.G / 2, centres = (o) => Array.from({ length: n }, (_, k) => (k + o) * c.p);
+  let spliced = 0;
+  for (const it of L.items.filter(i => i.role === 'core')) {
+    const P = it.pts;
+    for (let i = 0; i < P.length; i++) {
+      const [a, b] = [P[i], P[(i + 1) % P.length]];
+      if (Math.abs(a[1] - b[1]) > 1e-9 || Math.abs(Math.abs(a[1]) - e) > 1e-6) continue;
+      const y = a[1], s = Math.sign(-y), up = b[0] > a[0];   // fingers grow towards y = 0
+      const cs = centres(y < 0 ? 0.25 : 0.75).sort((u, v) => up ? u - v : v - u), ins = [];
+      for (const x of cs) { const [x1, x2] = up ? [x - h, x + h] : [x + h, x - h]; ins.push([r6(x1), y], [r6(x1), r6(y + s * c.lf)], [r6(x2), r6(y + s * c.lf)], [r6(x2), y]); }
+      if (!cs.every(x => x - h > Math.min(a[0], b[0]) && x + h < Math.max(a[0], b[0]))) throw new Error('fingers run past the coupled edge');
+      P.splice(i + 1, 0, ...ins); spliced++; break;
+    }
   }
-  L.items.push(...fingers);
+  if (spliced !== 2) throw new Error(`found ${spliced} inner edges, expected 2`);
   const fine = Math.min(c.wf, c.side, c.tip, Math.abs(c.overlap), c.G) / 3;
   const g = openemsExport(geomNet, { layout: L, fine, excite: '1,2', perm: [4, 3, 2, 1] });
   mkdirSync(dir, { recursive: true });
