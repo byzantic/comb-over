@@ -13,3 +13,5 @@ E24: R 102.29 → 100 Ω
   comb-over: S11 -20.57, S22 -21.76, S32 -24.06 dB; S21 -3.135 … -3.104 dB
   openEMS:   S11 -21.02, S22 -24.90, S32 -23.73 dB; S21 -3.119 … -3.106 dB
 wrote /home/claude/oems/run/trim49/wilkinson-2g4-ro4350b-1524.cir; final openEMS run in /home/claude/oems/run/trim49/round-e24
+
+re-processed with S = B A^-1 (all ports driven, #41): openEMS e24: S11 -21.55, S22 -25.08, S32 -23.02 dB; S21 -3.113 … -3.102 dB

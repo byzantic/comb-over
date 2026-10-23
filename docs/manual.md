@@ -1156,7 +1156,7 @@ Line admittances use coth and csch of γℓ, written so that they lose no precis
   - Matthaei g-value tables;
   - the engine against the analytic pair split;
   - realised centre, bandwidth and return loss of synthesised designs, before and after polishing.
-- **Full wave.** The compact Wilkinson of example 12 against openEMS (example 13, section 5): the arms, taper, width step and coupled output run agree piece by piece. The bends did not until #49 put the whole published L in each arm (§4.7, with a 40-case openEMS sweep). comb-over's own design is now 2 dB short in input match in openEMS (6 dB before). The board is trimmed against openEMS (§7.9), and comb-over then predicts it within 0.5 dB.
+- **Full wave.** The compact Wilkinson of example 12 against openEMS (example 13, section 5): the arms, taper, width step and coupled output run agree piece by piece. The bends did not until #49 put the whole published L in each arm (§4.7, with a 40-case openEMS sweep). comb-over's own design is now 2 dB short in input match in openEMS (6 dB before). The board is trimmed against openEMS (§7.9), and comb-over then predicts it within about 1 dB.
 - **Full wave.** The 10 dB coupler on 0.508 mm RO4350B against openEMS ([worked example 13](examples/13-openems-coupler.md)): coupling within 0.2 dB from 1 to 5 GHz and 0.3 dB at 6 GHz; transmission phase within 6° at 5 GHz, of which about 2° is copper thickness and 4° the layout's unmodelled corners; radiation below 1 %.
 
 ---
@@ -1177,6 +1177,7 @@ Line admittances use coth and csch of γℓ, written so that they lose no precis
 | `node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all\|N] [--fine MM] [--zfine MM] [--nz N] [--end X] [--lossless] [--run]` | openEMS model of the `.layout` and the comparison netlist (§8.6). `--compare DIR\|FILE.cir [--at F1,…] [--port N] [--csv FILE]` tabulates the result against comb-over. |
 | `node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]` | Trims a compact Wilkinson against openEMS by output space mapping (§7.9). Needs openEMS. |
 | `node tools/bendcheck.mjs gen\|run\|report DIR` | The openEMS check of the bend models (§4.7): writes, runs and reports 60 single-bend and straight-line cases. Needs openEMS. |
+| `node tools/fingercheck.mjs gen\|run\|fit DIR [--W --G --wf --lf --p --n 12,24 --sub ID --bare]` | Finger-loaded coupled lines against openEMS (#41, stage 1): writes and runs a finger-loaded pair (or the bare backbones, `--bare`) between coupled feeds, fits per-length C and L to the shortest section and predicts the others. Needs openEMS. |
 | `python3 tools/oemsfig.py CMP.csv OUT.png [--title T]` | Figure of an openEMS comparison from `--compare --csv` (needs matplotlib). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |

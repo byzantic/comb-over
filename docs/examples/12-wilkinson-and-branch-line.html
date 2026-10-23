@@ -95,7 +95,7 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 </tr>
 </tbody></table></div>
 <p>Ignoring the coupling costs about 6 dB of input match and 10 dB of output match. Designed with the coupling, the arms come out wider, to bring the pair&#39;s even-mode impedance back up to the arm impedance.</p>
-<p><strong>Full wave.</strong> In openEMS the third design gives 18.1 dB input match, 23.8 dB output match and 21.7 dB isolation over the band, against comb-over&#39;s 20.3, 22.2 and 22.0 dB (as built). The isolation and output match agree; the input match is about 2 dB short.</p>
+<p><strong>Full wave.</strong> In openEMS the third design gives 18.1 dB input match, 24.6 dB output match and 22.5 dB isolation over the band, against comb-over&#39;s 20.3, 22.2 and 22.0 dB (as built). The isolation and output match agree; the input match is about 2 dB short.</p>
 <p>Before #49 comb-over put only half of each bend&#39;s inductance in the model. The same design flow then gave 14.4 dB in openEMS against 20.1 dB in comb-over. Worked example 13 (section 5) traces the difference:</p>
 <ul>
 <li>The taper, the coupled arms, the step to the output width and the coupled output run each agree with openEMS on their own.</li>
@@ -121,29 +121,29 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 <tbody><tr>
 <td>input return loss</td>
 <td>20.6 dB</td>
-<td><strong>21.0 dB</strong></td>
-<td>20.9 dB</td>
+<td><strong>21.6 dB</strong></td>
+<td>21.6 dB</td>
 </tr>
 <tr>
 <td>output return loss</td>
 <td>21.8 dB</td>
-<td><strong>24.9 dB</strong></td>
-<td>25.9 dB</td>
+<td><strong>25.1 dB</strong></td>
+<td>25.8 dB</td>
 </tr>
 <tr>
 <td>isolation</td>
 <td>24.1 dB</td>
-<td><strong>23.7 dB</strong></td>
-<td>23.9 dB</td>
+<td><strong>23.0 dB</strong></td>
+<td>23.6 dB</td>
 </tr>
 <tr>
 <td>split</td>
 <td>−3.10 … −3.14 dB</td>
-<td>−3.11 … −3.12 dB</td>
-<td>−3.04 … −3.05 dB</td>
+<td>−3.10 … −3.11 dB</td>
+<td>−3.03 … −3.04 dB</td>
 </tr>
 </tbody></table></div>
-<p>The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within 0.5 dB on input match and isolation. The board netlist still has no <code>.goal</code> lines, because its dimensions come from the trim. The input match has the least margin, 0.9 dB at 2.64 GHz on the finer mesh.</p>
+<p>The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within about 1 dB on input match and isolation. The board netlist still has no <code>.goal</code> lines, because its dimensions come from the trim. The input match has the least margin, 1.6 dB on either mesh.</p>
 <p><strong>Not modelled in comb-over:</strong> the bends&#39; interaction where the outputs split, the start of the gap at the end of the taper, and the resistor body over the gap (its pads, ESL and body capacitance are). The openEMS model has the resistor as a plain 100 Ω, without its ESL.</p>
 <h2 id="2-the-branch-line-hybrid"><a class="anchor" href="#2-the-branch-line-hybrid" aria-hidden="true">#</a>2. The branch-line hybrid</h2>
 <p><figure><img src="../img/ex12-branchline.png" alt="Branch-line hybrid" loading="lazy"><figcaption>Branch-line hybrid</figcaption></figure></p>

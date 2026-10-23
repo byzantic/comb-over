@@ -4,7 +4,7 @@
 # input: a 2.030 mm linear taper from the port line to the arms' outer edges (as 4 stepped lines); outputs side by side for 6.58 mm after the resistor (modelled as a coupled pair), then two mitred bends to the 20 mm pitch
 # not modelled: where the gap between the arms begins at the taper; the resistor body over the gap (its pads, ESL and body capacitance are)
 # trimmed against openEMS by output space mapping (tools/emtrim.mjs, 3 simulations): arms, resistor and input taper chosen so that openEMS meets the goals
-# openEMS, 2.160–2.640 GHz (worst): S11 -21.02, S22 -24.90, S32 -23.73 dB; S21 -3.119 … -3.106 dB
+# openEMS, 2.160–2.640 GHz (worst): S11 -21.55, S22 -25.08, S32 -23.02 dB; S21 -3.113 … -3.102 dB
 # comb-over alone predicts S11 -20.57, S22 -21.76, S32 -24.06 dB; S21 -3.135 … -3.104 dB for this board
 .freq 1200000000 3600000000 401
 .ref 2400000000

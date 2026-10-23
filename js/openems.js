@@ -243,15 +243,27 @@ def run():
     f = np.linspace(f_min, f_max, 401)
     n = len(PORTS)
     S = np.full((len(f), n, n), np.nan, dtype=complex)
-    for exc in ${J(exc)}:
+    # incident (A) and reflected (B) waves at every port, one column per excitation
+    A = np.zeros((len(f), n, n), dtype=complex); B = np.zeros((len(f), n, n), dtype=complex)
+    exc_list = ${J(exc)}
+    for exc in exc_list:
         path = os.path.join(here, 'sim_p%d' % exc)
         fdtd, ports = model(exc)
-        fdtd.Run(path, cleanup=True)
+        if not (os.environ.get('OEMS_POST') and os.path.isdir(path)):   # OEMS_POST=1: re-process existing runs
+            fdtd.Run(path, cleanup=True)
         for p in ports:
             p.CalcPort(path, f, ref_impedance=PORTS[0]['z'])
+        for i, p in enumerate(ports):
+            A[:, i, exc - 1] = p.uf_inc; B[:, i, exc - 1] = p.uf_ref
         a = ports[exc - 1].uf_inc
         for i, p in enumerate(ports):
             S[:, i, exc - 1] = p.uf_ref / a
+    if sorted(exc_list) == list(range(1, n + 1)):
+        # every port driven: S = B A^-1, exact whatever the ports' terminations reflect (a port terminated
+        # off its line's impedance sends a wave back in, which b_i / a_exc alone would count as S, #41)
+        S = np.array([B[k] @ np.linalg.inv(A[k]) for k in range(len(f))])
+    else:
+        print('note: not every port driven; S_i,exc = b_i / a_exc assumes the other ports are matched to the reference impedance')
     out = os.path.join(here, '${name}.s%dp' % n)
     with open(out, 'w') as fh:
         fh.write('! openEMS result for ${L.title.replace(/'/g, '')}\\n# Hz S RI R %g\\n' % PORTS[0]['z'])

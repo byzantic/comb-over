@@ -67,6 +67,7 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
   }
   check('the comparison netlist is the export\'s, with the committed result\'s name', cmp.replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-10dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
 }
+check('every port driven: S = B·A⁻¹ from the waves at all ports (exact whatever the terminations reflect); otherwise b/a with a note', (() => { const g = openemsExport(ex('coupler-10dB-ro4350b.cir')), g1 = openemsExport(ex('coupler-10dB-ro4350b.cir'), { excite: '1' }); return /np\.linalg\.inv\(A\[k\]\)/.test(g.script) && /exc_list = \[1,2,3,4\]/.test(g.script) && /exc_list = \[1\]/.test(g1.script); })());
 check('a netlist without .layout is refused', throws(() => openemsExport(ex('combline-4pole.cir')), /needs a \.layout/));
 
 console.log(`\n${pass} passed, ${fail} failed`);
