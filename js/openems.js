@@ -32,20 +32,22 @@ function smooth(fixed, maxStep, ratio = 1.4, minStep = 0) {
   for (let i = 1; i < merged.length; i++) {
     const a = merged[i - 1], b = merged[i], gap = b - a;
     // grow from both ends: left step sl (the previous step), right step sr (the next one)
-    const sl = i > 1 ? Math.min(maxStep, merged[i - 1] - merged[i - 2]) : maxStep, sr = i < merged.length - 1 ? Math.min(maxStep, merged[i + 1] - merged[i]) : maxStep;
+    const sl = out.length > 1 ? Math.min(maxStep, out.at(-1) - out.at(-2)) : maxStep, sr = i < merged.length - 1 ? Math.min(maxStep, merged[i + 1] - merged[i]) : maxStep;
     // a gap is left as one cell only if it is within the max step and the grading ratio of both neighbours (a strip
     // between its two edge-line pairs was otherwise one cell, up to 25× its neighbours)
     if (gap <= maxStep && gap <= ratio * Math.min(sl, sr)) { out.push(b); continue; }
-    const fill = []; let x = a, y = b, dl = sl, dr = sr;
+    // grow from whichever side has the smaller next step until the rest is under two of those steps, then split the
+    // rest into equal cells no wider than ratio × the smaller adjacent step (no tiny or oversized last cell)
+    let x = a, y = b, dl = sl, dr = sr;
     const left = [], right = [];
     for (let guard = 0; guard < 10000; guard++) {
-      dl = Math.min(dl * ratio, maxStep); dr = Math.min(dr * ratio, maxStep);
-      if (y - x <= Math.max(dl, dr)) break;
-      if (dl <= dr) { x += dl; left.push(x); } else { y -= dr; right.unshift(y); }
+      const nl = Math.min(dl * ratio, maxStep), nr = Math.min(dr * ratio, maxStep);
+      if (y - x < 2 * Math.min(nl, nr)) break;
+      if (nl <= nr) { x += nl; left.push(x); dl = nl; } else { y -= nr; right.unshift(y); dr = nr; }
     }
-    fill.push(...left, ...right);
-    // spread what is left evenly if the middle gap is too wide
-    out.push(...fill.map(r6), b);
+    const R = y - x, k = Math.max(1, Math.ceil(R / Math.min(maxStep, ratio * Math.min(dl, dr)) - 1e-9));
+    const mid = Array.from({ length: k - 1 }, (_, j) => x + R * (j + 1) / k);
+    out.push(...[...left, ...mid, ...right].map(r6), b);
   }
   return out;
 }
