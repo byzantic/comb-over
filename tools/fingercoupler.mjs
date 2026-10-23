@@ -1,6 +1,6 @@
 // A finger-loaded coupled-line coupler in openEMS (issue #41, stage 2): the 10 dB coupler's layout with the
 // coupled section replaced by a finger-loaded pair, and comb-over's model of it from the extracted C, L.
-//   node tools/fingercoupler.mjs gen DIR --fit DESIGN_DIR/CASE [--cells 13 --net examples/coupler-10dB-ro4350b.cir]
+//   node tools/fingercoupler.mjs gen DIR --fit DESIGN_DIR/CASE [--long DESIGN_DIR/CASE_n14] [--cells 13 --net examples/coupler-10dB-ro4350b.cir]
 //   (cd DIR && $OPENEMS_PYTHON f.py)       ports 1 and 2 driven; the 180° rotation gives the rest
 //   node tools/fingercoupler.mjs cmp DIR   model against openEMS (and the plain coupler's committed result)
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -10,14 +10,16 @@ import { buildLayout } from '../js/layout-templates.js';
 import { openemsExport } from '../js/openems.js';
 import { solve } from '../js/solver.js';
 import { readTouchstone, onSweep } from '../js/touchstone.js';
-import { fitCase } from './fingerlib.mjs';
+import { fitCase, loadCase, bloch, fitZ } from './fingerlib.mjs';
 
 const [cmd, dir, ...rest] = process.argv.slice(2);
 const opt = (k, d) => { const i = rest.indexOf(`--${k}`); return i >= 0 ? rest[i + 1] : d; };
 const r6 = (x) => +x.toFixed(6), m8 = (x) => x.toPrecision(8);
 
 function gen() {
-  const f = fitCase(opt('fit')), c = f.c, n = +opt('cells', 13), len = r6(n * c.p);
+  // the section's C, L: de-embedded from the pair (--long, the same geometry with more cells), else fitted to --fit alone
+  const f = opt('long') ? (() => { const b = bloch(opt('long'), opt('fit')); return fitZ(opt('long'), b.ee, b.eo); })() : fitCase(opt('fit'));
+  const c = loadCase(opt('fit')).c, n = +opt('cells', 13), len = r6(n * c.p);
   const src = readFileSync(opt('net', 'examples/coupler-10dB-ro4350b.cir'), 'utf8');
   // the plain coupler's netlist with the backbones' W, gap and the section length
   const geomNet = src.replace(/^\.param w = \S+/m, `.param w = ${c.W}mm`).replace(/^\.param s = \S+/m, `.param s = ${c.G}mm`).replace(/len 90deg/, `len ${len}mm`);
