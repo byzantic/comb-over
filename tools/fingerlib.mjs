@@ -49,12 +49,16 @@ export function runCase(d) {
 }
 
 // comb-over's model of a case: plain coupled feeds (from the port planes) + the section as a cline with C, L (SI)
+// c.feedCL: the feeds' per-length C, L (e.g. fitted to a bare openEMS run, fitBare); else comb-over's microstrip model
 export function model(c, C, L, freq = `${c.fmin} ${c.fmax} 11`) {
   const fl = r6(c.Lf - c.Lp), m = (x) => x.toPrecision(8);
+  const feed = (nm, a, b) => c.feedCL
+    ? [`cline ${nm}`, `  C [${m(c.feedCL.C[0][0])} ${m(c.feedCL.C[0][1])}; ${m(c.feedCL.C[1][0])} ${m(c.feedCL.C[1][1])}]`, `  L [${m(c.feedCL.L[0][0])} ${m(c.feedCL.L[0][1])}; ${m(c.feedCL.L[1][0])} ${m(c.feedCL.L[1][1])}]`, `  len ${fl}mm`, '  Q 1e30', `  A ${a}`, `  B ${b}`, 'end']
+    : [`cline ${nm} geom=msl W=${c.W}mm S=${c.G}mm`, `  len ${fl}mm`, '  Q 1e30', `  A ${a}`, `  B ${b}`, 'end'];
   return ['.title finger pair model', `.freq ${freq}`, `.substrate ${c.sub}`, ...['p1', 'p2', 'p3', 'p4'].map(q => `port ${q} 50`),
-    `cline FA geom=msl W=${c.W}mm S=${c.G}mm`, `  len ${fl}mm`, '  Q 1e30', '  A p1 p3', '  B a1 a3', 'end',
+    ...feed('FA', 'p1 p3', 'a1 a3'),
     'cline K', `  C [${m(C[0][0])} ${m(C[0][1])}; ${m(C[1][0])} ${m(C[1][1])}]`, `  L [${m(L[0][0])} ${m(L[0][1])}; ${m(L[1][0])} ${m(L[1][1])}]`, `  len ${c.len}mm`, '  Q 1e30', '  A a1 a3', '  B b1 b3', 'end',
-    `cline FB geom=msl W=${c.W}mm S=${c.G}mm`, `  len ${fl}mm`, '  Q 1e30', '  A b1 b3', '  B p2 p4', 'end'].join('\n') + '\n';
+    ...feed('FB', 'b1 b3', 'p2 p4')].join('\n') + '\n';
 }
 const PAIRS = [1, 2, 3, 4].flatMap(i => [1, 2, 3, 4].map(j => [i, j]));
 export function errOf(c, F, em, C, L) {
@@ -117,4 +121,49 @@ export function fitZ(d, ee, eo, Z0 = [69, 37]) {
   const A = loadCase(d), f = nm((x) => errOf(A.c, A.F, A.em, ...clFromModes(Math.exp(x[0]), Math.exp(x[1]), ee, eo)), Z0.map(Math.log), 200, 0.05);
   const [Ze, Zo] = f.x.map(Math.exp), [C, L] = clFromModes(Ze, Zo, ee, eo);
   return { Ze, Zo, ee, eo, C, L, rms: f.v };
+}
+
+// The finger section's ends (#41): the lines' fingers are offset by p/2, so at each end one line's first finger is
+// p/4 in and the other's 3p/4. Modelled as shunt capacitance at each end of the section — Ca on the line whose
+// first finger is nearer the end, Cb on the other, Cm between them (any sign; swapped at the far end, as the pair's
+// 180° rotation requires) — plus a length offset δ at each end. Added to a parsed netlist as admittance blocks.
+// e = { Ca, Cb, Cm (F), delta (mm) }; A = [line 1, line 2] nodes at the section's start, B at its end (line 1 is the
+// one whose first finger is p/4 from the start).
+export function addEnds(d, A, B, e) {
+  const blk = (name, nodes, c1, c2) => ({ type: 'ends', name, nodes, y: (f) => { const w = 2 * Math.PI * f;
+    return { re: new Float64Array(4), im: Float64Array.from([w * (c1 + e.Cm), -w * e.Cm, -w * e.Cm, w * (c2 + e.Cm)]), n: 2 }; } });
+  (d.blocks ??= []).push(blk('ENDA', A, e.Ca, e.Cb), blk('ENDB', B, e.Cb, e.Ca));
+  return d;
+}
+// the straight case's model with ends: feeds + ends + section (length + 2δ) + ends + feeds
+export function modelEnds(c, C, L, e, freq) {
+  const net = model({ ...c, len: r6(c.len + 2 * (e.delta ?? 0)) }, C, L, freq);
+  return addEnds(parseNetlist(net), ['a1', 'a3'], ['b1', 'b3'], e);
+}
+function errD(A, d) {
+  const r = solve(d, A.F); let s = 0;
+  for (const [i, j] of PAIRS) { const a = r.S(i, j), b = A.em.S(i, j); for (let k = 0; k < A.F.length; k++) s += (a.re[k] - b.re[k]) ** 2 + (a.im[k] - b.im[k]) ** 2; }
+  return Math.sqrt(s / A.F.length / PAIRS.length);
+}
+// Ze, Zo and the ends fitted jointly to two lengths of the same geometry (εe, εo held: de-embedded from the pair)
+export function fitEnds(dShort, dLong, feedCL) {
+  const b = bloch(dLong, dShort), cases = [loadCase(dShort), loadCase(dLong)].map(a => feedCL ? { ...a, c: { ...a.c, feedCL } } : a), z = fitZ(dLong, b.ee, b.eo);
+  const P = (x) => ({ Ze: Math.exp(x[0]), Zo: Math.exp(x[1]), e: { Ca: x[2] * 1e-15, Cb: x[3] * 1e-15, Cm: x[4] * 1e-15, delta: x[5] * 1e-2 } });   // fF, 10 µm
+  const err = (x) => { const q = P(x), [C, L] = clFromModes(q.Ze, q.Zo, b.ee, b.eo);
+    return Math.hypot(...cases.map(a => errD(a, modelEnds(a.c, C, L, q.e)))) / Math.SQRT2; };
+  const x0 = [Math.log(z.Ze), Math.log(z.Zo), 0, 0, 0, 0];
+  let f = nm(err, x0, 800, 0.2); f = nm(err, f.x, 800, 0.05);
+  const q = P(f.x), [C, L] = clFromModes(q.Ze, q.Zo, b.ee, b.eo);
+  return { ee: b.ee, eo: b.eo, Ze: q.Ze, Zo: q.Zo, ends: q.e, C, L, rms: f.v, rms0: err(x0),
+    each: cases.map(a => errD(a, modelEnds(a.c, C, L, q.e))) };
+}
+
+// a bare case (backbones only) is one uniform coupled line from port plane to port plane: its per-length C, L
+// fitted directly, with no feed model in the way — the feeds' C, L as openEMS sees them
+export function fitBare(d) {
+  const A = loadCase(d), b = bareCL(A.c), x0 = [Math.log(b.C[0][0]), Math.log(-b.C[0][1]), Math.log(b.L[0][0]), Math.log(b.L[0][1])];
+  const CL = (x) => ({ C: [[Math.exp(x[0]), -Math.exp(x[1])], [-Math.exp(x[1]), Math.exp(x[0])]], L: [[Math.exp(x[2]), Math.exp(x[3])], [Math.exp(x[3]), Math.exp(x[2])]] });
+  const err = (x) => { const q = CL(x); return errD(A, parseNetlist(model({ ...A.c, feedCL: q }, q.C, q.L))); };   // feeds and section alike
+  let f = nm(err, x0, 600, 0.05); f = nm(err, f.x, 400, 0.01);
+  return { ...CL(f.x), rms: f.v, modes: modes(CL(f.x).C, CL(f.x).L) };
 }
