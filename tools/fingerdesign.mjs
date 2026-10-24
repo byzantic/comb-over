@@ -24,9 +24,11 @@ const r4 = (x) => +x.toFixed(4);
 // keep the geometry buildable: tip ≥ mn, |overlap| ≥ 0.03, W ≥ mn, G ≥ 2 mn
 // --tip T: the finger tip held T from the other backbone (lf = G − T) and the pitch searched instead: x = [W, G, p]
 const tip = rest.includes('--tip') ? opt('tip') : null;
+// the intermesh overlap is kept ≥ 2 mesh cells (≈ 2·tip/3): at one cell the finger tips' mesh lines merge and εo jumps
+const ovMin = opt('ovmin', tip != null ? 2 * Math.min(wf, tip, mn) / 3 : 0.03);
 const geom = (x) => tip != null ? { W: x[0], G: x[1], lf: r4(x[1] - tip), p: x[2] } : { W: x[0], G: x[1], lf: x[2], p };
 function project(x) {
-  if (tip != null) { let [W, G, pp] = x; W = Math.max(W, mn); G = Math.max(G, 2 * tip + 0.03); pp = Math.max(pp, 2 * (wf + mn)); return [r4(W), r4(G), r4(pp)]; }
+  if (tip != null) { let [W, G, pp] = x; W = Math.max(W, mn); G = Math.max(G, 2 * tip + ovMin); pp = Math.max(pp, 2 * (wf + mn)); return [r4(W), r4(G), r4(pp)]; }
   let [W, G, lf] = x;
   W = Math.max(W, mn); G = Math.max(G, 2 * mn); lf = Math.min(Math.max(lf, 0.02), G - mn);
   if (Math.abs(2 * lf - G) < 0.03) lf = 2 * lf - G >= 0 ? (G + 0.03) / 2 : (G - 0.03) / 2;
