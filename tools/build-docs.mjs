@@ -31,6 +31,7 @@ const EXAMPLES = [
   ['11-duplexer', 'Duplexer: spec to Gerbers'],
   ['12-wilkinson-and-branch-line', 'Wilkinson and branch-line'],
   ['13-openems-coupler', 'Checking a coupler in openEMS'],
+  ['14-finger-coupler', 'A velocity-equalised coupler with fingers'],
 ];
 const PAGES = [
   { src: 'docs/manual.md', out: 'docs/manual.html', title: 'Manual', kind: 'manual' },

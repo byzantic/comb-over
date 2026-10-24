@@ -67,6 +67,18 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
     const w = (i, j) => Math.max(...Array.from(Fw, (_, k) => db(e.S(i, j), k)));
     check(`openEMS (committed): the trimmed Wilkinson meets 20 dB over ±10 % (S11 ${w(1, 1).toFixed(2)}, S22 ${w(2, 2).toFixed(2)}, S33 ${w(3, 3).toFixed(2)}, S32 ${w(3, 2).toFixed(2)} dB)`, w(1, 1) < -20 && w(2, 2) < -20 && w(3, 3) < -20 && w(3, 2) < -20);
   }
+  {
+    // #41, worked example 14: the 15 dB finger-loaded coupler against the plain one (committed openEMS results)
+    const ld = (c) => { const d = parseNetlist(readFileSync(new URL(`../examples/em/${c}`, import.meta.url), 'utf8'));
+      return T(readFileSync(new URL(`../examples/em/${d.data[0].file}`, import.meta.url), 'utf8'), d.data[0].file); };
+    const T = (txt, name) => onSweep(readTouchstone(txt, { nPorts: 4, name }), Fd);
+    const Fd = Float64Array.from({ length: 8 }, (_, k) => (1 + k) * 1e9), D = (e, k) => db(e.S(3, 1), k) - db(e.S(4, 1), k);
+    const fg = ld('coupler-15dB-fingers-ro4350b-compare.cir'), pl = ld('coupler-15dB-ro4350b-compare.cir');
+    const dMin = Math.min(...Array.from(Fd, (_, k) => D(fg, k))), dPl = Math.max(...Array.from(Fd, (_, k) => D(pl, k)));
+    check(`openEMS (committed): the finger-loaded 15 dB coupler's directivity ≥ 19.5 dB over 1–8 GHz (min ${dMin.toFixed(1)} dB; plain ≤ ${dPl.toFixed(1)} dB), coupling ${db(fg.S(3, 1), 4).toFixed(2)} dB at 5 GHz`,
+      dMin > 19.5 && dPl < 13.5 && Math.abs(db(fg.S(3, 1), 4) + 15) < 0.6);
+    check('the plain 15 dB coupler\'s comparison netlist is the export\'s', readFileSync(new URL('../examples/em/coupler-15dB-ro4350b-compare.cir', import.meta.url), 'utf8').replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-15dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
+  }
   check('the comparison netlist is the export\'s, with the committed result\'s name', cmp.replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-10dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
 }
 check('every port driven: S = B·A⁻¹ from the waves at all ports (exact whatever the terminations reflect); otherwise b/a with a note', (() => { const g = openemsExport(ex('coupler-10dB-ro4350b.cir')), g1 = openemsExport(ex('coupler-10dB-ro4350b.cir'), { excite: '1' }); return /np\.linalg\.inv\(A\[k\]\)/.test(g.script) && /exc_list = \[1,2,3,4\]/.test(g.script) && /exc_list = \[1\]/.test(g1.script); })());
