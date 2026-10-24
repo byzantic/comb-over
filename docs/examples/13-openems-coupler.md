@@ -104,12 +104,12 @@ So the remaining error was in the bends, and in their interaction where the outp
 - **Ports:** at the strip's own impedance.
 - **Lines:** a straight reference of the same length takes out the lines' own εeff error.
 
-With the whole L in each arm, the S11 error is the same or smaller in all 40 cases.
+With the whole L in each arm, the S11 error is the same or smaller in all 40 cases. (Figures re-run on the graded mesh of section 4; the coarser mesh had given 2° in 13 of the 15 W/h ≤ 2 cases.)
 
 | optimum mitre | W/h ≤ 2 | W/h 4 |
 |---|---|---|
-| transmission-phase error at the top frequency | within 2° in 13 of 15 cases (4° in the other two) | −3° to −17°, largest at high εr and f·h |
-| complex S11 error | mostly below 0.1 | mostly below 0.1 |
+| transmission-phase error at the top frequency | within 4° in all 15 cases (2° in 7) | −2.5° to −15°, largest at high εr and f·h |
+| complex S11 error | below 0.1 | below 0.1 |
 
 The square corner's phase error grows with W/h, from about 1° to 35°. The models are otherwise used as published (manual §4.7).
 
