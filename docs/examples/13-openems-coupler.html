@@ -32,7 +32,7 @@
 cd oems &amp;&amp; python3 10_dB_coupled-line_coupler_*.py        # openEMS&#39;s Python modules must be importable
 cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 </code></pre>
-<p>The run takes 1 min 40 s on two cores: 540 k cells, 20 400 timesteps to −41 dB of the peak field energy. <code>--excite all</code> drives each port in turn and fills the whole S-matrix (four runs).</p>
+<p>The run takes 5 min 20 s on two cores: 1.71 M cells, 18 800 timesteps to −40 dB of the peak field energy. <code>--excite all</code> drives each port in turn and fills the whole S-matrix (four runs).</p>
 <h2 id="1-what-is-exported"><a class="anchor" href="#1-what-is-exported" aria-hidden="true">#</a>1. What is exported</h2>
 <ul>
 <li><strong>Copper.</strong> The layout&#39;s core, feeds and part pads as polygons on the substrate: zero-thickness conducting sheets with the copper&#39;s conductivity and thickness (for loss), or PEC with <code>--lossless</code>. Vias are PEC cylinders; chip resistors and capacitors are lumped elements across their pads.</li>
@@ -57,35 +57,35 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 </thead>
 <tbody><tr>
 <td>S31, coupling (dB)</td>
-<td>−19.80 / −19.71</td>
-<td>−11.79 / −11.78</td>
-<td>−10.20 / −10.37</td>
-<td>−12.06 / −12.53</td>
-<td>−20.12 / −21.84</td>
+<td>−19.80 / −20.07</td>
+<td>−11.79 / −12.10</td>
+<td>−10.20 / −10.71</td>
+<td>−12.06 / −12.91</td>
+<td>−20.12 / −22.04</td>
 </tr>
 <tr>
 <td>S41, isolation (dB)</td>
-<td>−36.2 / −38.4</td>
-<td>−28.4 / −30.4</td>
-<td>−24.9 / −28.7</td>
-<td>−20.7 / −23.9</td>
-<td>−17.2 / −19.6</td>
+<td>−36.2 / −37.4</td>
+<td>−28.4 / −29.3</td>
+<td>−24.9 / −28.1</td>
+<td>−20.7 / −24.0</td>
+<td>−17.2 / −19.4</td>
 </tr>
 <tr>
 <td>S11, match (dB)</td>
-<td>−38.4 / −38.2</td>
-<td>−33.7 / −32.4</td>
-<td>−34.2 / −35.1</td>
-<td>−24.3 / −26.4</td>
-<td>−19.4 / −23.3</td>
+<td>−38.4 / −35.3</td>
+<td>−33.7 / −30.1</td>
+<td>−34.2 / −30.9</td>
+<td>−24.3 / −27.6</td>
+<td>−19.4 / −21.4</td>
 </tr>
 <tr>
 <td>∠S21, openEMS − comb-over</td>
-<td>−1.1°</td>
-<td>−3.3°</td>
-<td>−6.0°</td>
-<td>−9.3°</td>
-<td>−13.4°</td>
+<td>−0.0°</td>
+<td>−0.1°</td>
+<td>−0.8°</td>
+<td>−2.1°</td>
+<td>−4.0°</td>
 </tr>
 <tr>
 <td>power lost (%)</td>
@@ -93,22 +93,18 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 <td>1.6 / 1.9</td>
 <td>2.6 / 1.8</td>
 <td>3.7 / 2.1</td>
-<td>4.8 / 2.0</td>
+<td>4.8 / 2.1</td>
 </tr>
 </tbody></table></div>
-<p><strong>Coupling</strong> agrees to 0.2 dB from 1 to 5 GHz (0.17 dB at the 5 GHz centre, 0.29 dB at 6 GHz). Above that openEMS falls off faster, because its coupler is electrically a little longer (next point).</p>
-<p><strong>Phase.</strong> openEMS&#39;s transmission lags by 6° at 5 GHz, over a 26 mm path. The parts of that, found by simulating a straight 50 Ω line of the same width on its own:</p>
-<ul>
-<li><strong>Copper thickness, about 2°.</strong> The openEMS strips are zero-thickness sheets; comb-over includes the 35 µm copper, which lowers εeff. With <code>.substrate … t=0</code> in the comparison netlist, the lag at 5 GHz is 4.8°.</li>
-<li><strong>Dispersion, 0° at 5 GHz, about 2° at 9 GHz.</strong> comb-over evaluates each line once, at the <code>.ref</code> frequency (5 GHz here), and keeps that εeff across the sweep (manual §4.6). Below 5 GHz its εeff is slightly too high and above it slightly too low. For this line Kirschning–Jansen gives εeff 2.852 at 1 GHz, 2.870 at 5 GHz and 2.894 at 9 GHz. That is why the lag grows faster than in proportion to frequency.</li>
-<li><strong>The layout&#39;s corners, about 4°.</strong> The 45° bends where the feeds meet the diverging arms, and the corners where the arms meet the coupled section, are not in comb-over&#39;s netlist. They act as about 0.4 mm of extra line.</li>
-</ul>
-<p><strong>Isolation</strong> is 2–4 dB better in openEMS. In comb-over&#39;s model, the coupled section&#39;s directivity is set by the difference between the even- and odd-mode velocities. The full-wave model also includes the coupling between the diverging arms at each end of the section, which is not in comb-over&#39;s netlist; it may partly compensate. The cause is not separated here. Isolation is also the most mesh-sensitive quantity: it moves by 1–2 dB when the mesh is refined (section 3).</p>
-<p><strong>Match</strong> agrees within 2 dB up to 6 GHz. Above that openEMS is better matched. Both are below −19 dB everywhere.</p>
+<p><strong>Coupling.</strong> openEMS&#39;s coupling is weaker: by 0.3 dB from 1 to 3 GHz, 0.5 dB at the 5 GHz centre and 0.65 dB at 6 GHz. Above that openEMS falls off faster still. Neither the cause nor a correction has been found yet; the mesh is not it (section 3).</p>
+<p><strong>Phase.</strong> openEMS&#39;s transmission lags by 0.8° at 5 GHz and 4° at 9 GHz, over a 26 mm path. The lag grows faster than frequency, which fits dispersion: comb-over evaluates each line once, at the <code>.ref</code> frequency (5 GHz here), and keeps that εeff across the sweep (manual §4.6), so above 5 GHz its εeff is slightly too low. For this line Kirschning–Jansen gives εeff 2.852 at 1 GHz, 2.870 at 5 GHz and 2.894 at 9 GHz. Not modelled in comb-over and evidently small: the copper thickness (the openEMS strips are zero-thickness sheets) and the layout&#39;s corners.</p>
+<p><em>Before #41 this section reported a 6° lag at 5 GHz, attributed to copper thickness (2°) and the corners (4°). Most of it was mesh error: the export&#39;s mesh smoother left a strip narrower than the maximum step as a single cell between its edge lines (section 4).</em></p>
+<p><strong>Isolation</strong> is 1–3 dB better in openEMS. In comb-over&#39;s model, the coupled section&#39;s directivity is set by the difference between the even- and odd-mode velocities. The full-wave model also includes the arms&#39; coupling and the corners at each end of the section, which are not in comb-over&#39;s netlist; they partly compensate. The cause is not separated here.</p>
+<p><strong>Match</strong> agrees within 3.5 dB. openEMS is worse matched up to 5 GHz and better matched above 7 GHz. Both are below −19 dB everywhere.</p>
 <p><strong>Radiation.</strong> With <code>--lossless</code>, openEMS&#39;s power balance is within the port&#39;s accuracy (0 to −1 %) across the band, so this coupler radiates less than about 1 % of the power up to 9 GHz. On 0.508 mm material this is expected: the substrate is thin compared with the wavelength.</p>
 <p><strong>Loss.</strong> comb-over&#39;s loss grows with frequency as it should (dielectric ∝ f, conductor ∝ √f). openEMS&#39;s stays near 2 %, because its dielectric loss is a conductivity, which gives the right tan δ only at the sweep centre. To check loss, export a narrow band (<code>--fmin</code>, <code>--fmax</code>).</p>
 <h2 id="3-is-the-mesh-fine-enough"><a class="anchor" href="#3-is-the-mesh-fine-enough" aria-hidden="true">#</a>3. Is the mesh fine enough?</h2>
-<p>The <code>fine</code> cell (default: a third of the narrowest strip or gap, here 0.034 mm) sets the mesh at copper edges. Halving it (<code>--fine 0.017</code>: 690 k cells, 4.5 min):</p>
+<p>The <code>fine</code> cell (default: a third of the narrowest strip or gap, here 0.034 mm) sets the mesh at copper edges. Halving it (<code>--fine 0.017</code>: 2.80 M cells, 12 min):</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -119,24 +115,30 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 </thead>
 <tbody><tr>
 <td>S31</td>
-<td>−10.37 dB</td>
-<td>−10.13 dB</td>
+<td>−10.71 dB</td>
+<td>−10.71 dB</td>
 </tr>
 <tr>
 <td>S41</td>
-<td>−28.7 dB</td>
-<td>−29.6 dB</td>
+<td>−28.1 dB</td>
+<td>−28.2 dB</td>
+</tr>
+<tr>
+<td>S11</td>
+<td>−30.9 dB</td>
+<td>−31.3 dB</td>
 </tr>
 <tr>
 <td>∠S21 − comb-over</td>
-<td>−6.0°</td>
-<td>−6.0°</td>
+<td>−0.8°</td>
+<td>−0.6°</td>
 </tr>
 </tbody></table></div>
-<p>Coupling moves by 0.24 dB and phase not at all, so the default mesh is adequate for coupling and phase. Isolation and match, 30–40 dB down, move by 1–2 dB; treat them as ±2 dB.</p>
+<p>Coupling does not move, phase by 0.2° and isolation and match by 0.1–0.4 dB, so the default mesh is converged. (Before the grading fix in section 4, halving <code>fine</code> moved coupling by 0.24 dB and isolation by 1 dB.)</p>
 <h2 id="4-lessons-from-setting-this-up"><a class="anchor" href="#4-lessons-from-setting-this-up" aria-hidden="true">#</a>4. Lessons from setting this up</h2>
 <p>These are built into the export now, but they matter if you edit the script or write your own.</p>
 <ul>
+<li><strong>Grade every gap.</strong> Between fixed lines (edges, ports) the mesh must grow by at most about 1.4× per cell. The export first filled only gaps wider than its maximum step (λ/20 in the substrate), so a strip narrower than that was a single cell between its two edge-line pairs, up to 25× its neighbours. On the 0.79 mm backbones of #41&#39;s finger-loaded lines that put the odd-mode εeff 3.5 % low and Zo 11 % low; on this coupler it gave 5° of the phase lag above. The export now grades every gap (worst neighbour ratio 2.8 on the worked examples, at fixed line pairs), at about three times the cells here.</li>
 <li><strong>Edges by the thirds rule.</strong> A zero-thickness strip&#39;s edge should sit a third of the way into its mesh cell: one line fine/3 inside the metal and one 2·fine/3 outside. With a line on each side at ±fine/2 instead, a straight 50 Ω line&#39;s εeff came out 4 % high and the coupler&#39;s coupling 0.9 dB too strong.</li>
 <li><strong>The port&#39;s feed outside the PML.</strong> openEMS silently drops a port&#39;s terminating resistor inside the absorber (the log says &quot;Unused primitive … port_resist&quot;). The export meshes each port end uniformly so the feed sits on the 10th line, beyond the 8 PML cells.</li>
 <li><strong>No DC in the excitation.</strong> The coupler&#39;s two strips are not connected at DC. A Gaussian pulse with a DC component leaves charge on them, and the field energy never falls to the end criterion. The export subtracts the DC from openEMS&#39;s pulse.</li>
@@ -211,7 +213,7 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 <li><strong>Ports:</strong> at the strip&#39;s own impedance.</li>
 <li><strong>Lines:</strong> a straight reference of the same length takes out the lines&#39; own εeff error.</li>
 </ul>
-<p>With the whole L in each arm, the S11 error is the same or smaller in all 40 cases.</p>
+<p>With the whole L in each arm, the S11 error is the same or smaller in all 40 cases. (Figures re-run on the graded mesh of section 4; the coarser mesh had given 2° in 13 of the 15 W/h ≤ 2 cases.)</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -222,13 +224,13 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 </thead>
 <tbody><tr>
 <td>transmission-phase error at the top frequency</td>
-<td>within 2° in 13 of 15 cases (4° in the other two)</td>
-<td>−3° to −17°, largest at high εr and f·h</td>
+<td>within 4° in all 15 cases (2° in 7)</td>
+<td>−2.5° to −15°, largest at high εr and f·h</td>
 </tr>
 <tr>
 <td>complex S11 error</td>
-<td>mostly below 0.1</td>
-<td>mostly below 0.1</td>
+<td>below 0.1</td>
+<td>below 0.1</td>
 </tr>
 </tbody></table></div>
 <p>The square corner&#39;s phase error grows with W/h, from about 1° to 35°. The models are otherwise used as published (manual §4.7).</p>
@@ -251,23 +253,23 @@ cd .. &amp;&amp; node tools/openems.mjs --compare oems/
 <tbody><tr>
 <td>input return loss</td>
 <td>20.6 dB</td>
-<td>21.6 dB</td>
-<td>21.6 dB</td>
+<td>20.6 dB</td>
+<td>21.1 dB</td>
 </tr>
 <tr>
 <td>output return loss</td>
 <td>21.8 dB</td>
-<td>25.1 dB</td>
-<td>25.8 dB</td>
+<td>24.5 dB</td>
+<td>26.3 dB</td>
 </tr>
 <tr>
 <td>isolation</td>
 <td>24.1 dB</td>
-<td>23.0 dB</td>
-<td>23.6 dB</td>
+<td>24.3 dB</td>
+<td>24.3 dB</td>
 </tr>
 </tbody></table></div>
-<p>The committed result (<a href="../../examples/em/"><code>examples/em/</code></a>) is for this trimmed board, with its comparison netlist and the trim&#39;s log. With the corrected bend model, comb-over alone agrees with openEMS on it within about 1 dB on input match and isolation.</p>
+<p>The committed result (<a href="../../examples/em/"><code>examples/em/</code></a>) is for this trimmed board, with its comparison netlist and the trim&#39;s log. The figures in this table are on the graded mesh (section 4); the trim and the diagnosis above were done on the earlier mesh, which had put the input return loss at 21.6 dB. With the corrected bend model, comb-over alone agrees with openEMS on it within about 1 dB on input match and isolation.</p>
 <p><em>Post-processing.</em> Since #41, when every port is driven the export computes S = B·A⁻¹ from the incident and reflected waves at all ports, so a port&#39;s termination needs no match to the reference. The figures in this section from before that change used b_i/a_exc. For these 50 Ω ports the difference is under 1 dB. The committed result and the trimmed board&#39;s figures are re-processed.</p>
 <p><strong>Loss.</strong> On both boards openEMS shows less loss than comb-over (about 1 % against 1.8 % for the trimmed Wilkinson at 2.4 GHz, port 1 driven). This has not been investigated.</p>
 

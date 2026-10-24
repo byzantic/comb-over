@@ -62,12 +62,14 @@ Here it took one correction, then a final check with the resistor rounded to E24
 
 | over 2.16–2.64 GHz, as built (worst) | comb-over alone | openEMS | openEMS, mesh halved |
 |---|---|---|---|
-| input return loss | 20.6 dB | **21.6 dB** | 21.6 dB |
-| output return loss | 21.8 dB | **25.1 dB** | 25.8 dB |
-| isolation | 24.1 dB | **23.0 dB** | 23.6 dB |
-| split | −3.10 … −3.14 dB | −3.10 … −3.11 dB | −3.03 … −3.04 dB |
+| input return loss | 20.6 dB | **20.6 dB** | 21.1 dB |
+| output return loss | 21.8 dB | **24.5 dB** | 26.3 dB |
+| isolation | 24.1 dB | **24.3 dB** | 24.3 dB |
+| split | −3.10 … −3.14 dB | −3.14 … −3.18 dB | −3.04 … −3.09 dB |
 
-The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within about 1 dB on input match and isolation. The board netlist still has no `.goal` lines, because its dimensions come from the trim. The input match has the least margin, 1.6 dB on either mesh.
+The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within about 1 dB on input match and isolation. The board netlist still has no `.goal` lines, because its dimensions come from the trim. The input match has the least margin: 0.6 dB, or 1.1 dB with the mesh halved.
+
+*The openEMS figures in this table are on the export's graded mesh (#41; worked example 13, section 4). The trim itself and the figures earlier in this section were on the earlier, coarser mesh, which had put the input return loss at 21.6 dB.*
 
 **Not modelled in comb-over:** the bends' interaction where the outputs split, the start of the gap at the end of the taper, and the resistor body over the gap (its pads, ESL and body capacitance are). The openEMS model has the resistor as a plain 100 Ω, without its ESL.
 

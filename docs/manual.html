@@ -777,8 +777,8 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 <p>Every model warns, on the netlist&#39;s line, when it is used outside its published range.</p>
 <p><strong>Checks.</strong> The KJK Δl agrees with Hammerstad&#39;s older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (<code>tests/tee.mjs</code>). The bends are also checked against openEMS (<code>tools/bendcheck.mjs</code>, #49). The sweep covers five substrates (εr 2.55–10.2, h 0.508–1.6 mm), W/h 0.5–4 and f·h up to 9 GHz·mm, with ports at the strip impedance and the lines&#39; own error removed by a straight reference.</p>
 <ul>
-<li><strong>Optimum mitre, W/h ≤ 2:</strong> transmission-phase error within 2° in 13 of 15 cases (4° in the other two); complex S11 error mostly below 0.1.</li>
-<li><strong>Optimum mitre, W/h 4:</strong> phase error −3° to −17°, largest at high εr and f·h.</li>
+<li><strong>Optimum mitre, W/h ≤ 2:</strong> transmission-phase error within 4° in all 15 cases (2° in 7); complex S11 error below 0.1.</li>
+<li><strong>Optimum mitre, W/h 4:</strong> phase error −2.5° to −15°, largest at high εr and f·h.</li>
 <li><strong>Square corner:</strong> phase error growing with W/h, about 1–35°.</li>
 </ul>
 <p>  The tee and step have not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (<code>tests/discontinuities.mjs</code>). Neither model has been checked here against EM simulation or measurement yet; the openEMS export (§8.6) can do the first, and #17 covers measurement.</p>
@@ -1915,6 +1915,18 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>node tools/fingercheck.mjs gen|run|fit DIR [--W --G --wf --lf --p --n 12,24 --sub ID --bare]</code></td>
 <td>Finger-loaded coupled lines against openEMS (#41, stage 1): writes and runs a finger-loaded pair (or the bare backbones, <code>--bare</code>) between coupled feeds, fits per-length C and L to the shortest section and predicts the others. Needs openEMS.</td>
+</tr>
+<tr>
+<td><code>node tools/fingerdesign.mjs DIR [--tip T --wf --p --W --G --C 10 --Z0 50 --n 8 --n2 14]</code></td>
+<td>Finger-loaded coupler design against openEMS (#41, stage 2): finds backbone width, gap and finger length (or, with <code>--tip</code>, pitch) for target Ze, Zo with equal even/odd velocity. Each point is two openEMS sections (n and n2 cells): εe, εo from the pair by Bloch de-embedding (<code>tools/fingerbloch.py</code>, numpy), then Ze, Zo fitted with those held.</td>
+</tr>
+<tr>
+<td><code>node tools/fingercoupler.mjs gen|cmp DIR --fit CASE [--long CASE_n2 --cells N]</code></td>
+<td>The 10 dB coupler&#39;s layout with a finger-loaded section, for openEMS, and comb-over&#39;s model of it from the extracted C, L; <code>cmp</code> tabulates both against the plain coupler.</td>
+</tr>
+<tr>
+<td><code>node tools/fingerctxfit.mjs DIR_SHORT DIR_LONG</code></td>
+<td>Two finger couplers of different length: εe, εo de-embedded from the pair, then Ze, Zo and an end network fitted to both.</td>
 </tr>
 <tr>
 <td><code>python3 tools/oemsfig.py CMP.csv OUT.png [--title T]</code></td>

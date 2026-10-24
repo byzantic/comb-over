@@ -425,8 +425,8 @@ The line model is pure TEM, so it has no parasitics of its own (§9.3). The layo
 Every model warns, on the netlist's line, when it is used outside its published range.
 
 **Checks.** The KJK Δl agrees with Hammerstad's older formula within 5 % for 0.5 ≤ W/h ≤ 3, and differs by up to 25 % at the extremes of W/h. The tee, bends and step are checked against a hand evaluation of the published equations, for losslessness and reciprocity over 10 MHz–10 GHz, and for the low-frequency limit (`tests/tee.mjs`). The bends are also checked against openEMS (`tools/bendcheck.mjs`, #49). The sweep covers five substrates (εr 2.55–10.2, h 0.508–1.6 mm), W/h 0.5–4 and f·h up to 9 GHz·mm, with ports at the strip impedance and the lines' own error removed by a straight reference.
-  - **Optimum mitre, W/h ≤ 2:** transmission-phase error within 2° in 13 of 15 cases (4° in the other two); complex S11 error mostly below 0.1.
-  - **Optimum mitre, W/h 4:** phase error −3° to −17°, largest at high εr and f·h.
+  - **Optimum mitre, W/h ≤ 2:** transmission-phase error within 4° in all 15 cases (2° in 7); complex S11 error below 0.1.
+  - **Optimum mitre, W/h 4:** phase error −2.5° to −15°, largest at high εr and f·h.
   - **Square corner:** phase error growing with W/h, about 1–35°.
 
   The tee and step have not been checked against EM simulation. The via formula is checked against its own long-via limit and against S11 = (jωL − 50)/(jωL + 50) for a via at a port (`tests/discontinuities.mjs`). Neither model has been checked here against EM simulation or measurement yet; the openEMS export (§8.6) can do the first, and #17 covers measurement.
@@ -1178,6 +1178,9 @@ Line admittances use coth and csch of γℓ, written so that they lose no precis
 | `node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]` | Trims a compact Wilkinson against openEMS by output space mapping (§7.9). Needs openEMS. |
 | `node tools/bendcheck.mjs gen\|run\|report DIR` | The openEMS check of the bend models (§4.7): writes, runs and reports 60 single-bend and straight-line cases. Needs openEMS. |
 | `node tools/fingercheck.mjs gen\|run\|fit DIR [--W --G --wf --lf --p --n 12,24 --sub ID --bare]` | Finger-loaded coupled lines against openEMS (#41, stage 1): writes and runs a finger-loaded pair (or the bare backbones, `--bare`) between coupled feeds, fits per-length C and L to the shortest section and predicts the others. Needs openEMS. |
+| `node tools/fingerdesign.mjs DIR [--tip T --wf --p --W --G --C 10 --Z0 50 --n 8 --n2 14]` | Finger-loaded coupler design against openEMS (#41, stage 2): finds backbone width, gap and finger length (or, with `--tip`, pitch) for target Ze, Zo with equal even/odd velocity. Each point is two openEMS sections (n and n2 cells): εe, εo from the pair by Bloch de-embedding (`tools/fingerbloch.py`, numpy), then Ze, Zo fitted with those held. |
+| `node tools/fingercoupler.mjs gen\|cmp DIR --fit CASE [--long CASE_n2 --cells N]` | The 10 dB coupler's layout with a finger-loaded section, for openEMS, and comb-over's model of it from the extracted C, L; `cmp` tabulates both against the plain coupler. |
+| `node tools/fingerctxfit.mjs DIR_SHORT DIR_LONG` | Two finger couplers of different length: εe, εo de-embedded from the pair, then Ze, Zo and an end network fitted to both. |
 | `python3 tools/oemsfig.py CMP.csv OUT.png [--title T]` | Figure of an openEMS comparison from `--compare --csv` (needs matplotlib). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
 | `python3 tools/docfigs.py` | Regenerates the figures in `docs/img` (needs Playwright with Chromium and a local server on port 8765). |

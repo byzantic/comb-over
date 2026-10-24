@@ -31,19 +31,23 @@ function smooth(fixed, maxStep, ratio = 1.4, minStep = 0) {
   const out = [merged[0]];
   for (let i = 1; i < merged.length; i++) {
     const a = merged[i - 1], b = merged[i], gap = b - a;
-    if (gap <= maxStep) { out.push(b); continue; }
     // grow from both ends: left step sl (the previous step), right step sr (the next one)
-    const sl = i > 1 ? Math.min(maxStep, merged[i - 1] - merged[i - 2]) : maxStep, sr = i < merged.length - 1 ? Math.min(maxStep, merged[i + 1] - merged[i]) : maxStep;
-    const fill = []; let x = a, y = b, dl = sl, dr = sr;
+    const sl = out.length > 1 ? Math.min(maxStep, out.at(-1) - out.at(-2)) : maxStep, sr = i < merged.length - 1 ? Math.min(maxStep, merged[i + 1] - merged[i]) : maxStep;
+    // a gap is left as one cell only if it is within the max step and the grading ratio of both neighbours (a strip
+    // between its two edge-line pairs was otherwise one cell, up to 25× its neighbours)
+    if (gap <= maxStep && gap <= ratio * Math.min(sl, sr)) { out.push(b); continue; }
+    // grow from whichever side has the smaller next step until the rest is under two of those steps, then split the
+    // rest into equal cells no wider than ratio × the smaller adjacent step (no tiny or oversized last cell)
+    let x = a, y = b, dl = sl, dr = sr;
     const left = [], right = [];
     for (let guard = 0; guard < 10000; guard++) {
-      dl = Math.min(dl * ratio, maxStep); dr = Math.min(dr * ratio, maxStep);
-      if (y - x <= Math.max(dl, dr)) break;
-      if (dl <= dr) { x += dl; left.push(x); } else { y -= dr; right.unshift(y); }
+      const nl = Math.min(dl * ratio, maxStep), nr = Math.min(dr * ratio, maxStep);
+      if (y - x < 2 * Math.min(nl, nr)) break;
+      if (nl <= nr) { x += nl; left.push(x); dl = nl; } else { y -= nr; right.unshift(y); dr = nr; }
     }
-    fill.push(...left, ...right);
-    // spread what is left evenly if the middle gap is too wide
-    out.push(...fill.map(r6), b);
+    const R = y - x, k = Math.max(1, Math.ceil(R / Math.min(maxStep, ratio * Math.min(dl, dr)) - 1e-9));
+    const mid = Array.from({ length: k - 1 }, (_, j) => x + R * (j + 1) / k);
+    out.push(...[...left, ...mid, ...right].map(r6), b);
   }
   return out;
 }
@@ -180,7 +184,11 @@ export function openemsExport(text, opts = {}) {
     return 'PML_8';
   }));
   bc.push('PEC', 'PML_8');
-  const nPort = ports.length, exc = opts.excite && opts.excite !== 'all' ? [Number(opts.excite)] : ports.map(p => p.n);
+  // excite: 'all' (default), a port number, or a list ('1,2'); perm: a symmetry of the structure as a port
+  // permutation (port i ↔ perm[i−1]), which fills in the excitations not run (#41)
+  const nPort = ports.length, exc = opts.excite && opts.excite !== 'all' ? String(opts.excite).split(',').map(Number) : ports.map(p => p.n);
+  const perm = opts.perm ?? null;
+  if (perm && (perm.length !== nPort || [...perm].sort((a, b) => a - b).some((v, i) => v !== i + 1))) throw new Error('openEMS export: perm must be a permutation of the ports');
   const name = (L.title || 'layout').replace(/[^\w.-]+/g, '_').slice(0, 60);
   const J = (x) => JSON.stringify(x);
   const script = `#!/usr/bin/env python3
@@ -246,6 +254,7 @@ def run():
     # incident (A) and reflected (B) waves at every port, one column per excitation
     A = np.zeros((len(f), n, n), dtype=complex); B = np.zeros((len(f), n, n), dtype=complex)
     exc_list = ${J(exc)}
+    PERM = ${perm ? J(perm) : "None"}            # a symmetry: port i maps to PERM[i-1] (1-based), or None
     for exc in exc_list:
         path = os.path.join(here, 'sim_p%d' % exc)
         fdtd, ports = model(exc)
@@ -258,7 +267,17 @@ def run():
         a = ports[exc - 1].uf_inc
         for i, p in enumerate(ports):
             S[:, i, exc - 1] = p.uf_ref / a
-    if sorted(exc_list) == list(range(1, n + 1)):
+    done = set(exc_list)
+    if PERM:
+        # an excitation not run is the image of one that was: driving PERM[r-1] gives the waves of driving r,
+        # with every port i moved to PERM[i-1]
+        for r in list(exc_list):
+            e = PERM[r - 1]
+            if e not in done:
+                for i in range(n):
+                    A[:, PERM[i] - 1, e - 1] = A[:, i, r - 1]; B[:, PERM[i] - 1, e - 1] = B[:, i, r - 1]
+                done.add(e)
+    if sorted(done) == list(range(1, n + 1)):
         # every port driven: S = B A^-1, exact whatever the ports' terminations reflect (a port terminated
         # off its line's impedance sends a wave back in, which b_i / a_exc alone would count as S, #41)
         S = np.array([B[k] @ np.linalg.inv(A[k]) for k in range(len(f))])

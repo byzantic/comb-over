@@ -141,7 +141,7 @@ For each section with per-unit-length Maxwell capacitance **C** and inductance *
 - a cascade of two sections against one;
 - the Q loss model.
 
-Full wave: the 10 dB microstrip coupler agrees with openEMS to 0.2 dB in coupling from 1 to 5 GHz (0.3 dB at 6 GHz) (worked example 13). The microstrip bend models are checked against openEMS over five substrates and W/h 0.5–4 (#49); the compact Wilkinson is trimmed against openEMS, and comb-over then predicts it within about 1 dB.
+Full wave: the 10 dB microstrip coupler's coupling is within 0.3 dB of openEMS from 1 to 3 GHz and 0.5 dB at 5 GHz (openEMS weaker), with transmission phase within 1° at 5 GHz (worked example 13). The microstrip bend models are checked against openEMS over five substrates and W/h 0.5–4 (#49); the compact Wilkinson is trimmed against openEMS, and comb-over then predicts it within about 1 dB.
 
 ## Tools
 

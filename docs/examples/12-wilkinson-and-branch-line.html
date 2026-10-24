@@ -121,29 +121,30 @@ node tools/emtrim.mjs examples/wilkinson-2g4-ro4350b-1524.json --substrate jlc-r
 <tbody><tr>
 <td>input return loss</td>
 <td>20.6 dB</td>
-<td><strong>21.6 dB</strong></td>
-<td>21.6 dB</td>
+<td><strong>20.6 dB</strong></td>
+<td>21.1 dB</td>
 </tr>
 <tr>
 <td>output return loss</td>
 <td>21.8 dB</td>
-<td><strong>25.1 dB</strong></td>
-<td>25.8 dB</td>
+<td><strong>24.5 dB</strong></td>
+<td>26.3 dB</td>
 </tr>
 <tr>
 <td>isolation</td>
 <td>24.1 dB</td>
-<td><strong>23.0 dB</strong></td>
-<td>23.6 dB</td>
+<td><strong>24.3 dB</strong></td>
+<td>24.3 dB</td>
 </tr>
 <tr>
 <td>split</td>
 <td>−3.10 … −3.14 dB</td>
-<td>−3.10 … −3.11 dB</td>
-<td>−3.03 … −3.04 dB</td>
+<td>−3.14 … −3.18 dB</td>
+<td>−3.04 … −3.09 dB</td>
 </tr>
 </tbody></table></div>
-<p>The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within about 1 dB on input match and isolation. The board netlist still has no <code>.goal</code> lines, because its dimensions come from the trim. The input match has the least margin, 1.6 dB on either mesh.</p>
+<p>The trimmed arms are 2.18 mm × 16.88 mm, with 100 Ω across them. comb-over alone now agrees with openEMS on this board within about 1 dB on input match and isolation. The board netlist still has no <code>.goal</code> lines, because its dimensions come from the trim. The input match has the least margin: 0.6 dB, or 1.1 dB with the mesh halved.</p>
+<p><em>The openEMS figures in this table are on the export&#39;s graded mesh (#41; worked example 13, section 4). The trim itself and the figures earlier in this section were on the earlier, coarser mesh, which had put the input return loss at 21.6 dB.</em></p>
 <p><strong>Not modelled in comb-over:</strong> the bends&#39; interaction where the outputs split, the start of the gap at the end of the taper, and the resistor body over the gap (its pads, ESL and body capacitance are). The openEMS model has the resistor as a plain 100 Ω, without its ESL.</p>
 <h2 id="2-the-branch-line-hybrid"><a class="anchor" href="#2-the-branch-line-hybrid" aria-hidden="true">#</a>2. The branch-line hybrid</h2>
 <p><figure><img src="../img/ex12-branchline.png" alt="Branch-line hybrid" loading="lazy"><figcaption>Branch-line hybrid</figcaption></figure></p>
