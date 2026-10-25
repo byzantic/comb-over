@@ -147,12 +147,23 @@ node tools/fingercoupler.mjs cmp oems/fc15 --plain oems/plain15     # the plain 
 <li><strong>Match and loss.</strong> Match is below −32 dB everywhere. Loss is 1.7 % at 5 GHz, the same as the plain coupler.</li>
 </ul>
 <p><figure><img src="../img/ex14-fingers.png" alt="comb-over against openEMS, finger-loaded coupler" loading="lazy"><figcaption>comb-over against openEMS, finger-loaded coupler</figcaption></figure></p>
-<p><strong>comb-over overestimates the directivity</strong> of the finger-loaded coupler: 32 dB at 5 GHz against openEMS&#39;s 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms&#39; own coupling, neither of which is in comb-over&#39;s netlist. In the plain couplers the section&#39;s own isolation term is much larger and hides them. On the 10 dB attempt (section 5), adding the fingerless layout&#39;s error to the model reproduced openEMS&#39;s directivity within 1–2 dB. So treat comb-over&#39;s isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.</p>
-<h2 id="5-limits"><a class="anchor" href="#5-limits" aria-hidden="true">#</a>5. Limits</h2>
+<p><strong>comb-over overestimates the directivity</strong> of the finger-loaded coupler: 32 dB at 5 GHz against openEMS&#39;s 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms&#39; own coupling, neither of which is in comb-over&#39;s netlist. In the plain couplers the section&#39;s own isolation term is much larger and hides them. On the 10 dB attempt (section 6), adding the fingerless layout&#39;s error to the model reproduced openEMS&#39;s directivity within 1–2 dB. So treat comb-over&#39;s isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.</p>
+<h2 id="5-the-board"><a class="anchor" href="#5-the-board" aria-hidden="true">#</a>5. The board</h2>
+<p><a href="../../index.html?example=coupler-15dB-fingers-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler-15dB-fingers-ro4350b.cir</code></a> is the coupler as a netlist. The section is a <code>geom msl</code> pair (the backbones) with a <code>fingers</code> line that carries the extracted modes (manual §4.6):</p>
+<pre><code>cline K geom=msl W=0.9463mm S=0.4749mm      # the backbones
+  fingers wf=0.13mm lf=0.3692mm p=1.065mm Ze=59.81 Zo=41.75 ee=3.095 eo=3.092
+  len 8.52mm                                # 8 whole cells: λ/4 at 5 GHz
+  …
+.layout coupler K
+</code></pre>
+<p>The <code>coupler</code> layout splices the fingers into each line&#39;s outline, the KiCad export puts them in the core footprint, and the openEMS export meshes them from the finger features. Exported from this netlist, openEMS gives the same result as the coupler of section 4.</p>
+<pre><code class="language-sh">node tools/kicad.mjs examples/coupler-15dB-fingers-ro4350b.cir --out kicad/ --board
+</code></pre>
+<p>The tip gap (0.106 mm) is the smallest spacing on the board. CI exports it, checks it with KiCad&#39;s DRC and makes Gerbers.</p>
+<h2 id="6-limits"><a class="anchor" href="#6-limits" aria-hidden="true">#</a>6. Limits</h2>
 <ul>
 <li><strong>Tight coupling does not fit.</strong> At 10 dB on 0.508 mm RO4350B with 0.09 mm spacing, the fingers do equalise the velocities, but Ze/Zo reaches only about 1.76 (about 11 dB coupling) against the 1.925 needed. The fingers need room in the gap (G ≥ 2 × tip gap + overlap), and that room weakens the coupling between the backbones. 15 dB needs Ze/Zo 1.43 and fits easily. Tighter coupling needs finer spacing or a different structure.</li>
 <li><strong>Per design, not per substrate rule.</strong> Each design point is two openEMS runs (about 7 min). A design takes about 1 h. A different substrate or coupling needs its own design.</li>
-<li><strong>Not yet in the layout templates or the KiCad export.</strong> The finger section exists only in the openEMS cases (<code>tools/fingercoupler.mjs</code>).</li>
 <li><strong>Isolation from comb-over</strong> is an upper bound, as above.</li>
 </ul>
 

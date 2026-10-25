@@ -31,7 +31,7 @@ jobs:
           node-version: 22
       - name: Generate KiCad projects
         run: |
-          for f in coupler-10dB-ro4350b schiffman-ro4350b marchand-ro4350b; do
+          for f in coupler-10dB-ro4350b coupler-15dB-ro4350b coupler-15dB-fingers-ro4350b schiffman-ro4350b marchand-ro4350b; do
             node tools/kicad.mjs examples/$f.cir --out kicad-out/$f --board --date 2026-01-01
           done
           # worked example 8: impedance-defined coupler → microstrip → board, as the layout panel does it

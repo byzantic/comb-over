@@ -239,6 +239,7 @@ Use exactly one of these. Lines are numbered 1..N in the order used by `A`/`B`.
 | `Cg g1 … gN` + `Cm m12 m23 …` | homogeneous | Normalised ground capacitances and adjacent mutual capacitances (all positive). Add non-adjacent terms with `Cm(i,j) value`. |
 | `C [ … ]` and `L [ … ]` | general | Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives; `node solver/cli.mjs` computes them for N strips (§10). |
 | `geom msl` + `W …` + `S …` | `.substrate` | Coupled microstrip given by strip widths and gaps (§4.6). A symmetric pair (scalar W and S) uses the closed-form model; lists `W [w1 w2 …]`, `S [s12 s23 …]` (or one S for all gaps) give N lines through the field solver. Also accepted inline: `cline K geom=msl W=0.88mm S=0.1mm`, `W=[0.8mm 1mm 0.8mm]`. |
+| `geom msl` pair + `fingers wf= lf= p= Ze= Zo= ee= eo=` | `.substrate`, an openEMS extraction | A finger-loaded (interdigital) coupled pair (#41, §4.6): W and S are the backbones; fingers of width wf and length lf on each inner edge, one per pitch p. The section's modes are the four values given, from `tools/fingerdesign.mjs`; comb-over has no model of its own for the fingers. |
 
 Matrices are written `[a b c; d e f; g h i]`, with rows separated by `;` and entries by spaces or commas. They must be square and symmetric, and C must be positive definite.
 
@@ -397,6 +398,19 @@ Some results on JLC's 0.508 mm RO4350B:
 
 ---
 
+
+**Finger-loaded pairs (#41).** A `fingers` line in a `geom msl` pair adds interdigital fingers to the backbones: width `wf`, length `lf` (from the inner edge, towards the other line), one per pitch `p`, line 1 at x = (k + ¼)p and line 2 at (k + ¾)p. They slow the odd mode, so the even and odd velocities can be equalised and the coupler's directivity no longer limited by their difference (worked example 14).
+
+```
+cline K geom=msl W=0.9463mm S=0.4749mm
+  fingers wf=0.13mm lf=0.3692mm p=1.065mm Ze=59.81 Zo=41.75 ee=3.095 eo=3.092
+  len 8.52mm
+  A in cpl
+  B thru iso
+end
+```
+
+comb-over has no model of its own for the fingers. The section's even/odd impedances and effective permittivities are the values on the line, from an openEMS extraction (`tools/fingerdesign.mjs`). They hold only for that substrate and those dimensions, at frequencies where a cell is short against the wavelength. The loss Q is the bare backbones'. The tip gap S − lf and the side gap p/2 − wf must be positive, and are checked against the substrate's minimum spacing. The `coupler` layout draws whole cells from the section's A end, and notes any remainder. The fingers go into the layout, the KiCad footprint and the openEMS export, which sizes its edge cell from them.
 
 ### 4.7 Discontinuities
 
@@ -834,7 +848,7 @@ Hovering a copper shape in the preview shows its net and width.
 ![Layout preview](img/ui-layout.png)
 
 ```
-.layout coupler K                         # 4-port coupled-line coupler
+.layout coupler K                         # 4-port coupled-line coupler (with fingers, if the section has them: §4.6)
 .layout schiffman CS TREF                 # C-section (far ends joined) + reference line
 .layout marchand S1 S2                    # two coupled sections, grounded secondaries
 .layout comb [cap=smd-0603]               # comb-line resonator array (from Realise in microstrip)

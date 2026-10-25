@@ -30,3 +30,21 @@ export function fingerPair({ W, G, wf, lf, p, n, x0 = 0 }) {
   const line1 = comb(c1), line2 = comb(c2).map(([x, y]) => [x, -y]).reverse();   // mirrored in y, kept counter-clockwise
   return { polys: [line1, line2], len, ...g };
 }
+
+// Splice fingers into a conductor outline (a closed polygon, mm) along its straight edge at y = yEdge: one finger of
+// width wf and length lf, towards y = yTo, at each centre in xs. One outline per line, not separate rectangles: a
+// finger butted against the backbone would put an edge inside the copper (the openEMS mesh's thirds rule then
+// misplaces the backbone edge). Returns the new point list; throws if no edge at yEdge spans every finger.
+export function spliceFingers(pts, yEdge, yTo, xs, wf, lf, eps = 1e-6) {
+  const h = wf / 2, s = Math.sign(yTo - yEdge);
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    if (Math.abs(a[1] - yEdge) > eps || Math.abs(b[1] - yEdge) > eps) continue;
+    const lo = Math.min(a[0], b[0]), hi = Math.max(a[0], b[0]);
+    if (!xs.every(x => x - h > lo - eps && x + h < hi + eps)) continue;
+    const up = b[0] > a[0], cs = [...xs].sort((u, v) => up ? u - v : v - u), ins = [];
+    for (const x of cs) { const [x1, x2] = up ? [x - h, x + h] : [x + h, x - h]; ins.push([x1, yEdge], [x1, yEdge + s * lf], [x2, yEdge + s * lf], [x2, yEdge]); }
+    return [...pts.slice(0, i + 1), ...ins, ...pts.slice(i + 1)];
+  }
+  throw new Error(`spliceFingers: no edge at y = ${yEdge} spans the fingers`);
+}

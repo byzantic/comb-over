@@ -12,6 +12,7 @@
 import { wilkinsonRoute } from './dividers-ms.js';
 import { resGeometry, RES_PACKAGES } from './resistors.js';
 import { routeOrtho } from './routing.js';
+import { spliceFingers } from './fingers.js';
 import { rect, pathPolygon, pathLength, bbox, drc, cutPath, unit } from './layout.js';
 import { synthMsline, fromSubstrate } from './microstrip.js';
 import { toDirective } from './substrates.js';
@@ -148,6 +149,9 @@ function coupler(d, [name], o) {
   const pitch = o.pitch ?? 10, feedLen = o.feed ?? 5, margin = o.margin ?? 4;
   const yc = (W + S) / 2;
   if (pitch / 2 <= yc + W) throw new Error(`.layout coupler: pitch ${pitch} mm is too small for the line spacing`);
+  // fingers (#41): whole cells only; a remainder is left plain at the B end, with a note
+  const fg = K.geom.fingers, FG = fg ? { wf: mm(fg.wf), lf: mm(fg.lf), p: mm(fg.p), n: Math.floor(L / mm(fg.p) + 1e-6) } : null;
+  if (FG && FG.n < 1) throw new Error(`.layout coupler: the section (${r4(L)} mm) is shorter than one finger pitch (${r4(FG.p)} mm)`);
   const items = [], dims = [], nl = [];
   const core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
   const lines = [[-yc, a1, b1, P[0], P[1]], [yc, a2, b2, P[2], P[3]]];
@@ -160,11 +164,18 @@ function coupler(d, [name], o) {
     const linePath = [sA, [0, y], [L, y], sB];
     const uA = unit([0, y], fa.esc), uB = unit([L, y], fb.esc);
     const ta = taper(sA, uA, W, wfA, 0.8 * dist(sA, fa.esc)), tb = taper(sB, uB, W, wfB, 0.8 * dist(sB, fb.esc));
-    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon(linePath, W), width: W, label: `line ${i + 1}`, role: 'core' });
+    // finger-loaded section (#41): fingers on the inner edge, line 1 at x = (k + ¼)p, line 2 at (k + ¾)p
+    const fxs = FG ? Array.from({ length: FG.n }, (_, k) => r4((k + (i === 0 ? 0.25 : 0.75)) * FG.p)) : [];
+    const yIn = y + (i === 0 ? W / 2 : -W / 2);
+    let linePoly = pathPolygon(linePath, W);
+    if (FG) linePoly = spliceFingers(linePoly.map(([x, yy]) => [r4(x), r4(yy)]), r4(yIn), 0, fxs, FG.wf, FG.lf, 1e-3);
+    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: linePoly, width: W, label: `line ${i + 1}`, role: 'core' });
     for (const t of [ta, tb]) if (t.poly) items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: t.poly, width: W, label: `taper ${i + 1}`, role: 'core' });
     items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon(dedupe([fa.edge, fa.esc, ta.T]), wfA), width: wfA, label: `feed ${nA}`, role: 'feed', node: nA, path: dedupe([fa.edge, fa.esc, ta.T]) });
     items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon(dedupe([tb.T, fb.esc, fb.edge]), wfB), width: wfB, label: `feed ${nB}`, role: 'feed', node: nB, path: dedupe([fb.edge, fb.esc, tb.T]) });
     const halves = splitConductor(d, linePath, W, nA, nB);
+    // the fingers as extra pad primitives, on the half that holds their centre (both halves are one tie group)
+    for (const x of fxs) halves[x < L / 2 ? 0 : 1].polys.push(rect(x - FG.wf / 2, Math.min(yIn, yIn + Math.sign(-y) * FG.lf), x + FG.wf / 2, Math.max(yIn, yIn + Math.sign(-y) * FG.lf)));
     if (ta.poly) halves[0].polys.push(ta.poly);
     if (tb.poly) halves[1].polys.push(tb.poly);
     core.pads.push(...halves);
@@ -182,10 +193,18 @@ function coupler(d, [name], o) {
   items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
   dims.push({ a: [0, -yc - W / 2 - 1.2], b: [L, -yc - W / 2 - 1.2], text: `L ${r4(L)} mm` });
   dims.push({ a: [L / 2, yc + W / 2 + 1.2], b: [L / 2, yc + W / 2 + 1.2], text: `W ${r4(W)} · S ${r4(S)} mm`, dy: 0.6 });
-  const coupled = [`cline ${name} geom=msl W=${r4(W)}mm S=${r4(S)}mm`, `  len ${r4(L)}mm`, `  A ${a1}_k ${a2}_k`, `  B ${b1}_k ${b2}_k`, 'end'];
+  const g = K.geom, fgLine = FG ? [`  fingers wf=${r4(FG.wf)}mm lf=${r4(FG.lf)}mm p=${r4(FG.p)}mm Ze=${+g.Ze.toFixed(4)} Zo=${+g.Zo.toFixed(4)} ee=${+g.epse.toFixed(5)} eo=${+g.epso.toFixed(5)}`] : [];
+  const coupled = [`cline ${name} geom=msl W=${r4(W)}mm S=${r4(S)}mm`, ...fgLine, `  len ${r4(L)}mm`, `  A ${a1}_k ${a2}_k`, `  B ${b1}_k ${b2}_k`, 'end'];
   const netlist = [...header(d, 'coupler'), ...d.ports.map(p => `port ${p.node} ${p.z}`), ...coupled, ...nl, ...analysisLines(d)].join('\n') + '\n';
   core.netlist = coreNetlist(d, 'coupler', [...coupled, ...core.nl]);
-  return { outline, items, dims, netlist, core, notes: [`ports on ${pitch} mm pitch; feeds ${feedLen} mm long at the port impedance`] };
+  const notes = [`ports on ${pitch} mm pitch; feeds ${feedLen} mm long at the port impedance`];
+  if (FG) {
+    dims.push({ a: [L / 2, -yc - W / 2 - 2.4], b: [L / 2, -yc - W / 2 - 2.4], text: `${FG.n} finger cells: wf ${r4(FG.wf)} · lf ${r4(FG.lf)} · p ${r4(FG.p)} mm`, dy: 0.6 });
+    notes.push(`${FG.n} finger cells of ${r4(FG.p)} mm (tip gap ${r4(S - FG.lf)} mm, side gap ${r4(FG.p / 2 - FG.wf)} mm); the section's modes are as given on its fingers line (an openEMS extraction)`);
+    const rem = L - FG.n * FG.p;
+    if (rem > 1e-3) notes.push(`the section is ${r4(rem)} mm longer than ${FG.n} whole cells: that remainder is drawn without fingers, but the netlist gives the whole length the fingers' modes`);
+  }
+  return { outline, items, dims, netlist, core, notes };
 }
 
 // ---------------------------------------------------------------- Schiffman C-section + reference line

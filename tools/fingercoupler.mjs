@@ -6,7 +6,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseNetlist } from '../js/netlist.js';
-import { buildLayout } from '../js/layout-templates.js';
 import { openemsExport } from '../js/openems.js';
 import { solve } from '../js/solver.js';
 import { readTouchstone, onSweep } from '../js/touchstone.js';
@@ -21,35 +20,16 @@ function gen() {
   const f = opt('long') ? (() => { const b = bloch(opt('long'), opt('fit')); return fitZ(opt('long'), b.ee, b.eo); })() : fitCase(opt('fit'));
   const c = loadCase(opt('fit')).c, n = +opt('cells', 13), len = r6(n * c.p);
   const src = readFileSync(opt('net', 'examples/coupler-10dB-ro4350b.cir'), 'utf8');
-  // the plain coupler's netlist with the backbones' W, gap and the section length
-  const geomNet = src.replace(/^\.param w = \S+/m, `.param w = ${c.W}mm`).replace(/^\.param s = \S+/m, `.param s = ${c.G}mm`).replace(/len 90deg/, `len ${len}mm`);
-  const d = parseNetlist(geomNet), L = buildLayout({ ...d, layout: { ...d.layout, opts: { ...(d.layout.opts ?? {}), connector: 'none' } } });
-  // fingers spliced into each backbone's outline along its inner edge (y = ∓G/2), section from x = 0: one outline
-  // per line, as in the extraction (separate rectangles butted against the backbone put an edge inside the copper,
-  // and the mesh's thirds rule then placed the backbone edge's lines the wrong way round)
-  const h = c.wf / 2, e = c.G / 2, centres = (o) => Array.from({ length: n }, (_, k) => (k + o) * c.p);
-  let spliced = 0;
-  for (const it of L.items.filter(i => i.role === 'core')) {
-    const P = it.pts;
-    for (let i = 0; i < P.length; i++) {
-      const [a, b] = [P[i], P[(i + 1) % P.length]];
-      if (Math.abs(a[1] - b[1]) > 1e-9 || Math.abs(Math.abs(a[1]) - e) > 1e-6) continue;
-      const y = a[1], s = Math.sign(-y), up = b[0] > a[0];   // fingers grow towards y = 0
-      const cs = centres(y < 0 ? 0.25 : 0.75).sort((u, v) => up ? u - v : v - u), ins = [];
-      for (const x of cs) { const [x1, x2] = up ? [x - h, x + h] : [x + h, x - h]; ins.push([r6(x1), y], [r6(x1), r6(y + s * c.lf)], [r6(x2), r6(y + s * c.lf)], [r6(x2), y]); }
-      if (!cs.every(x => x - h > Math.min(a[0], b[0]) && x + h < Math.max(a[0], b[0]))) throw new Error('fingers run past the coupled edge');
-      P.splice(i + 1, 0, ...ins); spliced++; break;
-    }
-  }
-  if (spliced !== 2) throw new Error(`found ${spliced} inner edges, expected 2`);
-  const fine = Math.min(c.wf, c.side, c.tip, Math.abs(c.overlap), c.G) / 3;
-  const g = openemsExport(geomNet, { layout: L, fine, excite: '1,2', perm: [4, 3, 2, 1] });
+  // the plain coupler's netlist with the backbones' W, gap, the section length and a fingers line carrying the
+  // extracted modes: the coupler layout template draws the fingers (one outline per line) and the export meshes them
+  const modes = f.modes ?? f, fl = `  fingers wf=${c.wf}mm lf=${c.lf}mm p=${c.p}mm Ze=${modes.Ze.toFixed(4)} Zo=${modes.Zo.toFixed(4)} ee=${modes.ee.toFixed(5)} eo=${modes.eo.toFixed(5)}`;
+  const net = src.replace(/^\.param w = \S+/m, `.param w = ${c.W}mm`).replace(/^\.param s = \S+/m, `.param s = ${c.G}mm`).replace(/len 90deg/, `len ${len}mm`)
+    .replace(/^(cline K .*)$/m, `$1\n${fl}`);
+  const g = openemsExport(net, { excite: '1,2', perm: [4, 3, 2, 1] }), fine = g.info.fine;
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'f.py'), g.script.replace(/'[^']*\.s%dp'/, "'f.s%dp'"));
-  // comb-over's model: the comparison netlist with the section as the extracted per-length C, L
-  const K = `cline K\n  C [${m8(f.C[0][0])} ${m8(f.C[0][1])}; ${m8(f.C[1][0])} ${m8(f.C[1][1])}]\n  L [${m8(f.L[0][0])} ${m8(f.L[0][1])}; ${m8(f.L[1][0])} ${m8(f.L[1][1])}]`;
-  const cmp = g.compare.replace(/^cline K .*$/m, K).replace(/^\.data .*$/m, '.data em f.s4p overlay');
-  writeFileSync(join(dir, 'compare.cir'), cmp);
+  writeFileSync(join(dir, 'net.cir'), net);
+  writeFileSync(join(dir, 'compare.cir'), g.compare.replace(/^\.data .*$/m, '.data em f.s4p overlay'));
   writeFileSync(join(dir, 'case.json'), JSON.stringify({ ...c, cells: n, len, meshCells: g.info.cells, fine, fit: opt('fit') }));
   console.log(`${n} cells, ${len} mm; mesh ${g.info.cells} cells, fine ${fine.toFixed(4)} mm`);
 }
