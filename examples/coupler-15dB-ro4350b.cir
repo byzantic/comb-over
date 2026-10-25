@@ -1,0 +1,23 @@
+.title 15 dB coupled-line coupler on JLC RO4350B 0.508 mm, from physical dimensions (5 GHz)
+# The section is given by strip width W and gap S; Z0e/Z0o, the even/odd effective permittivities
+# and the per-mode losses come from the microstrip models (manual §4.6) for the .substrate below.
+# W and S are tunable, so the optimiser can adjust the actual copper dimensions.
+.freq 1G 9G 801
+.ref 5G
+.substrate jlc-ro4350b-0.508
+.param w = 1.0059mm tune 0.5mm 1.5mm
+.param s = 0.3187mm tune 0.1mm 0.8mm
+port in    # 1
+port thru  # 2
+port cpl   # 3
+port iso   # 4
+cline K geom=msl W=w S=s
+  len 90deg                 # at .ref, mean modal velocity
+  A in   cpl
+  B thru iso
+end
+.goal db(S31) = -15 4.5G 5.5G
+.goal db(S11) < -25 4G 6G
+.plot ylim=-50,0 db(S11) db(S21) db(S31) db(S41)
+.plot title=Directivity_(dB) db(S31/S41)
+.layout coupler K

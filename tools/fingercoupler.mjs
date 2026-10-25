@@ -2,7 +2,7 @@
 // coupled section replaced by a finger-loaded pair, and comb-over's model of it from the extracted C, L.
 //   node tools/fingercoupler.mjs gen DIR --fit DESIGN_DIR/CASE [--long DESIGN_DIR/CASE_n14] [--cells 13 --net examples/coupler-10dB-ro4350b.cir]
 //   (cd DIR && $OPENEMS_PYTHON f.py)       ports 1 and 2 driven; the 180° rotation gives the rest
-//   node tools/fingercoupler.mjs cmp DIR   model against openEMS (and the plain coupler's committed result)
+//   node tools/fingercoupler.mjs cmp DIR [--plain DIR]   model against openEMS, and a plain coupler's (default: the committed 10 dB)
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseNetlist } from '../js/netlist.js';
@@ -58,8 +58,10 @@ function cmp() {
   const net = readFileSync(join(dir, 'compare.cir'), 'utf8'), d = parseNetlist(net);
   const F = Float64Array.from({ length: 9 }, (_, k) => (1 + k) * 1e9);
   const em = onSweep(readTouchstone(readFileSync(join(dir, 'f.s4p'), 'utf8'), { nPorts: 4, name: 'f' }), F), r = solve(d, F);
-  const pc = parseNetlist(readFileSync('examples/em/coupler-10dB-ro4350b-compare.cir', 'utf8'));
-  const pe = onSweep(readTouchstone(readFileSync(`examples/em/${pc.data[0].file}`, 'utf8'), { nPorts: 4, name: 'p' }), F), pr = solve(pc, F);
+  // the plain coupler to compare with: --plain DIR (an openems.mjs --out DIR with its result), else the committed 10 dB one
+  const pdir = opt('plain', 'examples/em'), pcf = opt('plain') ? join(pdir, 'compare.cir') : 'examples/em/coupler-10dB-ro4350b-compare.cir';
+  const pc = parseNetlist(readFileSync(pcf, 'utf8'));
+  const pe = onSweep(readTouchstone(readFileSync(join(pdir, pc.data[0].file), 'utf8'), { nPorts: 4, name: 'p' }), F), pr = solve(pc, F);
   const db = (x, k) => 20 * Math.log10(Math.hypot(x.re[k], x.im[k])), f2 = (v) => v.toFixed(1).padStart(6);
   console.log('GHz   | finger: model / openEMS                         | plain: model / openEMS');
   console.log('      | S31          S41          S11          D        | S31          S41          D');

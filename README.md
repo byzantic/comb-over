@@ -22,7 +22,8 @@ The documentation is published as web pages next to the designer: `docs/manual.h
   10. hairpin and edge-coupled filters from one specification;
   11. a duplexer from specification to Gerbers;
   12. a compact Wilkinson and a branch-line hybrid;
-  13. checking a coupler in openEMS (full wave).
+  13. checking a coupler in openEMS (full wave);
+  14. a velocity-equalised coupler with interdigital fingers (designed against openEMS).
 
 ## Run it
 
