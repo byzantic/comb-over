@@ -3,7 +3,9 @@
 // characteristic impedance matrix at Z0), and the two mirror-symmetric modes at equal velocity. A centre-line signal is
 // mirror-symmetric, so only those two modes carry the centre-to-outer response; the antisymmetric mode (outer lines in
 // antiphase) only affects outer-to-outer isolation and the outer ports' match.
-//   node tools/fingerdesign3.mjs DIR [--C 20 --Z0 50 --f0 5e9 --Wo 1 --Wc 1 --G 0.6 --lf 0.4 --wf 0.13 --p 1 --n 6 --n2 10 --min 0.09 --iters 10]
+//   node tools/fingerdesign3.mjs DIR [--C 20 --Z0 50 --f0 5e9 --Wo 1 --Wc 1 --G 0.6 --lf 0.4 --lfo 0.5 --wf 0.13 --p 1 --n 6 --n2 10 --min 0.09 --iters 10]
+// Variables Wo, Wc, G, lf and lfo (fingers on the outer lines' outer edges: their ground capacitance, without which the
+// symmetric modes' velocities cannot be matched); four targets, so each step is the minimum-norm Newton step.
 // Each evaluation: openEMS cases of n and n2 cells (tools/fingerlibN.mjs), the symmetric modes de-embedded from the pair
 // (Bloch), and the section's 3×3 C, L fitted to both (feeds from the 2-D field solver).
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -22,10 +24,10 @@ const logf = join(dir, 'design3.json'), hist = existsSync(logf) ? JSON.parse(rea
 
 // keep it buildable: tip gap ≥ mn, overlap ≥ 2 mesh cells (≈ 2·min(wf, tip)/3), widths ≥ mn
 const ovMin = 2 * Math.min(wf, mn) / 3;
-function project([Wo, Wc, G, lf]) {
+function project([Wo, Wc, G, lf, lfo]) {
   Wo = Math.max(Wo, mn); Wc = Math.max(Wc, mn); G = Math.max(G, 2 * mn + ovMin);
-  lf = Math.min(Math.max(lf, (G + ovMin) / 2), G - mn);
-  return [r4(Wo), r4(Wc), r4(G), r4(lf)];
+  lf = Math.min(Math.max(lf, (G + ovMin) / 2), G - mn); lfo = Math.max(lfo, 0.05);
+  return [r4(Wo), r4(Wc), r4(G), r4(lf), r4(lfo)];
 }
 
 // 3×3 helpers
@@ -58,9 +60,9 @@ function coupling(C, L, epsMean) {
 }
 
 function evaluate(x) {
-  const [Wo, Wc, G, lf] = x, name = `Wo${Wo}_Wc${Wc}_G${G}_lf${lf}`;
+  const [Wo, Wc, G, lf, lfo] = x, name = `Wo${Wo}_Wc${Wc}_G${G}_lf${lf}_lfo${lfo}`;
   const hit = hist.find(h => h.name === name); if (hit) return hit;
-  const P = { W: [Wo, Wc, Wo], G: [G, G], wf, lf, p }, dS = join(dir, `${name}_n${n}`), dL = join(dir, `${name}_n${n2}`);
+  const P = { W: [Wo, Wc, Wo], G: [G, G], wf, lf, p, lfo }, dS = join(dir, `${name}_n${n}`), dL = join(dir, `${name}_n${n2}`);
   for (const [nn, dd] of [[n, dS], [n2, dL]]) if (!existsSync(join(dd, 'f.s6p'))) {
     genCaseN(dir, dd.split('/').pop(), P, nn);
     const r = runCaseN(dd); if (!r.ok) throw new Error(`openEMS failed for ${dd} (see run.log)`);
@@ -89,21 +91,23 @@ function lin(A, b) {
 }
 
 console.log(`target: centre-to-outer ${Cdb} dB at ${f0 / 1e9} GHz, lines matched to ${Z0} Ω, symmetric modes at equal velocity; wf ${wf} mm, p ${p} mm, ${n}/${n2} cells`);
-let x = project([opt('Wo', 1), opt('Wc', 1), opt('G', 0.6), opt('lf', 0.4)]), h = evaluate(x);
-const steps = [0.05, 0.05, 0.04, 0.03];
-let J = steps.map(() => steps.map(() => 0));
-for (let j = 0; j < 4; j++) {
+let x = project([opt('Wo', 1), opt('Wc', 1), opt('G', 0.6), opt('lf', 0.4), opt('lfo', 0.5)]), h = evaluate(x);
+const steps = [0.05, 0.05, 0.04, 0.03, 0.1];
+let J = [0, 1, 2, 3].map(() => steps.map(() => 0));
+for (let j = 0; j < steps.length; j++) {
   let xs = [...x]; xs[j] += steps[j]; let xp = project(xs);
   if (Math.abs(xp[j] - x[j]) < steps[j] / 2) { xs = [...x]; xs[j] -= steps[j]; xp = project(xs); }
   const dx = xp[j] - x[j]; if (Math.abs(dx) < 1e-4) throw new Error(`no room to step variable ${j} from ${x}`);
   const hj = evaluate(xp); for (let i = 0; i < 4; i++) J[i][j] = (hj.res[i] - h.res[i]) / dx;
 }
+// minimum-norm Newton step: dx = Jᵀ (J Jᵀ)⁻¹ (−r)
+const mnStep = (J, r) => { const JJ = J.map(a => J.map(b => a.reduce((s, v, k) => s + v * b[k], 0))), y = lin(JJ, r.map(v => -v)); return J[0].map((_, j) => J.reduce((s, row, i) => s + row[j] * y[i], 0)); };
 for (let it = 0; it < opt('iters', 10) && norm(h.res) > 0.005; it++) {
-  let dx = lin(J, h.res.map(v => -v));
+  let dx = mnStep(J, h.res);
   const s = Math.min(1, 0.1 / Math.max(...dx.map(Math.abs))); dx = dx.map(v => v * s);
   const xn = project(x.map((v, j) => v + dx[j])), hn = evaluate(xn);
   const d = xn.map((v, j) => v - x[j]), dd = d.reduce((a, v) => a + v * v, 0);
   if (dd > 0) { const y = hn.res.map((v, i) => v - h.res[i]), Jd = J.map(r => r.reduce((a, v, j) => a + v * d[j], 0)); J = J.map((r, i) => r.map((v, j) => v + (y[i] - Jd[i]) * d[j] / dd)); }
   if (norm(hn.res) < norm(h.res) || it === 0) { x = xn; h = hn; } else if (dd === 0) break;
 }
-console.log(`\nbest: Wo ${x[0]} Wc ${x[1]} G ${x[2]} lf ${x[3]} mm (wf ${wf}, p ${p}): Zc11 ${h.Zo11.toFixed(2)} Zc22 ${h.Zc22.toFixed(2)} Ω, coupling ${h.coupling.toFixed(2)} dB, ε π ${h.epsPi.toFixed(3)} c ${h.epsC.toFixed(3)} a ${h.epsA?.toFixed(3)}; worst residual ${(100 * norm(h.res)).toFixed(2)} %`);
+console.log(`\nbest: Wo ${x[0]} Wc ${x[1]} G ${x[2]} lf ${x[3]} lfo ${x[4]} mm (wf ${wf}, p ${p}): Zc11 ${h.Zo11.toFixed(2)} Zc22 ${h.Zc22.toFixed(2)} Ω, coupling ${h.coupling.toFixed(2)} dB, ε π ${h.epsPi.toFixed(3)} c ${h.epsC.toFixed(3)} a ${h.epsA?.toFixed(3)}; worst residual ${(100 * norm(h.res)).toFixed(2)} %`);

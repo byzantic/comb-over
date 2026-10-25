@@ -53,8 +53,10 @@ export function spliceFingers(pts, yEdge, yTo, xs, wf, lf, eps = 1e-6) {
 // neighbours, fingers of width wf and length lf (per gap: lf[i], a number or a list) on each edge that faces a
 // neighbour, one per pitch p. Odd lines (1, 3, …) carry theirs at x = (k + ¼)p, even lines at (k + ¾)p, so every
 // gap intermeshes; outer edges carry none. Lines are centred on y = 0 overall.
-// fingerArray({W, G, wf, lf, p, n, x0 = 0}) → { polys: [line1, …] (one counter-clockwise outline each), len, gaps: [{overlap, side, tip}] }
-export function fingerArray({ W, G, wf, lf, p, n, x0 = 0 }) {
+// lfo > 0 adds fingers of that length on the outer lines' outer edges too (pointing away from the set, same x as the
+// line's inner fingers): capacitance to ground only, which the outer lines can need for the modes' velocities to match.
+// fingerArray({W, G, wf, lf, p, n, x0 = 0, lfo = 0}) → { polys: [line1, …] (one counter-clockwise outline each), len, gaps: [{overlap, side, tip}] }
+export function fingerArray({ W, G, wf, lf, p, n, x0 = 0, lfo = 0 }) {
   const N = W.length;
   if (N < 2 || G.length !== N - 1) throw new Error('fingerArray: N ≥ 2 widths and N − 1 gaps');
   const LF = Array.isArray(lf) ? lf : Array(N - 1).fill(lf);
@@ -75,6 +77,8 @@ export function fingerArray({ W, G, wf, lf, p, n, x0 = 0 }) {
     let P = [[x0, lo], [x0 + len, lo], [x0 + len, hi], [x0, hi]];          // counter-clockwise: bottom edge →, top edge ←
     if (i < N - 1) P = spliceFingers(P, hi, hi + 1, xs, wf, LF[i]);           // top edge faces line i + 1
     if (i > 0) P = spliceFingers(P, lo, lo - 1, xs, wf, LF[i - 1]);           // bottom edge faces line i − 1
+    if (lfo > 0 && i === 0) P = spliceFingers(P, lo, lo - 1, xs, wf, lfo);     // outer edges (#41 stage 3)
+    if (lfo > 0 && i === N - 1) P = spliceFingers(P, hi, hi + 1, xs, wf, lfo);
     return P;
   });
   return { polys, len, gaps, ybands: yb };
