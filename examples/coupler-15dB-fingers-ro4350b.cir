@@ -1,0 +1,23 @@
+.title 15 dB finger-loaded coupler on JLC RO4350B 0.508 mm (5 GHz), velocity-equalised (#41)
+# The coupled section carries interdigital fingers on each line's inner edge (worked example 14). comb-over has
+# no model of its own for them: the section's even/odd impedances and effective permittivities on the fingers
+# line come from an openEMS extraction (tools/fingerdesign.mjs: εe, εo de-embedded from 8- and 14-cell sections,
+# Ze, Zo fitted with those held). They hold for this substrate and these dimensions only. The loss Q is the
+# backbones'. In openEMS this coupler has 22.8 dB directivity at 5 GHz (the plain 15 dB coupler: 9.1 dB);
+# comb-over's own figure (32 dB) is an upper bound, as its layout's corners and arm coupling are not modelled.
+.freq 1G 9G 801
+.ref 5G
+.substrate jlc-ro4350b-0.508
+port in    # 1
+port thru  # 2
+port cpl   # 3
+port iso   # 4
+cline K geom=msl W=0.9463mm S=0.4749mm      # the backbones
+  fingers wf=0.13mm lf=0.3692mm p=1.065mm Ze=59.81 Zo=41.75 ee=3.095 eo=3.092
+  len 8.52mm                                # 8 whole cells: λ/4 at 5 GHz
+  A in   cpl
+  B thru iso
+end
+.plot ylim=-60,0 db(S11) db(S21) db(S31) db(S41)
+.plot title=Directivity_(dB) db(S31/S41)
+.layout coupler K

@@ -123,7 +123,11 @@ export function openemsExport(text, opts = {}) {
   // mesh
   const xs = polys.flatMap(P => P.map(q => q[0])), ys = polys.flatMap(P => P.map(q => q[1]));
   const widths = L.items.filter(i => i.type === 'poly' && i.width > 0 && ['core', 'feed'].includes(i.role)).map(i => i.width);
-  const minGap = (d0.sections ?? []).flatMap(s => (s.geom?.S != null ? [].concat(s.geom.S) : [])).map(x => x * 1e3);
+  // gaps (and, for finger-loaded sections (#41), the finger width, tip and side gaps and the overlap) set the edge cell
+  const minGap = (d0.sections ?? []).flatMap(s => {
+    const g = s.geom; if (g?.S == null) return [];
+    const f = g.fingers; return [].concat(g.S, f ? [f.wf, f.tip, f.side, Math.max(Math.abs(f.overlap), f.wf)] : []);
+  }).map(x => x * 1e3);
   const fine = opts.fine ?? Math.max(0.02, Math.min(...widths, ...(minGap.length ? minGap : [Infinity])) / 3);
   const maxStep = C0 / fmax / Math.sqrt(er) / 20 * 1e3;
   const diag = Math.max(fine, Math.min(...widths) / 3);
