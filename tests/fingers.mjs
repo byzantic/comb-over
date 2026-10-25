@@ -1,6 +1,6 @@
 // Finger-loaded coupled lines (issue #41): geometry, the netlist's fingers line, the coupler layout. Run: node tests/fingers.mjs
 import { readFileSync } from 'node:fs';
-import { fingerPair, spliceFingers } from '../js/fingers.js';
+import { fingerPair, spliceFingers, fingerArray } from '../js/fingers.js';
 import { parseNetlist } from '../js/netlist.js';
 import { buildLayout } from '../js/layout-templates.js';
 import { openemsExport } from '../js/openems.js';
@@ -44,6 +44,18 @@ check('fingers that do not fit the pitch, or reach the other backbone, are refus
   const g15 = openemsExport(src);
   check(`openEMS export: the edge cell from the finger features (tip gap / 3: ${g15.info.fine.toFixed(4)} mm)`, Math.abs(g15.info.fine - 0.1057 / 3) < 1e-4);
   check('layout: a section that is not whole cells is drawn with whole cells and a note', /longer than 7 whole cells/.test(buildLayout(parseNetlist(src.replace('len 8.52mm', 'len 8mm'))).notes.join(' ')));
+}
+
+{
+  // stage 3: N lines, fingers on every edge that faces a neighbour
+  const a = fingerArray({ W: [0.8, 1, 0.8], G: [0.6, 0.6], wf: 0.13, lf: 0.4, p: 1, n: 3 });
+  check('fingerArray: 3 lines, outer lines with fingers on the inner edge only, the centre line on both (4 + 4n, 4 + 8n points)', a.polys.map(P => P.length).join() === '16,28,16');
+  check('fingerArray: each outline\'s area is its strip plus its fingers', [2.4 + 3 * 0.052, 3 + 6 * 0.052, 2.4 + 3 * 0.052].every((v, i) => Math.abs(Math.abs(area(a.polys[i])) - v) < 1e-9) && a.polys.every(P => area(P) > 0));
+  const tipsUp = (P, y) => P.filter(([, yy]) => Math.abs(yy - y) < 1e-9).map(([x]) => +x.toFixed(6));
+  const lo2 = a.ybands[1][0], hi2 = a.ybands[1][1];
+  check('fingerArray: odd lines at (k + ¼)p, even lines at (k + ¾)p, so both gaps intermesh', Math.min(...tipsUp(a.polys[0], a.ybands[0][1] + 0.4)) === 0.185 && Math.min(...tipsUp(a.polys[1], lo2 - 0.4)) === 0.685 && Math.min(...tipsUp(a.polys[1], hi2 + 0.4)) === 0.685 && Math.min(...tipsUp(a.polys[2], a.ybands[2][0] - 0.4)) === 0.185);
+  check('fingerArray: mirror-symmetric about y = 0 (line 1 ↔ line 3)', a.polys[0].every(([x, y]) => a.polys[2].some(([u, v]) => Math.abs(u - x) < 1e-9 && Math.abs(v + y) < 1e-9)));
+  check('fingerArray: fingers reaching across a gap are refused, per gap', throws(() => fingerArray({ W: [1, 1, 1], G: [0.6, 0.3], wf: 0.13, lf: [0.4, 0.35], p: 1, n: 2 }), /gap 2/));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

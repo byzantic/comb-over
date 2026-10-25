@@ -48,3 +48,34 @@ export function spliceFingers(pts, yEdge, yTo, xs, wf, lf, eps = 1e-6) {
   }
   throw new Error(`spliceFingers: no edge at y = ${yEdge} spans the fingers`);
 }
+
+// N finger-loaded lines (#41, stage 3): strips of widths W[0..N-1] (line 1 at the bottom), gaps G[0..N-2] between
+// neighbours, fingers of width wf and length lf (per gap: lf[i], a number or a list) on each edge that faces a
+// neighbour, one per pitch p. Odd lines (1, 3, …) carry theirs at x = (k + ¼)p, even lines at (k + ¾)p, so every
+// gap intermeshes; outer edges carry none. Lines are centred on y = 0 overall.
+// fingerArray({W, G, wf, lf, p, n, x0 = 0}) → { polys: [line1, …] (one counter-clockwise outline each), len, gaps: [{overlap, side, tip}] }
+export function fingerArray({ W, G, wf, lf, p, n, x0 = 0 }) {
+  const N = W.length;
+  if (N < 2 || G.length !== N - 1) throw new Error('fingerArray: N ≥ 2 widths and N − 1 gaps');
+  const LF = Array.isArray(lf) ? lf : Array(N - 1).fill(lf);
+  if (LF.length !== N - 1) throw new Error('fingerArray: lf per gap (N − 1 values) or one value');
+  if (!(wf > 0 && p > 0 && n >= 1 && W.every(w => w > 0) && G.every(g => g > 0) && LF.every(l => l > 0))) throw new Error('fingerArray: all dimensions > 0 and n ≥ 1');
+  const side = p / 2 - wf;
+  if (side <= 0) throw new Error(`fingerArray: fingers ${wf} mm wide do not fit a ${p} mm pitch (side gap ${side} mm)`);
+  const gaps = G.map((g, i) => {
+    const tip = g - LF[i];
+    if (tip <= 0) throw new Error(`fingerArray: fingers ${LF[i]} mm long reach the other line across gap ${i + 1} (${g} mm)`);
+    return { overlap: 2 * LF[i] - g, side, tip };
+  });
+  const total = W.reduce((a, b) => a + b, 0) + G.reduce((a, b) => a + b, 0), len = n * p;
+  const yb = []; let y = -total / 2;   // [bottom, top] of each strip
+  for (let i = 0; i < N; i++) { yb.push([y, y + W[i]]); y += W[i] + (G[i] ?? 0); }
+  const polys = yb.map(([lo, hi], i) => {
+    const xs = Array.from({ length: n }, (_, k) => x0 + (k + (i % 2 === 0 ? 0.25 : 0.75)) * p);
+    let P = [[x0, lo], [x0 + len, lo], [x0 + len, hi], [x0, hi]];          // counter-clockwise: bottom edge →, top edge ←
+    if (i < N - 1) P = spliceFingers(P, hi, hi + 1, xs, wf, LF[i]);           // top edge faces line i + 1
+    if (i > 0) P = spliceFingers(P, lo, lo - 1, xs, wf, LF[i - 1]);           // bottom edge faces line i − 1
+    return P;
+  });
+  return { polys, len, gaps, ybands: yb };
+}
