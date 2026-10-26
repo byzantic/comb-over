@@ -26,7 +26,7 @@
 <ol class="examples"><li><a class="" href="01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="" href="12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li><li><a class="" href="13-openems-coupler.html">Checking a coupler in openEMS</a></li><li><a class="" href="14-finger-coupler.html">A velocity-equalised coupler with fingers</a></li><li><a class="current" href="15-three-line-coupler.html">A three-line coupler with fingers</a></li></ol></nav></aside>
   <main class="doc">
     <h1>15. A three-line coupler with fingers</h1>
-<p>A three-line coupler sends a sample of the signal on its centre line to both outer lines. On microstrip it has the same problem as a pair, more strongly: the modes travel at different speeds, so its directivity is poor. The plain 20 dB design below has symmetric modes at εeff 2.57 and 3.14, 20 % apart, and 7 dB directivity at 5 GHz in openEMS. Fingers between the lines bring the two modes that a centre-line signal excites to within 1.7 %, and the directivity to 28–39 dB from 2 to 5 GHz.</p>
+<p>A three-line coupler sends a sample of the signal on its centre line to both outer lines. On microstrip it has the same problem as a pair, more strongly: the modes travel at different speeds, so its directivity is poor. The plain 20 dB design below has symmetric modes at εeff 2.57 and 3.14, 20 % apart, and 7 dB directivity at 5 GHz in openEMS. Fingers between the lines bring the two modes that a centre-line signal excites to within 1.7 %, and the directivity to at least 27 dB from 1 to 6 GHz, with coupling centred at 5 GHz.</p>
 <p>This example extends worked example 14 to three lines. It covers the match conditions for a centre-driven coupler, the 3-line extraction and design, and the <code>coupler3</code> layout. That layout is shaped by what openEMS showed about the coupling around the section&#39;s ends.</p>
 <p>Netlists: <a href="../../index.html?example=coupler3-20dB-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler3-20dB-ro4350b.cir</code></a> (plain) · <a href="../../index.html?example=coupler3-20dB-fingers-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler3-20dB-fingers-ro4350b.cir</code></a> (finger-loaded) · results: <a href="../../examples/em/"><code>examples/em/</code></a> · issue #41. The design needs openEMS (<code>OPENEMS_PYTHON</code>) and numpy.</p>
 <h2 id="1-what-a-centre-input-needs"><a class="anchor" href="#1-what-a-centre-input-needs" aria-hidden="true">#</a>1. What a centre input needs</h2>
@@ -73,7 +73,7 @@
 <tr>
 <td>section</td>
 <td>8.869 mm</td>
-<td>8 cells, 8.0 mm</td>
+<td>6 cells, 6.0 mm (section 4)</td>
 </tr>
 <tr>
 <td>symmetric modes, εeff</td>
@@ -103,7 +103,7 @@
 <p><figure><img src="../img/ex15-layout.png" alt="The coupler3 layout around the finger-loaded section" loading="lazy"><figcaption>The coupler3 layout around the finger-loaded section</figcaption></figure></p>
 <pre><code class="language-sh">node tools/kicad.mjs examples/coupler3-20dB-fingers-ro4350b.cir --out kicad/ --board
 </code></pre>
-<p>The KiCad core is six pads in three net-tie pairs, and carries all 48 fingers. CI exports both boards and checks them with KiCad&#39;s DRC.</p>
+<p>The KiCad core is six pads in three net-tie pairs, and carries all 36 fingers. CI exports both boards and checks them with KiCad&#39;s DRC.</p>
 <h2 id="4-the-result"><a class="anchor" href="#4-the-result" aria-hidden="true">#</a>4. The result</h2>
 <p>Exported from the netlists through <code>.layout coupler3</code>, with no connectors and a centre input (port 3):</p>
 <p><figure><img src="../img/ex15-directivity.png" alt="Directivity of the plain and finger-loaded 3-line couplers" loading="lazy"><figcaption>Directivity of the plain and finger-loaded 3-line couplers</figcaption></figure></p>
@@ -132,45 +132,46 @@
 </tr>
 <tr>
 <td>directivity: fingers (dB)</td>
-<td>15.7*</td>
-<td><strong>27.8</strong></td>
-<td><strong>32.0</strong></td>
-<td><strong>39.4</strong></td>
-<td><strong>38.0</strong></td>
-<td><strong>25.2</strong></td>
-<td>16.1</td>
+<td>32.9*</td>
+<td>33.4*</td>
+<td>37.0*</td>
+<td>43.3*</td>
+<td>40.0*</td>
+<td><strong>27.1</strong></td>
+<td>19.2</td>
 </tr>
 <tr>
 <td>coupling S13, fingers: comb-over / openEMS (dB)</td>
-<td>−28.8 / −28.4</td>
-<td>−23.4 / −23.3</td>
-<td>−21.0 / −21.0</td>
-<td>−20.0 / −20.2</td>
-<td>−20.3 / −20.7</td>
-<td>−21.8 / −22.4</td>
-<td>−25.1 / −26.0</td>
+<td>−30.9 / −30.5</td>
+<td>−25.2 / −25.0</td>
+<td>−22.4 / −22.3</td>
+<td>−20.8 / −20.9</td>
+<td>−20.1 / <strong>−20.4</strong></td>
+<td>−20.1 / −20.6</td>
+<td>−20.9 / −21.5</td>
 </tr>
 <tr>
 <td>centre match S33, fingers (dB)</td>
-<td>−44.6</td>
-<td></td>
-<td>−38.9</td>
-<td></td>
-<td>−33.1</td>
-<td></td>
-<td>−27.3</td>
+<td>−45.0</td>
+<td>−40.6</td>
+<td>−38.5</td>
+<td>−37.0</td>
+<td>−35.3</td>
+<td>−32.8</td>
+<td>−29.7</td>
 </tr>
 </tbody></table></div>
-<p>* At 1 GHz the finger coupler&#39;s isolation is below −44 dB and moves with the mesh. Halving the edge cell took the directivity from 25 to 16 dB. The other figures moved by up to 5 dB, and the coupling by less than 0.1 dB.</p>
+<p>* From 1 to 5 GHz the finger coupler&#39;s isolation is −58 to −64 dB. Below about −45 dB it moves with the mesh: on the 8-cell version, halving the edge cell moved such figures by up to 10 dB and the coupling by less than 0.1 dB. Read these as &quot;above about 30 dB&quot;, not as the numbers given.</p>
 <ul>
-<li><strong>Coupling.</strong> comb-over agrees with openEMS within 0.4 dB to 5 GHz on the finger coupler and within 0.7 dB on the plain one. Both are as built, through <code>coupler3</code>.</li>
-<li><strong>Directivity.</strong> The fingers lift it from 7 to 38 dB at 5 GHz, and to at least 25 dB from 2 to 6 GHz. comb-over predicts less (16–20 dB). Its as-built netlist treats the side-by-side runs at the ends as bare coupled lines, and their mode mismatch then dominates its isolation figure. So comb-over&#39;s directivity for this layout is a lower bound, not an upper one as in example 14.</li>
-<li><strong>Match.</strong> The centre port is −33 dB at 5 GHz in openEMS (comb-over −36 dB), and −27 dB at 7 GHz.</li>
+<li><strong>Centring (#60).</strong> The extracted C and L hold for any whole number of cells at the 1 mm pitch, so the length was chosen without new openEMS runs. With 8 cells (8.0 mm) the coupling peaked near 4.0 GHz in openEMS. comb-over&#39;s as-built netlist puts the peak at 5 GHz for about 6.6 mm. openEMS runs about 8–9 % electrically longer than the netlist on this coupler (4.0 against 4.3 GHz at 8 cells), so 6 cells (6.0 mm) were chosen. openEMS then peaks at 5.0 GHz, at −20.4 dB. The design&#39;s coupling target (−20 dB at the section&#39;s own λ/4) did not need changing.</li>
+<li><strong>Coupling.</strong> comb-over agrees with openEMS within 0.3 dB to 5 GHz on the finger coupler, 0.5–0.6 dB at 6–7 GHz, and within 0.7 dB on the plain one. Both are as built, through <code>coupler3</code>.</li>
+<li><strong>Directivity.</strong> The fingers lift it from 7 dB to above 30 dB at 5 GHz, and to at least 27 dB from 1 to 6 GHz. comb-over predicts less (15–19 dB). Its as-built netlist treats the side-by-side runs at the ends as bare coupled lines, and their mode mismatch then dominates its isolation figure. So comb-over&#39;s directivity for this layout is a lower bound, not an upper one as in example 14.</li>
+<li><strong>Match.</strong> The centre port is −35 dB at 5 GHz in openEMS (comb-over −41 dB), and −30 dB at 7 GHz.</li>
 <li><strong>Mesh.</strong> The plain coupler&#39;s default edge cell, a third of its 0.61 mm gap, is not converged: at 0.1 mm its coupling moved by 0.5–0.7 dB. Its committed result uses <code>--fine 0.1</code>. The finger coupler&#39;s committed result uses half its default edge cell.</li>
 </ul>
 <h2 id="5-limits"><a class="anchor" href="#5-limits" aria-hidden="true">#</a>5. Limits</h2>
 <ul>
-<li><strong>The design was not driven to tolerance.</strong> The coupling peaks near 4 GHz rather than 5, and is −20.7 dB at 5 GHz. A redesign that includes the side-by-side runs in its model would recentre it.</li>
+<li><strong>The design was not driven to tolerance.</strong> The search stopped at its best point, with the symmetric modes 1.7 % apart. The centring is by cell count, which steps the band by about 0.3–0.6 GHz per cell; a finer adjustment needs a different pitch and a new extraction.</li>
 <li><strong>Per design.</strong> Each design point is two 6-port openEMS runs, about 10 minutes. A design takes a few hours.</li>
 <li><strong>Outer ports.</strong> Driving an outer line also excites the antisymmetric mode, whose speed and impedance are not designed here. Only the centre input is characterised.</li>
 <li><strong>The 90° turns are not modelled</strong> in the netlist. The 45° and 90° turns tried gave similar coupling within about 1 dB in openEMS.</li>

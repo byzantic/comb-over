@@ -17,7 +17,7 @@ cline K geom=msl W=[0.8844mm 0.8607mm 0.8844mm] S=[0.9113mm 0.9113mm]
   fingers wf=0.13mm lf=0.5423mm p=1mm lfo=0.4761mm
   C [1.2760830e-10 -1.2474140e-11 -7.4769850e-13; -1.2474140e-11 1.3078610e-10 -1.2474140e-11; -7.4769850e-13 -1.2474140e-11 1.2760830e-10]
   L [3.1537000e-7 3.4213560e-8 9.5356230e-9; 3.4213560e-8 3.1918920e-7 3.4213560e-8; 9.5356230e-9 3.4213560e-8 3.1537000e-7]
-  len 8mm
+  len 6mm
   A o1_k c_k o3_k
   B o1b_k cb_k o3b_k
 end
@@ -34,7 +34,7 @@ end
 To1_f o1 o1_s W=1.073mm len=10.4162mm
 Tc_f c c_s W=1.073mm len=2.2mm
 To3_f o3 o3_s W=1.073mm len=10.4161mm
-To1b_f o1b o1b_s W=1.073mm len=10.4162mm
+To1b_f o1b o1b_s W=1.073mm len=10.4161mm
 Tcb_f cb cb_s W=1.073mm len=2.2mm
 To3b_f o3b o3b_s W=1.073mm len=10.4161mm
 .plot ylim=-60,0 db(S33) db(S43) db(S13) db(S23)
