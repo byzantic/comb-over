@@ -1,0 +1,21 @@
+.title 3-line coupler, centre to each outer line 20 dB, JLC RO4350B 0.508 mm (5 GHz), plain (#41)
+# Matched for a centre-line input: in the mirror-symmetric subspace (the outer lines in parallel, terminated in Z0/2) the
+# section meets (Z11+Z13)/Z22 = 1 and ((Z11+Z13)/2·Z22 − Z12²) = Z0²/2 (worked example 14, section 7). The two symmetric
+# modes travel at εeff 2.57 and 3.14, which limits the directivity to 6–14 dB.
+.freq 1G 9G 801
+.ref 5G
+.substrate jlc-ro4350b-0.508
+port o1  # 1: outer line 1, end A (coupled port for centre input)
+port o1b # 2: outer line 1, end B (isolated)
+port c   # 3: centre line, end A (input)
+port cb  # 4: centre line, end B (through)
+port o3  # 5: outer line 3, end A (coupled)
+port o3b # 6: outer line 3, end B (isolated)
+cline K geom=msl W=[1.1259mm 1.0765mm 1.1259mm] S=[0.6133mm 0.6133mm]
+  len 8.8688mm
+  A o1 c o3
+  B o1b cb o3b
+end
+.plot ylim=-60,0 db(S33) db(S43) db(S13) db(S23)
+.plot title=Directivity_(dB) db(S13/S23)
+.layout coupler3 K

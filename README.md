@@ -23,7 +23,8 @@ The documentation is published as web pages next to the designer: `docs/manual.h
   11. a duplexer from specification to Gerbers;
   12. a compact Wilkinson and a branch-line hybrid;
   13. checking a coupler in openEMS (full wave);
-  14. a velocity-equalised coupler with interdigital fingers (designed against openEMS).
+  14. a velocity-equalised coupler with interdigital fingers (designed against openEMS);
+  15. a three-line coupler with fingers.
 
 ## Run it
 

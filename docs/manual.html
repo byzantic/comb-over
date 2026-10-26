@@ -24,7 +24,7 @@
 <ol class="toc"><li><a href="#1-running-it">1. Running it</a></li><li><a href="#2-the-interface">2. The interface</a></li><li><a href="#3-netlist-language">3. Netlist language</a></li><li><a href="#4-coupled-line-sections">4. Coupled-line sections</a></li><li><a href="#5-plots-and-trace-expressions">5. Plots and trace expressions</a></li><li><a href="#6-tuning-and-optimisation">6. Tuning and optimisation</a></li><li><a href="#7-filter-synthesis">7. Filter synthesis</a></li><li><a href="#8-export-and-sharing">8. Export and sharing</a></li><li><a href="#not-checked-yet-against-em-simulation-or-measurement-the-bend-step-and-resistor-models-the-openems-export-86-includes-them-as-drawn">Not checked yet against EM simulation or measurement: the bend, step and resistor models. The openEMS export (§8.6) includes them as drawn.</a></li><li><a href="#9-the-model-its-assumptions-and-limits">9. The model, its assumptions and limits</a></li><li><a href="#10-command-line-tools">10. Command-line tools</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li></ol>
 <a class="" href="substrates.html">Substrate presets</a>
 <a class="" href="examples/index.html">Worked examples</a>
-<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="examples/11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="" href="examples/12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li><li><a class="" href="examples/13-openems-coupler.html">Checking a coupler in openEMS</a></li><li><a class="" href="examples/14-finger-coupler.html">A velocity-equalised coupler with fingers</a></li></ol></nav></aside>
+<ol class="examples"><li><a class="" href="examples/01-transformers.html">Quarter-wave transformers</a></li><li><a class="" href="examples/02-couplers.html">Coupled-line couplers</a></li><li><a class="" href="examples/03-combline-synthesis.html">Comb-line: spec to loss budget</a></li><li><a class="" href="examples/04-interdigital-by-hand.html">Interdigital by hand</a></li><li><a class="" href="examples/05-marchand-balun.html">Marchand balun</a></li><li><a class="" href="examples/06-schiffman.html">Schiffman phase shifter</a></li><li><a class="" href="examples/07-three-line-CL.html">Three-line section from C, L</a></li><li><a class="" href="examples/08-coupler-to-board.html">From a coupler netlist to a KiCad board</a></li><li><a class="" href="examples/09-combline-to-gerbers.html">Comb-line: spec to Gerbers</a></li><li><a class="" href="examples/10-hairpin-and-edge-coupled.html">Hairpin and edge-coupled</a></li><li><a class="" href="examples/11-duplexer.html">Duplexer: spec to Gerbers</a></li><li><a class="" href="examples/12-wilkinson-and-branch-line.html">Wilkinson and branch-line</a></li><li><a class="" href="examples/13-openems-coupler.html">Checking a coupler in openEMS</a></li><li><a class="" href="examples/14-finger-coupler.html">A velocity-equalised coupler with fingers</a></li><li><a class="" href="examples/15-three-line-coupler.html">A three-line coupler with fingers</a></li></ol></nav></aside>
   <main class="doc">
     <h1>comb-over manual</h1>
 <p>comb-over analyses linear networks built from <strong>uniform coupled multiconductor TEM / quasi-TEM line sections</strong>, single lines and lumped R/L/C. It also synthesises tapped comb-line and interdigital band-pass filters. Everything runs in the browser, and the same engine runs under Node for scripting and tests.</p>
@@ -477,6 +477,11 @@ end
 <td><code>.substrate</code>, an openEMS extraction</td>
 <td>A finger-loaded (interdigital) coupled pair (#41, §4.6): W and S are the backbones; fingers of width wf and length lf on each inner edge, one per pitch p. The section&#39;s modes are the four values given, from <code>tools/fingerdesign.mjs</code>; comb-over has no model of its own for the fingers.</td>
 </tr>
+<tr>
+<td><code>geom msl</code> N lines + <code>fingers wf= lf= p= [lfo=]</code> + <code>C […]</code> + <code>L […]</code></td>
+<td><code>.substrate</code>, an openEMS extraction</td>
+<td>N finger-loaded lines (§4.6): fingers on every edge that faces a neighbour (<code>lfo</code>: also on the outer lines&#39; outer edges). The section&#39;s C and L are the matrices given, from <code>tools/fingerdesign3.mjs</code>.</td>
+</tr>
 </tbody></table></div>
 <p>Matrices are written <code>[a b c; d e f; g h i]</code>, with rows separated by <code>;</code> and entries by spaces or commas. They must be square and symmetric, and C must be positive definite.</p>
 <p>The <strong>Maxwell capacitance matrix</strong> has positive diagonal entries (each line&#39;s total capacitance with all other lines grounded) and negative off-diagonal entries. Ground and mutual capacitances convert to it as</p>
@@ -725,6 +730,17 @@ node tools/mscalc.mjs --sub jlc-fr4-1.6 --w 2.8mm --f 1G                 # analy
 end
 </code></pre>
 <p>comb-over has no model of its own for the fingers. The section&#39;s even/odd impedances and effective permittivities are the values on the line, from an openEMS extraction (<code>tools/fingerdesign.mjs</code>). They hold only for that substrate and those dimensions, at frequencies where a cell is short against the wavelength. The loss Q is the bare backbones&#39;. The tip gap S − lf and the side gap p/2 − wf must be positive, and are checked against the substrate&#39;s minimum spacing. The <code>coupler</code> layout draws whole cells from the section&#39;s A end, and notes any remainder. The fingers go into the layout, the KiCad footprint and the openEMS export, which sizes its edge cell from them.</p>
+<p><strong>N finger-loaded lines.</strong> For three or more lines (<code>W=[…] S=[…]</code>) the <code>fingers</code> line takes <code>wf</code>, <code>lf</code> and <code>p</code>, and optionally <code>lfo</code> for fingers on the outer lines&#39; outer edges. Odd lines carry their fingers at x = (k + ¼)p and even lines at (k + ¾)p, so every gap intermeshes. The section&#39;s electrical model is its C and L matrices, given in the same block (from <code>tools/fingerdesign3.mjs</code>, which de-embeds the modes from two lengths and fits C and L to both). The geometry gives the layout and, through the field solver&#39;s bare lines, the loss Q. Each gap&#39;s tip gap is checked.</p>
+<pre><code>cline K geom=msl W=[0.8844mm 0.8607mm 0.8844mm] S=[0.9113mm 0.9113mm]
+  fingers wf=0.13mm lf=0.5423mm p=1mm lfo=0.4761mm
+  C [1.21e-10 -1.9e-11 …; …]
+  L [3.0e-07 4.6e-08 …; …]
+  len 8mm
+  A o1 c o3
+  B o1b cb o3b
+end
+</code></pre>
+<p>A three-line coupler driven on its centre line excites only the two mirror-symmetric modes. The outer pair then acts as one line terminated in Z0/2 (its two ports in parallel), and the centre line as one terminated in Z0. Match and isolation are perfect when the two symmetric modes have equal velocities and Z = Zc in that subspace meets (Z11 + Z13)/Z22 = 1 and ((Z11 + Z13)/2 · Z22 − Z12²) = Z0²/2. The coupling to each outer port is then 20 log(k/√2), with k = Z12/√((Z11 + Z13)/2 · Z22). Matching each line&#39;s own impedance to Z0 does not achieve this (worked example 15).</p>
 <h3 id="47-discontinuities"><a class="anchor" href="#47-discontinuities" aria-hidden="true">#</a>4.7 Discontinuities</h3>
 <p>The line model is pure TEM, so it has no parasitics of its own (§9.3). The layout templates add the most important ones automatically, and a <code>via</code> element is available for netlists written by hand. The models live in <code>js/discontinuities.js</code>.</p>
 <div class="table-wrap"><table>
@@ -1424,6 +1440,7 @@ end
 <p>Hovering a copper shape in the preview shows its net and width.</p>
 <p><figure><img src="img/ui-layout.png" alt="Layout preview" loading="lazy"><figcaption>Layout preview</figcaption></figure></p>
 <pre><code>.layout coupler K                         # 4-port coupled-line coupler (with fingers, if the section has them: §4.6)
+.layout coupler3 K                        # 3-line coupler, centre line straight through (§4.6, worked example 15)
 .layout schiffman CS TREF                 # C-section (far ends joined) + reference line
 .layout marchand S1 S2                    # two coupled sections, grounded secondaries
 .layout comb [cap=smd-0603]               # comb-line resonator array (from Realise in microstrip)
@@ -1492,12 +1509,19 @@ end
 <td><code>smd-0603</code></td>
 <td>how ideal loading capacitors in the netlist are realised: <code>smd-0402</code>/<code>0603</code>/<code>0805</code>, <code>trimmer</code>, <code>printed</code></td>
 </tr>
+<tr>
+<td><code>taper</code> (coupler3)</td>
+<td>0.2 mm</td>
+<td>longest taper from each line&#39;s width to its feed&#39;s, right at the section&#39;s end</td>
+</tr>
 </tbody></table></div>
 <p><strong>What the templates do:</strong></p>
 <ul>
 <li><p><strong>Coordinates.</strong> Everything is in millimetres, with the y axis pointing down as in KiCad.</p>
 </li>
 <li><p><strong>Port feeds.</strong> Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.</p>
+</li>
+<li><p><strong>Leaving a 3-line section (<code>coupler3</code>).</strong> Each line first tapers (at most <code>taper=</code>) to its feed width, right at the section&#39;s end. The outer lines then turn straight away (90°) to their ports&#39; row. A centre-driven 3-line coupler is matched for Z0 terminations at the section itself, so a run at a line&#39;s own width there detunes it. The side-by-side run before the turn is still coupled; the as-built netlist models it as a 3-line (<code>K_ea</code>, <code>K_eb</code>). With 45° arms, or outer feeds running beside the centre feed, openEMS showed 25–50 % more coupled length than a netlist of separate lines.</p>
 </li>
 <li><p><strong>Leaving a coupled line.</strong> A feed first runs diagonally (45°) at the coupled-line width. As soon as it is clear of its neighbour by the coupling gap, a linear taper of length max(w<sub>f</sub>, 3|w<sub>f</sub> − W|) widens it to the feed width w<sub>f</sub>. The taper replaces an abrupt width step and belongs to the part (§8.2). The as-built netlist models it as three stepped sections.</p>
 </li>
@@ -1945,6 +1969,14 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <tr>
 <td><code>node tools/capcoupler.mjs design|gen …</code></td>
 <td>A coupled-line coupler with a capacitor across the gap at each end of the section: <code>design</code> sizes W, S and the capacitor in comb-over; <code>gen DIR</code> writes the openEMS case (ideal lumped capacitors) (worked example 14, §6).</td>
+</tr>
+<tr>
+<td><code>node tools/fingerdesign3.mjs DIR [--C 20 --Wo --Wc --G --lf --lfo --wf --p]</code></td>
+<td>Finger-loaded 3-line coupler design against openEMS (#41, stage 3): outer and centre widths, gap and finger lengths for a centre-to-outer coupling, centre-input match and equal symmetric-mode velocities. Each point is two 6-port openEMS sections; the modes are de-embedded from the pair (<code>tools/fingerbloch.py</code>) and the 3×3 C, L fitted to both (<code>tools/fingerlibN.mjs</code>).</td>
+</tr>
+<tr>
+<td><code>node tools/fingercoupler3.mjs gen|cmp DIR …</code></td>
+<td>A 3-line coupler for openEMS built outside the layout templates (arm angle, feed offset and taper as options), with its model; used to find the junction coupling that <code>.layout coupler3</code> now avoids and models.</td>
 </tr>
 <tr>
 <td><code>python3 tools/fingerfig.py geometry|directivity OUT.png …</code></td>

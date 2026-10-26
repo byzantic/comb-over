@@ -1,0 +1,24 @@
+.title 3-line coupler, centre to each outer line 20 dB, JLC RO4350B 0.508 mm (5 GHz), finger-loaded (#41)
+# Fingers on every edge that faces a neighbour and on the outer lines' outer edges (lfo). The section's C and L come from
+# an openEMS extraction (tools/fingerdesign3.mjs: modes de-embedded from 6- and 10-cell sections, C and L fitted to
+# both): they hold for this substrate and these dimensions only. The two symmetric modes are within 1.7 %.
+.freq 1G 9G 801
+.ref 5G
+.substrate jlc-ro4350b-0.508
+port o1  # 1: outer line 1, end A (coupled port for centre input)
+port o1b # 2: outer line 1, end B (isolated)
+port c   # 3: centre line, end A (input)
+port cb  # 4: centre line, end B (through)
+port o3  # 5: outer line 3, end A (coupled)
+port o3b # 6: outer line 3, end B (isolated)
+cline K geom=msl W=[0.8844mm 0.8607mm 0.8844mm] S=[0.9113mm 0.9113mm]
+  fingers wf=0.13mm lf=0.5423mm p=1mm lfo=0.4761mm
+  C [1.276083e-10 -1.247414e-11 -7.476985e-13; -1.247414e-11 1.307861e-10 -1.247414e-11; -7.476985e-13 -1.247414e-11 1.276083e-10]
+  L [3.153700e-7 3.421356e-8 9.535623e-9; 3.421356e-8 3.191892e-7 3.421356e-8; 9.535623e-9 3.421356e-8 3.153700e-7]
+  len 8mm
+  A o1 c o3
+  B o1b cb o3b
+end
+.plot ylim=-60,0 db(S33) db(S43) db(S13) db(S23)
+.plot title=Directivity_(dB) db(S13/S23)
+.layout coupler3 K

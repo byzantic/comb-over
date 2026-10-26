@@ -82,6 +82,20 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
       dc(2) > 24 && dc(3) > 23 && dc(6) < 12 && D(fg, 6) > 20);
     check('the plain 15 dB coupler\'s comparison netlist is the export\'s', readFileSync(new URL('../examples/em/coupler-15dB-ro4350b-compare.cir', import.meta.url), 'utf8').replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-15dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
   }
+  {
+    // #41 stage 3, worked example 15: the 3-line couplers (centre input, port 3; coupled 1, isolated 2)
+    const { mirrorPerm } = await import('../tools/fingerlibN.mjs');
+    const Fd = Float64Array.from({ length: 6 }, (_, k) => (1 + k) * 1e9);
+    const ld6 = (c) => { const d = parseNetlist(readFileSync(new URL(`../examples/em/${c}`, import.meta.url), 'utf8'));
+      return { d, em: onSweep(readTouchstone(readFileSync(new URL(`../examples/em/${d.data[0].file}`, import.meta.url), 'utf8'), { nPorts: 6, name: d.data[0].file }), Fd) }; };
+    const fg = ld6('coupler3-20dB-fingers-ro4350b-compare.cir'), pl = ld6('coupler3-20dB-ro4350b-compare.cir'), D = (e, k) => db(e.S(1, 3), k) - db(e.S(2, 3), k);
+    // 2–6 GHz: at 1 GHz the finger coupler's isolation is below −44 dB, where it moves with the mesh
+    const dF = Math.min(...Array.from(Fd, (_, k) => D(fg.em, k)).slice(1)), dP = Math.max(...Array.from(Fd, (_, k) => D(pl.em, k)));
+    const r = solve(fg.d, Fd), cpl = Math.max(...Array.from(Fd, (_, k) => Math.abs(db(r.S(1, 3), k) - db(fg.em.S(1, 3), k))).slice(0, 5));
+    check(`openEMS (committed): the finger-loaded 3-line coupler's directivity ≥ 24 dB over 2–6 GHz (min ${dF.toFixed(1)}; plain ≤ ${dP.toFixed(1)} dB), comb-over's coupling within 0.6 dB to 5 GHz (worst ${cpl.toFixed(2)} dB)`, dF > 24 && dP < 15 && cpl < 0.6);
+    for (const f of ['coupler3-20dB-ro4350b', 'coupler3-20dB-fingers-ro4350b'])
+      check(`the committed ${f} comparison netlist is the export's`, readFileSync(new URL(`../examples/em/${f}-compare.cir`, import.meta.url), 'utf8').replace(/^\.data .*$/m, '') === openemsExport(ex(`${f}.cir`), { excite: '1,2,3,4', perm: mirrorPerm(3) }).compare.replace(/^\.data .*$/m, ''));
+  }
   check('the comparison netlist is the export\'s, with the committed result\'s name', cmp.replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-10dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
 }
 check('every port driven: S = B·A⁻¹ from the waves at all ports (exact whatever the terminations reflect); otherwise b/a with a note', (() => { const g = openemsExport(ex('coupler-10dB-ro4350b.cir')), g1 = openemsExport(ex('coupler-10dB-ro4350b.cir'), { excite: '1' }); return /np\.linalg\.inv\(A\[k\]\)/.test(g.script) && /exc_list = \[1,2,3,4\]/.test(g.script) && /exc_list = \[1\]/.test(g1.script); })());

@@ -1,6 +1,6 @@
 // Finger-loaded coupled lines (issue #41): geometry, the netlist's fingers line, the coupler layout. Run: node tests/fingers.mjs
 import { readFileSync } from 'node:fs';
-import { fingerPair, spliceFingers } from '../js/fingers.js';
+import { fingerPair, spliceFingers, fingerArray } from '../js/fingers.js';
 import { parseNetlist } from '../js/netlist.js';
 import { buildLayout } from '../js/layout-templates.js';
 import { openemsExport } from '../js/openems.js';
@@ -44,6 +44,33 @@ check('fingers that do not fit the pitch, or reach the other backbone, are refus
   const g15 = openemsExport(src);
   check(`openEMS export: the edge cell from the finger features (tip gap / 3: ${g15.info.fine.toFixed(4)} mm)`, Math.abs(g15.info.fine - 0.1057 / 3) < 1e-4);
   check('layout: a section that is not whole cells is drawn with whole cells and a note', /longer than 7 whole cells/.test(buildLayout(parseNetlist(src.replace('len 8.52mm', 'len 8mm'))).notes.join(' ')));
+}
+
+{
+  // stage 3: N lines, fingers on every edge that faces a neighbour
+  const a = fingerArray({ W: [0.8, 1, 0.8], G: [0.6, 0.6], wf: 0.13, lf: 0.4, p: 1, n: 3 });
+  check('fingerArray: 3 lines, outer lines with fingers on the inner edge only, the centre line on both (4 + 4n, 4 + 8n points)', a.polys.map(P => P.length).join() === '16,28,16');
+  check('fingerArray: each outline\'s area is its strip plus its fingers', [2.4 + 3 * 0.052, 3 + 6 * 0.052, 2.4 + 3 * 0.052].every((v, i) => Math.abs(Math.abs(area(a.polys[i])) - v) < 1e-9) && a.polys.every(P => area(P) > 0));
+  const tipsUp = (P, y) => P.filter(([, yy]) => Math.abs(yy - y) < 1e-9).map(([x]) => +x.toFixed(6));
+  const lo2 = a.ybands[1][0], hi2 = a.ybands[1][1];
+  check('fingerArray: odd lines at (k + ¼)p, even lines at (k + ¾)p, so both gaps intermesh', Math.min(...tipsUp(a.polys[0], a.ybands[0][1] + 0.4)) === 0.185 && Math.min(...tipsUp(a.polys[1], lo2 - 0.4)) === 0.685 && Math.min(...tipsUp(a.polys[1], hi2 + 0.4)) === 0.685 && Math.min(...tipsUp(a.polys[2], a.ybands[2][0] - 0.4)) === 0.185);
+  check('fingerArray: mirror-symmetric about y = 0 (line 1 ↔ line 3)', a.polys[0].every(([x, y]) => a.polys[2].some(([u, v]) => Math.abs(u - x) < 1e-9 && Math.abs(v + y) < 1e-9)));
+  check('fingerArray: fingers reaching across a gap are refused, per gap', throws(() => fingerArray({ W: [1, 1, 1], G: [0.6, 0.3], wf: 0.13, lf: [0.4, 0.35], p: 1, n: 2 }), /gap 2/));
+}
+
+{
+  // stage 3 in the netlist and the coupler3 layout
+  const src = readFileSync(new URL('../examples/coupler3-20dB-fingers-ro4350b.cir', import.meta.url), 'utf8'), d = parseNetlist(src), K = d.sections[0];
+  check('netlist: three finger-loaded lines take the section\'s C and L as given, the geometry for the layout', K.N === 3 && K.geom.kind === 'mslN' && K.geom.fingers.lfo > 0 && K.C[0][1] < 0 && K.L[0][1] > 0);
+  const bad = (from, to, re) => throws(() => parseNetlist(src.replace(from, to)), re);
+  check('netlist: N-line fingers without C and L, or reaching across a gap, are refused', bad(/^  C .*\n  L .*\n/m, '', /need the section's C and L/) && bad('lf=0.5423mm', 'lf=0.95mm', /across gap 1/));
+  const L = buildLayout(d), lines = L.items.filter(i => i.role === 'core' && /^line/.test(i.label));
+  check('coupler3 layout: three outlines with their fingers (8 per facing edge, and with lfo 8 on each outer line\'s outer edge: 16 on every line), no design-rule errors', lines.map(i => i.pts.length).join() === [68, 68, 68].join() && L.errors.length === 0);
+  check('coupler3 layout: six ports, the KiCad core carries every finger (48) on six pads in three tie groups', L.items.filter(i => i.type === 'port').length === 6 && L.core.pads.length === 6 && L.core.ties.length === 3 && L.core.pads.flatMap(p => p.polys).filter(P => P.length === 4 && Math.abs(Math.abs(P[1][0] - P[0][0]) - 0.13) < 1e-6).length === 48);
+  const ab = parseNetlist(L.netlist);
+  check('coupler3 layout: the as-built netlist keeps the section (fingers, C, L) and models the side-by-side run at each end as a coupled 3-line', ab.sections.filter(s => s.N === 3).length === 3 && /fingers wf=0.13mm/.test(L.netlist) && /cline K_ea geom=msl model=field/.test(L.netlist));
+  const plain = buildLayout(parseNetlist(readFileSync(new URL('../examples/coupler3-20dB-ro4350b.cir', import.meta.url), 'utf8')));
+  check('coupler3 layout: the plain 3-line coupler lays out without fingers or errors', plain.errors.length === 0 && plain.items.filter(i => /^line/.test(i.label ?? '')).every(i => i.pts.length === 4));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
