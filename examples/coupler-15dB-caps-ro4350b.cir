@@ -1,0 +1,25 @@
+.title 15 dB coupler with end capacitors on JLC RO4350B 0.508 mm (5 GHz), for comparison with finger loading (#41)
+# A capacitor across the gap at each end of the coupled section gives the odd mode the extra capacitance that
+# fingers spread along it (worked example 14, section 6). W, S and Cc from tools/capcoupler.mjs design. 48 fF is
+# below any chip capacitor: in practice a printed gap or interdigital capacitor, held to about ±20 %. The coupler
+# layout template does not place the capacitors; tools/capcoupler.mjs gen builds the openEMS case.
+.freq 1G 9G 801
+.ref 5G
+.substrate jlc-ro4350b-0.508
+.param w = 1.0046mm
+.param s = 0.3124mm
+.param cc = 0.0484p tune 0.02p 0.1p
+port in    # 1
+port thru  # 2
+port cpl   # 3
+port iso   # 4
+cline K geom=msl W=w S=s
+  len 90deg
+  A in   cpl
+  B thru iso
+end
+Cc1 in cpl cc
+Cc2 thru iso cc
+.goal db(S31) = -15 4.5G 5.5G
+.plot ylim=-60,0 db(S11) db(S21) db(S31) db(S41)
+.plot title=Directivity_(dB) db(S31/S41)

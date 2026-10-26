@@ -95,7 +95,8 @@ node tools/fingerdesign.mjs oems/fd15b --C 15 --min 0.09 --wf 0.13 --p 1.065 --W
 (cd oems/fc15 &amp;&amp; $OPENEMS_PYTHON f.py)
 node tools/fingercoupler.mjs cmp oems/fc15 --plain oems/plain15     # the plain coupler: tools/openems.mjs … --out oems/plain15 --excite 1 --run
 </code></pre>
-<p><figure><img src="../img/ex14-directivity.png" alt="Directivity of the two couplers" loading="lazy"><figcaption>Directivity of the two couplers</figcaption></figure></p>
+<p><figure><img src="../img/ex14-directivity.png" alt="Directivity of the plain, finger-loaded and end-capacitor couplers" loading="lazy"><figcaption>Directivity of the plain, finger-loaded and end-capacitor couplers</figcaption></figure></p>
+<p>(The end-capacitor coupler in the figure is section 6.)</p>
 <p>openEMS, port 1 driven:</p>
 <div class="table-wrap"><table>
 <thead>
@@ -147,7 +148,7 @@ node tools/fingercoupler.mjs cmp oems/fc15 --plain oems/plain15     # the plain 
 <li><strong>Match and loss.</strong> Match is below −32 dB everywhere. Loss is 1.7 % at 5 GHz, the same as the plain coupler.</li>
 </ul>
 <p><figure><img src="../img/ex14-fingers.png" alt="comb-over against openEMS, finger-loaded coupler" loading="lazy"><figcaption>comb-over against openEMS, finger-loaded coupler</figcaption></figure></p>
-<p><strong>comb-over overestimates the directivity</strong> of the finger-loaded coupler: 32 dB at 5 GHz against openEMS&#39;s 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms&#39; own coupling, neither of which is in comb-over&#39;s netlist. In the plain couplers the section&#39;s own isolation term is much larger and hides them. On the 10 dB attempt (section 6), adding the fingerless layout&#39;s error to the model reproduced openEMS&#39;s directivity within 1–2 dB. So treat comb-over&#39;s isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.</p>
+<p><strong>comb-over overestimates the directivity</strong> of the finger-loaded coupler: 32 dB at 5 GHz against openEMS&#39;s 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms&#39; own coupling, neither of which is in comb-over&#39;s netlist. In the plain couplers the section&#39;s own isolation term is much larger and hides them. On the 10 dB attempt (section 7), adding the fingerless layout&#39;s error to the model reproduced openEMS&#39;s directivity within 1–2 dB. So treat comb-over&#39;s isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.</p>
 <h2 id="5-the-board"><a class="anchor" href="#5-the-board" aria-hidden="true">#</a>5. The board</h2>
 <p><a href="../../index.html?example=coupler-15dB-fingers-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler-15dB-fingers-ro4350b.cir</code></a> is the coupler as a netlist. The section is a <code>geom msl</code> pair (the backbones) with a <code>fingers</code> line that carries the extracted modes (manual §4.6):</p>
 <pre><code>cline K geom=msl W=0.9463mm S=0.4749mm      # the backbones
@@ -160,7 +161,87 @@ node tools/fingercoupler.mjs cmp oems/fc15 --plain oems/plain15     # the plain 
 <pre><code class="language-sh">node tools/kicad.mjs examples/coupler-15dB-fingers-ro4350b.cir --out kicad/ --board
 </code></pre>
 <p>The tip gap (0.106 mm) is the smallest spacing on the board. CI exports it, checks it with KiCad&#39;s DRC and makes Gerbers.</p>
-<h2 id="6-limits"><a class="anchor" href="#6-limits" aria-hidden="true">#</a>6. Limits</h2>
+<h2 id="6-against-end-capacitors"><a class="anchor" href="#6-against-end-capacitors" aria-hidden="true">#</a>6. Against end capacitors</h2>
+<p>The usual cheap alternative is a capacitor across the gap at each end of the section (Dydyk). It gives the odd mode the extra capacitance that the fingers spread along the section. <code>tools/capcoupler.mjs design</code> sizes it in comb-over, which models it directly: W 1.0046 mm, S 0.3124 mm and Cc = 0.048 pF at each end (<a href="../../index.html?example=coupler-15dB-caps-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler-15dB-caps-ro4350b.cir</code></a>). In comb-over this coupler holds 34–35 dB directivity from 1 to 6 GHz, falling to 27 dB at 7 GHz.</p>
+<p><code>tools/capcoupler.mjs gen</code> puts it in the plain coupler&#39;s layout for openEMS, with an ideal lumped capacitor across the gap at each end. The capacitor has no ESL, and no pads beyond the two that hold it, so this is the best case for the technique.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>openEMS, port 1 driven</th>
+<th>1 GHz</th>
+<th>2 GHz</th>
+<th>3 GHz</th>
+<th>4 GHz</th>
+<th>5 GHz</th>
+<th>6 GHz</th>
+<th>7 GHz</th>
+<th>8 GHz</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>directivity: plain (dB)</td>
+<td>12.9</td>
+<td>12.2</td>
+<td>11.1</td>
+<td>10.2</td>
+<td>9.1</td>
+<td>7.2</td>
+<td>3.9</td>
+<td>−1.1</td>
+</tr>
+<tr>
+<td>directivity: fingers (dB)</td>
+<td><strong>33.0</strong></td>
+<td><strong>28.9</strong></td>
+<td>25.9</td>
+<td>23.7</td>
+<td><strong>22.8</strong></td>
+<td><strong>22.5</strong></td>
+<td><strong>21.9</strong></td>
+<td><strong>19.9</strong></td>
+</tr>
+<tr>
+<td>directivity: end capacitors (dB)</td>
+<td>26.3</td>
+<td>24.9</td>
+<td><strong>26.0</strong></td>
+<td><strong>24.7</strong></td>
+<td>21.6</td>
+<td>16.1</td>
+<td>7.6</td>
+<td>−19.9</td>
+</tr>
+<tr>
+<td>S31: fingers / capacitors (dB)</td>
+<td>−24.8 / −22.6</td>
+<td>−19.4 / −17.4</td>
+<td>−16.8 / −15.1</td>
+<td>−15.6 / −14.4</td>
+<td>−15.35 / −15.00</td>
+<td>−15.9 / −17.1</td>
+<td>−17.4 / −22.3</td>
+<td>−20.4 / −47.1</td>
+</tr>
+<tr>
+<td>S11: fingers / capacitors (dB)</td>
+<td>−37.1 / −37.2</td>
+<td>−35.3 / −33.4</td>
+<td>−38.3 / −33.5</td>
+<td>−46.9 / −38.4</td>
+<td>−36.6 / −37.8</td>
+<td>−34.8 / −28.3</td>
+<td>−37.0 / −23.1</td>
+<td>−35.1 / −20.2</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><strong>Mid-band, 3–5 GHz.</strong> The two are level, at 22–26 dB. Both are limited by the layout around the section, not by the compensation: comb-over gives each 30–35 dB.</li>
+<li><strong>Bandwidth.</strong> Fingers keep at least 20 dB directivity from 1 to 8 GHz; the capacitors manage that from 1 to 5 GHz. The capacitor coupler&#39;s coupling and match also fall away above 6 GHz, with a coupling null near 8 GHz.</li>
+<li><strong>Realisation and tolerance.</strong> 48 fF is below any chip capacitor: the smallest have ±0.05 pF tolerance and pad capacitance of that order. It would be a printed gap or interdigital capacitor. In comb-over a ±20 % error in Cc takes the 5 GHz directivity from 30 dB to 20–29 dB, and to 10–14 dB at 7 GHz. The fingers&#39; etch sensitivity has not been checked.</li>
+<li><strong>Design effort.</strong> The capacitors need no extraction: comb-over designs them in seconds. The fingers need about an hour of openEMS per design.</li>
+</ul>
+<p>So finger loading earns its extra design effort when the directivity has to hold over more than about an octave. For one band, a printed end capacitor held to about ±20 % does as well. Neither design was trimmed against openEMS, which could change both mid-band figures.</p>
+<h2 id="7-limits"><a class="anchor" href="#7-limits" aria-hidden="true">#</a>7. Limits</h2>
 <ul>
 <li><strong>Tight coupling does not fit.</strong> At 10 dB on 0.508 mm RO4350B with 0.09 mm spacing, the fingers do equalise the velocities, but Ze/Zo reaches only about 1.76 (about 11 dB coupling) against the 1.925 needed. The fingers need room in the gap (G ≥ 2 × tip gap + overlap), and that room weakens the coupling between the backbones. 15 dB needs Ze/Zo 1.43 and fits easily. Tighter coupling needs finer spacing or a different structure.</li>
 <li><strong>Per design, not per substrate rule.</strong> Each design point is two openEMS runs (about 7 min). A design takes about 1 h. A different substrate or coupling needs its own design.</li>

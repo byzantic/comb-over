@@ -4,7 +4,7 @@ from their openEMS comparisons.  Needs matplotlib.
     python3 tools/fingerfig.py geometry OUT.png W G wf lf p [CELLS]
     node tools/openems.mjs --compare examples/em/coupler-15dB-ro4350b-compare.cir --csv plain.csv
     node tools/openems.mjs --compare examples/em/coupler-15dB-fingers-ro4350b-compare.cir --csv fingers.csv
-    python3 tools/fingerfig.py directivity OUT.png plain.csv fingers.csv
+    python3 tools/fingerfig.py directivity OUT.png plain.csv fingers.csv [caps.csv]
 """
 import csv, sys
 import matplotlib
@@ -53,7 +53,7 @@ def geometry(out, W, G, wf, lf, p, n=3):
 
 
 def directivity(out, *srcs):
-    labels = ['plain', 'finger-loaded']
+    labels = ['plain', 'finger-loaded', 'end capacitors']
     fig, ax = plt.subplots(figsize=(8, 4.2), facecolor=SURF)
     ax.set_facecolor(SURF); ax.grid(color=GRID, lw=0.8); ax.set_axisbelow(True)
     for s in ax.spines.values(): s.set_visible(False)

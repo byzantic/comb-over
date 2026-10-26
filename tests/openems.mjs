@@ -77,6 +77,9 @@ const val = (script, name) => JSON.parse(script.match(new RegExp(`^${name} = (.*
     const dMin = Math.min(...Array.from(Fd, (_, k) => D(fg, k))), dPl = Math.max(...Array.from(Fd, (_, k) => D(pl, k)));
     check(`openEMS (committed): the finger-loaded 15 dB coupler's directivity ≥ 19.5 dB over 1–8 GHz (min ${dMin.toFixed(1)} dB; plain ≤ ${dPl.toFixed(1)} dB), coupling ${db(fg.S(3, 1), 4).toFixed(2)} dB at 5 GHz`,
       dMin > 19.5 && dPl < 13.5 && Math.abs(db(fg.S(3, 1), 4) + 15) < 0.6);
+    const cp = ld('coupler-15dB-caps-ro4350b-compare.cir'), dc = (k) => D(cp, k);
+    check(`openEMS (committed): the end-capacitor 15 dB coupler matches the fingers at mid-band (3–4 GHz ${dc(2).toFixed(1)}, ${dc(3).toFixed(1)} dB) but not at 7 GHz (${dc(6).toFixed(1)} dB, fingers ${D(fg, 6).toFixed(1)} dB)`,
+      dc(2) > 24 && dc(3) > 23 && dc(6) < 12 && D(fg, 6) > 20);
     check('the plain 15 dB coupler\'s comparison netlist is the export\'s', readFileSync(new URL('../examples/em/coupler-15dB-ro4350b-compare.cir', import.meta.url), 'utf8').replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-15dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));
   }
   check('the comparison netlist is the export\'s, with the committed result\'s name', cmp.replace(/^\.data .*$/m, '') === openemsExport(ex('coupler-10dB-ro4350b.cir')).compare.replace(/^\.data .*$/m, ''));

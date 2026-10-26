@@ -1943,6 +1943,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <td>Two finger couplers of different length: εe, εo de-embedded from the pair, then Ze, Zo and an end network fitted to both.</td>
 </tr>
 <tr>
+<td><code>node tools/capcoupler.mjs design|gen …</code></td>
+<td>A coupled-line coupler with a capacitor across the gap at each end of the section: <code>design</code> sizes W, S and the capacitor in comb-over; <code>gen DIR</code> writes the openEMS case (ideal lumped capacitors) (worked example 14, §6).</td>
+</tr>
+<tr>
 <td><code>python3 tools/fingerfig.py geometry|directivity OUT.png …</code></td>
 <td>Figures for worked example 14: the finger-loaded pair&#39;s geometry, and two couplers&#39; directivity from <code>--compare --csv</code> files (needs matplotlib).</td>
 </tr>
