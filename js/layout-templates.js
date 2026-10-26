@@ -169,7 +169,7 @@ function coupler(d, [name], o) {
     const fxs = FG ? Array.from({ length: FG.n }, (_, k) => r4((k + (i === 0 ? 0.25 : 0.75)) * FG.p)) : [];
     const yIn = y + (i === 0 ? W / 2 : -W / 2);
     let linePoly = pathPolygon(linePath, W);
-    if (FG) linePoly = spliceFingers(linePoly.map(([x, yy]) => [r4(x), r4(yy)]), r4(yIn), 0, fxs, FG.wf, FG.lf, 1e-3);
+    if (FG) linePoly = spliceFingers(linePoly, yIn, 0, fxs, FG.wf, FG.lf, 1e-6);
     items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: linePoly, width: W, label: `line ${i + 1}`, role: 'core' });
     for (const t of [ta, tb]) if (t.poly) items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: t.poly, width: W, label: `taper ${i + 1}`, role: 'core' });
     items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon(dedupe([fa.edge, fa.esc, ta.T]), wfA), width: wfA, label: `feed ${nA}`, role: 'feed', node: nA, path: dedupe([fa.edge, fa.esc, ta.T]) });
@@ -249,7 +249,7 @@ function coupler3(d, [name], o) {
     let poly = rect(0, lo, L, hi), fpolys = [];
     if (FG) {
       const xs = Array.from({ length: FG.n }, (_, k) => r4((k + (i % 2 === 0 ? 0.25 : 0.75)) * FG.p));
-      const add = (yEdge, dir, lf) => { poly = spliceFingers(poly.map(q => q.map(r4)), r4(yEdge), r4(yEdge + dir), xs, FG.wf, lf, 1e-3);
+      const add = (yEdge, dir, lf) => { poly = spliceFingers(poly, yEdge, yEdge + dir, xs, FG.wf, lf, 1e-6);
         xs.forEach(x => fpolys.push({ x, poly: rect(x - FG.wf / 2, Math.min(yEdge, yEdge + dir * lf), x + FG.wf / 2, Math.max(yEdge, yEdge + dir * lf)) })); };
       if (i < 2) add(hi, 1, FG.lf);
       if (i > 0) add(lo, -1, FG.lf);

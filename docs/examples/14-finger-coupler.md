@@ -80,7 +80,7 @@ openEMS, port 1 driven:
 
 ![comb-over against openEMS, finger-loaded coupler](../img/ex14-fingers.png)
 
-**comb-over overestimates the directivity** of the finger-loaded coupler: 32 dB at 5 GHz against openEMS's 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms' own coupling, neither of which is in comb-over's netlist. In the plain couplers the section's own isolation term is much larger and hides them. On the 10 dB attempt (section 7), adding the fingerless layout's error to the model reproduced openEMS's directivity within 1–2 dB. So treat comb-over's isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.
+**comb-over overestimates the directivity** of the finger-loaded coupler: 32 dB at 5 GHz against openEMS's 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms' own coupling, neither of which is in comb-over's netlist. In the plain couplers the section's own isolation term is much larger and hides them. On the 10 dB attempt (section 8), adding the fingerless layout's error to the model reproduced openEMS's directivity within 1–2 dB. So treat comb-over's isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.
 
 ## 5. The board
 
@@ -118,13 +118,42 @@ The usual cheap alternative is a capacitor across the gap at each end of the sec
 
 - **Mid-band, 3–5 GHz.** The two are level, at 22–26 dB. Both are limited by the layout around the section, not by the compensation: comb-over gives each 30–35 dB.
 - **Bandwidth.** Fingers keep at least 20 dB directivity from 1 to 8 GHz; the capacitors manage that from 1 to 5 GHz. The capacitor coupler's coupling and match also fall away above 6 GHz, with a coupling null near 8 GHz.
-- **Realisation and tolerance.** 48 fF is below any chip capacitor: the smallest have ±0.05 pF tolerance and pad capacitance of that order. It would be a printed gap or interdigital capacitor. In comb-over a ±20 % error in Cc takes the 5 GHz directivity from 30 dB to 20–29 dB, and to 10–14 dB at 7 GHz. The fingers' etch sensitivity has not been checked.
+- **Realisation and tolerance.** 48 fF is below any chip capacitor: the smallest have ±0.05 pF tolerance and pad capacitance of that order. It would be a printed gap or interdigital capacitor. In comb-over a ±20 % error in Cc takes the 5 GHz directivity from 30 dB to 20–29 dB, and to 10–14 dB at 7 GHz. The fingers' etch sensitivity is in section 7.
 - **Design effort.** The capacitors need no extraction: comb-over designs them in seconds. The fingers need about an hour of openEMS per design.
 
 So finger loading earns its extra design effort when the directivity has to hold over more than about an octave. For one band, a printed end capacitor held to about ±20 % does as well. Neither design was trimmed against openEMS, which could change both mid-band figures.
 
-## 7. Limits
+## 7. Etch tolerance
+
+Etching moves every copper edge. `tools/etchcheck.mjs` moves each edge of the coupled section by δ:
+- **Over-etch (δ > 0):** the backbones and fingers narrow by 2δ, and the gap, the tip gaps and the side gaps widen by 2δ.
+- **Unchanged:** a finger's length from its backbone's edge, and the pitch.
+
+Each case is re-exported from the netlist and run in openEMS on the nominal mesh. The feeds stay nominal. The design rules are not applied: an under-etched section breaks them, and that is the point.
+
+```sh
+node tools/etchcheck.mjs gen examples/coupler-15dB-fingers-ro4350b.cir oems/etch --delta -0.03,-0.015,0.015,0.03
+node tools/etchcheck.mjs cmp oems/etch --nominal examples/em/coupler-15dB-fingers-ro4350b-openems.s4p
+```
+
+| δ per edge | fingers / tip gap | directivity at 2 / 5 / 7 GHz | S31 at 5 GHz | S11 at 5 GHz |
+|---|---|---|---|---|
+| −0.03 mm (under-etched) | 0.19 / 0.046 mm | 15.4 / 13.8 / 10.7 dB | −13.6 dB | −23.2 dB |
+| −0.015 mm | 0.16 / 0.076 mm | 20.6 / 17.7 / 15.6 dB | −14.6 dB | −27.1 dB |
+| nominal | 0.13 / 0.106 mm | 28.9 / 22.8 / 21.9 dB | −15.35 dB | −36.6 dB |
+| +0.015 mm (over-etched) | 0.10 / 0.136 mm | 26.4 / 30.7 / 35.5 dB | −16.1 dB | −32.1 dB |
+| +0.03 mm | 0.07 / 0.166 mm | 19.6 / 24.6 / 20.3 dB | −16.9 dB | −26.5 dB |
+
+- **Directivity is the sensitive figure.** At ±0.015 mm it stays within 15.6–35.5 dB from 2 to 7 GHz. At ±0.03 mm it can fall to 10–14 dB. The plain coupler is at 4–9 dB in openEMS, and the same etch moves its directivity by under 1 dB in comb-over.
+- **Under-etch hurts most.** Wider fingers and a closing tip gap add capacitance between the lines faster than the backbones' coupling changes.
+- **The nominal design is not centred.** Over-etching by 0.015 mm improves it: 30.7 dB at 5 GHz and 38 dB at 6 GHz. With the layout around the section included, the nominal fingers carry slightly too much capacitance. A design biased by the fab's known etch, or trimmed against openEMS, would centre it.
+- **Coupling** moves by about 0.8 dB per 0.015 mm, the same as the plain coupler's (comb-over: 0.4 dB at 5 GHz). **Match** degrades to −27 to −32 dB.
+
+So the fingers keep most of their advantage if the fab holds edges to about ±0.015 mm, and much less at ±0.03 mm. A test coupon on the same panel (this coupler, or a few finger cells) measures the actual etch before relying on the directivity.
+
+## 8. Limits
 
 - **Tight coupling does not fit.** At 10 dB on 0.508 mm RO4350B with 0.09 mm spacing, the fingers do equalise the velocities, but Ze/Zo reaches only about 1.76 (about 11 dB coupling) against the 1.925 needed. The fingers need room in the gap (G ≥ 2 × tip gap + overlap), and that room weakens the coupling between the backbones. 15 dB needs Ze/Zo 1.43 and fits easily. Tighter coupling needs finer spacing or a different structure.
 - **Per design, not per substrate rule.** Each design point is two openEMS runs (about 7 min). A design takes about 1 h. A different substrate or coupling needs its own design.
+- **Etch.** Directivity depends on the fab holding the finger edges to about ±0.015 mm (section 7).
 - **Isolation from comb-over** is an upper bound, as above.
