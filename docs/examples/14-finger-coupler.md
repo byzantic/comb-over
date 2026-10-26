@@ -61,7 +61,9 @@ node tools/fingercoupler.mjs gen oems/fc15 --fit oems/fd15b/W0.9463_G0.4749_lf0.
 node tools/fingercoupler.mjs cmp oems/fc15 --plain oems/plain15     # the plain coupler: tools/openems.mjs … --out oems/plain15 --excite 1 --run
 ```
 
-![Directivity of the two couplers](../img/ex14-directivity.png)
+![Directivity of the plain, finger-loaded and end-capacitor couplers](../img/ex14-directivity.png)
+
+(The end-capacitor coupler in the figure is section 6.)
 
 openEMS, port 1 driven:
 
@@ -78,7 +80,7 @@ openEMS, port 1 driven:
 
 ![comb-over against openEMS, finger-loaded coupler](../img/ex14-fingers.png)
 
-**comb-over overestimates the directivity** of the finger-loaded coupler: 32 dB at 5 GHz against openEMS's 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms' own coupling, neither of which is in comb-over's netlist. In the plain couplers the section's own isolation term is much larger and hides them. On the 10 dB attempt (section 6), adding the fingerless layout's error to the model reproduced openEMS's directivity within 1–2 dB. So treat comb-over's isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.
+**comb-over overestimates the directivity** of the finger-loaded coupler: 32 dB at 5 GHz against openEMS's 22.8 dB. The section is not the cause; its velocities and impedances come from openEMS. The isolation that remains comes from the layout around the section: the corners where the arms leave it and the arms' own coupling, neither of which is in comb-over's netlist. In the plain couplers the section's own isolation term is much larger and hides them. On the 10 dB attempt (section 7), adding the fingerless layout's error to the model reproduced openEMS's directivity within 1–2 dB. So treat comb-over's isolation figure for a velocity-equalised section as an upper bound, and check the layout in openEMS.
 
 ## 5. The board
 
@@ -100,7 +102,28 @@ node tools/kicad.mjs examples/coupler-15dB-fingers-ro4350b.cir --out kicad/ --bo
 
 The tip gap (0.106 mm) is the smallest spacing on the board. CI exports it, checks it with KiCad's DRC and makes Gerbers.
 
-## 6. Limits
+## 6. Against end capacitors
+
+The usual cheap alternative is a capacitor across the gap at each end of the section (Dydyk). It gives the odd mode the extra capacitance that the fingers spread along the section. `tools/capcoupler.mjs design` sizes it in comb-over, which models it directly: W 1.0046 mm, S 0.3124 mm and Cc = 0.048 pF at each end ([`examples/coupler-15dB-caps-ro4350b.cir`](../../examples/coupler-15dB-caps-ro4350b.cir)). In comb-over this coupler holds 34–35 dB directivity from 1 to 6 GHz, falling to 27 dB at 7 GHz.
+
+`tools/capcoupler.mjs gen` puts it in the plain coupler's layout for openEMS, with an ideal lumped capacitor across the gap at each end. The capacitor has no ESL, and no pads beyond the two that hold it, so this is the best case for the technique.
+
+| openEMS, port 1 driven | 1 GHz | 2 GHz | 3 GHz | 4 GHz | 5 GHz | 6 GHz | 7 GHz | 8 GHz |
+|---|---|---|---|---|---|---|---|---|
+| directivity: plain (dB) | 12.9 | 12.2 | 11.1 | 10.2 | 9.1 | 7.2 | 3.9 | −1.1 |
+| directivity: fingers (dB) | **33.0** | **28.9** | 25.9 | 23.7 | **22.8** | **22.5** | **21.9** | **19.9** |
+| directivity: end capacitors (dB) | 26.3 | 24.9 | **26.0** | **24.7** | 21.6 | 16.1 | 7.6 | −19.9 |
+| S31: fingers / capacitors (dB) | −24.8 / −22.6 | −19.4 / −17.4 | −16.8 / −15.1 | −15.6 / −14.4 | −15.35 / −15.00 | −15.9 / −17.1 | −17.4 / −22.3 | −20.4 / −47.1 |
+| S11: fingers / capacitors (dB) | −37.1 / −37.2 | −35.3 / −33.4 | −38.3 / −33.5 | −46.9 / −38.4 | −36.6 / −37.8 | −34.8 / −28.3 | −37.0 / −23.1 | −35.1 / −20.2 |
+
+- **Mid-band, 3–5 GHz.** The two are level, at 22–26 dB. Both are limited by the layout around the section, not by the compensation: comb-over gives each 30–35 dB.
+- **Bandwidth.** Fingers keep at least 20 dB directivity from 1 to 8 GHz; the capacitors manage that from 1 to 5 GHz. The capacitor coupler's coupling and match also fall away above 6 GHz, with a coupling null near 8 GHz.
+- **Realisation and tolerance.** 48 fF is below any chip capacitor: the smallest have ±0.05 pF tolerance and pad capacitance of that order. It would be a printed gap or interdigital capacitor. In comb-over a ±20 % error in Cc takes the 5 GHz directivity from 30 dB to 20–29 dB, and to 10–14 dB at 7 GHz. The fingers' etch sensitivity has not been checked.
+- **Design effort.** The capacitors need no extraction: comb-over designs them in seconds. The fingers need about an hour of openEMS per design.
+
+So finger loading earns its extra design effort when the directivity has to hold over more than about an octave. For one band, a printed end capacitor held to about ±20 % does as well. Neither design was trimmed against openEMS, which could change both mid-band figures.
+
+## 7. Limits
 
 - **Tight coupling does not fit.** At 10 dB on 0.508 mm RO4350B with 0.09 mm spacing, the fingers do equalise the velocities, but Ze/Zo reaches only about 1.76 (about 11 dB coupling) against the 1.925 needed. The fingers need room in the gap (G ≥ 2 × tip gap + overlap), and that room weakens the coupling between the backbones. 15 dB needs Ze/Zo 1.43 and fits easily. Tighter coupling needs finer spacing or a different structure.
 - **Per design, not per substrate rule.** Each design point is two openEMS runs (about 7 min). A design takes about 1 h. A different substrate or coupling needs its own design.
