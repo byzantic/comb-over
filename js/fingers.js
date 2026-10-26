@@ -42,8 +42,10 @@ export function spliceFingers(pts, yEdge, yTo, xs, wf, lf, eps = 1e-6) {
     if (Math.abs(a[1] - yEdge) > eps || Math.abs(b[1] - yEdge) > eps) continue;
     const lo = Math.min(a[0], b[0]), hi = Math.max(a[0], b[0]);
     if (!xs.every(x => x - h > lo - eps && x + h < hi + eps)) continue;
-    const up = b[0] > a[0], cs = [...xs].sort((u, v) => up ? u - v : v - u), ins = [];
-    for (const x of cs) { const [x1, x2] = up ? [x - h, x + h] : [x + h, x - h]; ins.push([x1, yEdge], [x1, yEdge + s * lf], [x2, yEdge + s * lf], [x2, yEdge]); }
+    // the fingers sit on the edge as found (its own y, not the requested one), so nothing is left between them and the
+    // outline and the copper needs no rounding
+    const up = b[0] > a[0], cs = [...xs].sort((u, v) => up ? u - v : v - u), ins = [], yE = (a[1] + b[1]) / 2;
+    for (const x of cs) { const [x1, x2] = up ? [x - h, x + h] : [x + h, x - h]; ins.push([x1, yE], [x1, yE + s * lf], [x2, yE + s * lf], [x2, yE]); }
     return [...pts.slice(0, i + 1), ...ins, ...pts.slice(i + 1)];
   }
   throw new Error(`spliceFingers: no edge at y = ${yEdge} spans the fingers`);
