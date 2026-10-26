@@ -1971,6 +1971,10 @@ Y12 = Y21 = −W · diag(vᵢ csch γᵢℓ) · Wᵀ          γᵢ = βᵢ (1/(
 <td>A coupled-line coupler with a capacitor across the gap at each end of the section: <code>design</code> sizes W, S and the capacitor in comb-over; <code>gen DIR</code> writes the openEMS case (ideal lumped capacitors) (worked example 14, §6).</td>
 </tr>
 <tr>
+<td><code>node tools/etchcheck.mjs gen NETLIST DIR [--delta …] | cmp DIR [--nominal FILE]</code></td>
+<td>Etch tolerance of a finger-loaded pair: every edge of the coupled section moved by δ, one openEMS case per δ on the nominal mesh; <code>cmp</code> tabulates directivity, coupling and match (worked example 14, §7).</td>
+</tr>
+<tr>
 <td><code>node tools/fingerdesign3.mjs DIR [--C 20 --Wo --Wc --G --lf --lfo --wf --p]</code></td>
 <td>Finger-loaded 3-line coupler design against openEMS (#41, stage 3): outer and centre widths, gap and finger lengths for a centre-to-outer coupling, centre-input match and equal symmetric-mode velocities. Each point is two 6-port openEMS sections; the modes are de-embedded from the pair (<code>tools/fingerbloch.py</code>) and the 3×3 C, L fitted to both (<code>tools/fingerlibN.mjs</code>).</td>
 </tr>
