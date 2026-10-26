@@ -15,6 +15,7 @@ import { parseNetlist } from '../js/netlist.js';
 import { solve } from '../js/solver.js';
 import { readTouchstone, onSweep } from '../js/touchstone.js';
 import { mirrorPerm, bareCLN } from './fingerlibN.mjs';
+import { synthMsline, fromSubstrate } from '../js/microstrip.js';
 
 const [cmd, dir, ...rest] = process.argv.slice(2);
 const opt = (k, d) => { const i = rest.indexOf(`--${k}`); return i >= 0 ? rest[i + 1] : d; };
@@ -25,26 +26,34 @@ function gen() {
   const bare = rest.includes('--bare'), subId = opt('sub', 'jlc-ro4350b-0.508'), sub = makeSubstrate(subId), h = sub.dielectric.h * 1e3;
   const fa = fingerArray({ W: [Wo, Wc, Wo], G: [G, G], wf, lf, p, n, lfo: bare ? 0 : lfo }), len = fa.len;
   const yc = fa.ybands.map(([lo, hi]) => (lo + hi) / 2), W = [Wo, Wc, Wo];
-  // m: straight margin past the section before the outer lines bend (clears the bend's inside mitre from the fingers);
-  // d: the outer arms' 45° run; Lf: the straight feeds to the board edge (port plane Lp in from it)
-  const m = 0.5, d = +opt('arm', 2.5), Lp = 3, Lf = r6(Lp + 3 * h + 1.5), xL = -m - d - Lf, xR = len + m + d + Lf;
-  const items = [], ports = [];
+  // At each end of the section a linear taper (length Lt) from the line's width to the 50 Ω width wz, then everything at
+  // wz: the outer lines' 45° arms (run d) and the straight feeds to the board edge (Lf, port plane Lp in from it). The
+  // match conditions hold for Z0 terminations at the section itself: every stretch at a line's own ~56 Ω between the
+  // section and the feeds detunes it (a line-width margin, arms and tapers after them gave S33 −18 dB at 7 GHz)
+  const wz = r6(synthMsline({ Z0: 50, ...fromSubstrate(sub), f: 5e9 }).W * 1e3), Lt = +opt('taper', 0.6), dh = 0.2;
+  const d = +opt('arm', 1.5), Lp = 3, Lf = r6(Lp + 3 * h + 1.5);
+  const items = [], ports = [], xFeed = [];
   for (let i = 0; i < 3; i++) {
-    const y = yc[i], s = i === 1 ? 0 : Math.sign(y), ya = y + s * d;   // arm level
-    const path = i === 1 ? [[-m - d, y], [len + m + d, y]] : [[-m - d, ya], [-m, y], [len + m, y], [len + m + d, ya]];
-    let P = pathPolygon(path, W[i]).map(([x, yy]) => [r6(x), r6(yy)]);
+    const [lo, hi] = fa.ybands[i].map(r6), y = (lo + hi) / 2, s = i === 1 ? 0 : Math.sign(y), ya = y + s * d;
+    // the section: one outline per line, fingers spliced into its straight edges
+    let P = [[0, lo], [len, lo], [len, hi], [0, hi]];
     if (!bare) {
-      const xs = Array.from({ length: n }, (_, k) => r6((k + (i % 2 === 0 ? 0.25 : 0.75)) * p)), [lo, hi] = fa.ybands[i].map(r6);
+      const xs = Array.from({ length: n }, (_, k) => r6((k + (i % 2 === 0 ? 0.25 : 0.75)) * p));
       if (i < 2) P = spliceFingers(P, hi, hi + 1, xs, wf, lf, 1e-6);
       if (i > 0) P = spliceFingers(P, lo, lo - 1, xs, wf, lf, 1e-6);
       if (lfo > 0 && i === 0) P = spliceFingers(P, lo, lo - 1, xs, wf, lfo, 1e-6);
       if (lfo > 0 && i === 2) P = spliceFingers(P, hi, hi + 1, xs, wf, lfo, 1e-6);
     }
     items.push({ type: 'poly', role: 'core', pts: P });
-    const yf = i === 1 ? y : ya, rect = (a, b) => [[Math.min(a, b), yf - W[i] / 2], [Math.max(a, b), yf - W[i] / 2], [Math.max(a, b), yf + W[i] / 2], [Math.min(a, b), yf + W[i] / 2]];
-    for (const [k, xe, xi] of [[2 * i + 1, xL, -m - d], [2 * i + 2, xR, len + m + d]]) {
-      items.push({ type: 'poly', role: 'feed', node: `p${k}`, width: W[i], pts: rect(xe, xi), path: [[xe, yf], [xi, yf]] });
-      ports.push({ k, W: W[i] });
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? 0 : len, x1 = x0 + side * Lt, [xa, xb] = side < 0 ? [x1, x0] : [x0, x1], [wa, wb] = side < 0 ? [wz, W[i]] : [W[i], wz];
+      items.push({ type: 'poly', role: 'core', pts: [[xa, y - wa / 2], [xb, y - wb / 2], [xb, y + wb / 2], [xa, y + wa / 2]] });          // taper
+      // the arm at wz: a short straight, then 45° away (outer lines) to the feed's level, then the feed
+      const path = i === 1 ? [[x1, y], [x1 + side * (2 * dh + d), y]] : [[x1, y], [x1 + side * dh, y], [x1 + side * (dh + d), ya], [x1 + side * (2 * dh + d), ya]];
+      items.push({ type: 'poly', role: 'core', pts: pathPolygon(path, wz).map(([u, v]) => [r6(u), r6(v)]) });
+      const xs0 = x1 + side * (2 * dh + d), xe = xs0 + side * Lf, k = 2 * i + (side < 0 ? 1 : 2), yf = i === 1 ? y : ya;
+      items.push({ type: 'poly', role: 'feed', node: `p${k}`, width: wz, pts: [[Math.min(xs0, xe), yf - wz / 2], [Math.max(xs0, xe), yf - wz / 2], [Math.max(xs0, xe), yf + wz / 2], [Math.min(xs0, xe), yf + wz / 2]], path: [[xe, yf], [xs0, yf]] });
+      ports.push({ k, W: wz, Wl: W[i], arm: i === 1 ? 2 * dh + d : r6(2 * dh + d * Math.SQRT2) });
     }
   }
   ports.sort((a, b) => a.k - b.k);
@@ -54,18 +63,19 @@ function gen() {
   const g = openemsExport(net, { layout: { items, parts: [], substrate: sub, netlist: net, errors: [], title: `3-line coupler${bare ? ' (plain)' : ' (fingers)'}` }, fine: opt('fine') != null ? +opt('fine') : Math.min(...feats) / 3, excite: '1,2,3,4', perm: mirrorPerm(3) });
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'f.py'), g.script.replace(/'[^']*\.s%dp'/, "'f.s%dp'"));
-  // comb-over's model at the measurement planes: feeds (Lf − Lp) and the outer arms (45°, length d√2) as single lines,
-  // the straight margins m as the bare 3-line, the section as its C, L (--CL from fingerdesign3's log, or bare)
+  // comb-over's model at the measurement planes: feeds (Lf − Lp), arms and tapers (3 steps) as single lines, the section
+  // as its C, L (--CL from fingerdesign3's log, or the bare lines from the 2-D solver)
   const bareCL = bareCLN({ sub: subId, W, G: [G, G] });
   let C = bareCL.C, L = bareCL.L;
   const clArg = opt('CL');
   if (clArg) { const [f, nm] = clArg.split(':'), hh = JSON.parse(readFileSync(f, 'utf8')).find(x => x.name === nm); if (!hh) throw new Error(`no ${nm} in ${f}`); C = hh.C; L = hh.L; }
-  const fl = r6(Lf - g.info.ports[0].Lp), arm = r6(d * Math.SQRT2), sec = (nm, CC, LL, l, A, B) => [`cline ${nm}`, `  C ${mat(CC)}`, `  L ${mat(LL)}`, `  len ${l}mm`, `  A ${A}`, `  B ${B}`, 'end'];
+  const fl = r6(Lf - g.info.ports[0].Lp), sec = (nm, CC, LL, l, A, B) => [`cline ${nm}`, `  C ${mat(CC)}`, `  L ${mat(LL)}`, `  len ${l}mm`, `  A ${A}`, `  B ${B}`, 'end'];
   const model = ['.title 3-line coupler model', '.freq 1G 9G 801', '.ref 5G', `.substrate ${subId}`, ...ports.map(q => `port p${q.k} 50`),
     ...ports.map(q => `Tp${q.k}_f p${q.k} p${q.k}_e W=${q.W}mm len=${fl}mm`),
-    `Tp1_a p1_e a1 W=${Wo}mm len=${arm}mm`, `Tp5_a p5_e a3 W=${Wo}mm len=${arm}mm`, `Tp3_a p3_e a2 W=${Wc}mm len=${d}mm`,
-    `Tp2_a p2_e b1 W=${Wo}mm len=${arm}mm`, `Tp6_a p6_e b3 W=${Wo}mm len=${arm}mm`, `Tp4_a p4_e b2 W=${Wc}mm len=${d}mm`,
-    ...sec('MA', bareCL.C, bareCL.L, m, 'a1 a2 a3', 's1 s2 s3'), ...sec('K', C, L, len, 's1 s2 s3', 't1 t2 t3'), ...sec('MB', bareCL.C, bareCL.L, m, 't1 t2 t3', 'b1 b2 b3'),
+    ...ports.map(q => `Tp${q.k}_a p${q.k}_e p${q.k}_g W=${wz}mm len=${q.arm}mm`),
+    ...ports.flatMap(q => { const end = q.k % 2 ? 'a' : 'b', ln = (q.k + 1) >> 1;
+      return [1, 2, 3].map(j => `Tp${q.k}_t${j} p${q.k}_${j === 1 ? 'g' : `t${j - 1}`} ${j === 3 ? `${end}${ln}` : `p${q.k}_t${j}`} W=${r6(q.W + (q.Wl - q.W) * (j - 0.5) / 3)}mm len=${r6(Lt / 3)}mm`); }),
+    ...sec('K', C, L, len, 'a1 a2 a3', 'b1 b2 b3'),
     '.data em f.s6p overlay'].join('\n') + '\n';
   writeFileSync(join(dir, 'compare.cir'), model);
   writeFileSync(join(dir, 'case.json'), JSON.stringify({ Wo, Wc, G, wf, lf, lfo, p, n, len, bare, cells: g.info.cells, fine: g.info.fine, CL: clArg ?? 'bare 2-D' }));
