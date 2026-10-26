@@ -30,8 +30,9 @@ function gen() {
   // wz: the outer lines' 45° arms (run d) and the straight feeds to the board edge (Lf, port plane Lp in from it). The
   // match conditions hold for Z0 terminations at the section itself: every stretch at a line's own ~56 Ω between the
   // section and the feeds detunes it (a line-width margin, arms and tapers after them gave S33 −18 dB at 7 GHz)
-  const wz = r6(synthMsline({ Z0: 50, ...fromSubstrate(sub), f: 5e9 }).W * 1e3), Lt = +opt('taper', 0.6), dh = 0.2;
-  const d = +opt('arm', 1.5), Lp = 3, Lf = r6(Lp + 3 * h + 1.5);
+  const wz = r6(synthMsline({ Z0: 50, ...fromSubstrate(sub), f: 5e9 }).W * 1e3), Lt = +opt('taper', 0.2), dh = 0.2;
+  // --angle: the outer arms' angle from the line (45° by default; 90° turns straight away: less coupled run at the ends)
+  const d = +opt('arm', 4), ang = +opt('angle', 90), dx = r6(d / Math.tan(ang * Math.PI / 180)), Lp = 3, Lf = r6(Lp + 3 * h + 1.5);
   const items = [], ports = [], xFeed = [];
   for (let i = 0; i < 3; i++) {
     const [lo, hi] = fa.ybands[i].map(r6), y = (lo + hi) / 2, s = i === 1 ? 0 : Math.sign(y), ya = y + s * d;
@@ -49,11 +50,11 @@ function gen() {
       const x0 = side < 0 ? 0 : len, x1 = x0 + side * Lt, [xa, xb] = side < 0 ? [x1, x0] : [x0, x1], [wa, wb] = side < 0 ? [wz, W[i]] : [W[i], wz];
       items.push({ type: 'poly', role: 'core', pts: [[xa, y - wa / 2], [xb, y - wb / 2], [xb, y + wb / 2], [xa, y + wa / 2]] });          // taper
       // the arm at wz: a short straight, then 45° away (outer lines) to the feed's level, then the feed
-      const path = i === 1 ? [[x1, y], [x1 + side * (2 * dh + d), y]] : [[x1, y], [x1 + side * dh, y], [x1 + side * (dh + d), ya], [x1 + side * (2 * dh + d), ya]];
+      const path = i === 1 ? [[x1, y], [x1 + side * (2 * dh + dx), y]] : [[x1, y], [x1 + side * dh, y], [x1 + side * (dh + dx), ya], [x1 + side * (2 * dh + dx), ya]];
       items.push({ type: 'poly', role: 'core', pts: pathPolygon(path, wz).map(([u, v]) => [r6(u), r6(v)]) });
-      const xs0 = x1 + side * (2 * dh + d), xe = xs0 + side * Lf, k = 2 * i + (side < 0 ? 1 : 2), yf = i === 1 ? y : ya;
+      const xs0 = x1 + side * (2 * dh + dx), xe = xs0 + side * Lf, k = 2 * i + (side < 0 ? 1 : 2), yf = i === 1 ? y : ya;
       items.push({ type: 'poly', role: 'feed', node: `p${k}`, width: wz, pts: [[Math.min(xs0, xe), yf - wz / 2], [Math.max(xs0, xe), yf - wz / 2], [Math.max(xs0, xe), yf + wz / 2], [Math.min(xs0, xe), yf + wz / 2]], path: [[xe, yf], [xs0, yf]] });
-      ports.push({ k, W: wz, Wl: W[i], arm: i === 1 ? 2 * dh + d : r6(2 * dh + d * Math.SQRT2) });
+      ports.push({ k, W: wz, Wl: W[i], arm: i === 1 ? r6(2 * dh + dx) : r6(2 * dh + Math.hypot(dx, d)) });
     }
   }
   ports.sort((a, b) => a.k - b.k);
@@ -69,13 +70,18 @@ function gen() {
   let C = bareCL.C, L = bareCL.L;
   const clArg = opt('CL');
   if (clArg) { const [f, nm] = clArg.split(':'), hh = JSON.parse(readFileSync(f, 'utf8')).find(x => x.name === nm); if (!hh) throw new Error(`no ${nm} in ${f}`); C = hh.C; L = hh.L; }
+  const Wm = W.map(w => (w + wz) / 2), Ce = bareCLN({ sub: subId, W: Wm, G: [0, 1].map(j => r6(G - (Wm[j] - W[j]) / 2 - (Wm[j + 1] - W[j + 1]) / 2)) });
   const fl = r6(Lf - g.info.ports[0].Lp), sec = (nm, CC, LL, l, A, B) => [`cline ${nm}`, `  C ${mat(CC)}`, `  L ${mat(LL)}`, `  len ${l}mm`, `  A ${A}`, `  B ${B}`, 'end'];
   const model = ['.title 3-line coupler model', '.freq 1G 9G 801', '.ref 5G', `.substrate ${subId}`, ...ports.map(q => `port p${q.k} 50`),
     ...ports.map(q => `Tp${q.k}_f p${q.k} p${q.k}_e W=${q.W}mm len=${fl}mm`),
-    ...ports.map(q => `Tp${q.k}_a p${q.k}_e p${q.k}_g W=${wz}mm len=${q.arm}mm`),
-    ...ports.flatMap(q => { const end = q.k % 2 ? 'a' : 'b', ln = (q.k + 1) >> 1;
-      return [1, 2, 3].map(j => `Tp${q.k}_t${j} p${q.k}_${j === 1 ? 'g' : `t${j - 1}`} ${j === 3 ? `${end}${ln}` : `p${q.k}_t${j}`} W=${r6(q.W + (q.Wl - q.W) * (j - 0.5) / 3)}mm len=${r6(Lt / 3)}mm`); }),
+    // the arms after the side-by-side stretch, single lines
+    ...ports.map(q => `Tp${q.k}_a p${q.k}_e ${q.k % 2 ? 'x' : 'y'}${(q.k + 1) >> 1} W=${wz}mm len=${r6(q.arm - dh)}mm`),
+    // the side-by-side stretch at each end (the taper and the straight dh before the outer lines turn away): still a
+    // coupled 3-line, at the mean of line and feed widths, centre spacings kept (as separate lines it under-counted
+    // the coupling, #41)
+    ...sec('EA', Ce.C, Ce.L, r6(Lt + dh), 'x1 x2 x3', 'a1 a2 a3'),
     ...sec('K', C, L, len, 'a1 a2 a3', 'b1 b2 b3'),
+    ...sec('EB', Ce.C, Ce.L, r6(Lt + dh), 'b1 b2 b3', 'y1 y2 y3'),
     '.data em f.s6p overlay'].join('\n') + '\n';
   writeFileSync(join(dir, 'compare.cir'), model);
   writeFileSync(join(dir, 'case.json'), JSON.stringify({ Wo, Wc, G, wf, lf, lfo, p, n, len, bare, cells: g.info.cells, fine: g.info.fine, CL: clArg ?? 'bare 2-D' }));
