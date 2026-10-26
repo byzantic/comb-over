@@ -4,7 +4,8 @@ from their openEMS comparisons.  Needs matplotlib.
     python3 tools/fingerfig.py geometry OUT.png W G wf lf p [CELLS]
     node tools/openems.mjs --compare examples/em/coupler-15dB-ro4350b-compare.cir --csv plain.csv
     node tools/openems.mjs --compare examples/em/coupler-15dB-fingers-ro4350b-compare.cir --csv fingers.csv
-    python3 tools/fingerfig.py directivity OUT.png plain.csv fingers.csv [caps.csv]
+    python3 tools/fingerfig.py directivity OUT.png plain.csv fingers.csv [caps.csv] [--pair 13,23 --title T --labels a,b]
+    python3 tools/fingerfig.py polys OUT.png LAYOUT.json [--xlim a,b --ylim a,b --title T]   (copper from a layout's items)
 """
 import csv, sys
 import matplotlib
@@ -52,8 +53,11 @@ def geometry(out, W, G, wf, lf, p, n=3):
     fig.tight_layout(); fig.savefig(out, dpi=130, facecolor=SURF)
 
 
-def directivity(out, *srcs):
-    labels = ['plain', 'finger-loaded', 'end capacitors']
+def directivity(out, *args):
+    opt = lambda k, d: args[args.index(k) + 1] if k in args else d
+    srcs = [a for i, a in enumerate(args) if not a.startswith('--') and (i == 0 or not args[i - 1].startswith('--'))]
+    c, i_ = opt('--pair', '31,41').split(',')
+    labels = opt('--labels', 'plain,finger-loaded,end capacitors').split(',')
     fig, ax = plt.subplots(figsize=(8, 4.2), facecolor=SURF)
     ax.set_facecolor(SURF); ax.grid(color=GRID, lw=0.8); ax.set_axisbelow(True)
     for s in ax.spines.values(): s.set_visible(False)
@@ -62,15 +66,32 @@ def directivity(out, *srcs):
         rows = list(csv.DictReader(open(src)))
         f = [float(r['f_GHz']) for r in rows]
         for pre, ls in (('co_', '-'), ('em_', (0, (4, 2.5)))):
-            ax.plot(f, [float(r[f'{pre}S31_dB']) - float(r[f'{pre}S41_dB']) for r in rows], color=SERIES[i], lw=2, ls=ls)
+            ax.plot(f, [float(r[f'{pre}S{c}_dB']) - float(r[f'{pre}S{i_}_dB']) for r in rows], color=SERIES[i], lw=2, ls=ls)
     hs = [Line2D([], [], color=SERIES[i], lw=2) for i in range(len(srcs))] + [Line2D([], [], color=INK2, lw=2), Line2D([], [], color=INK2, lw=2, ls=(0, (4, 2.5)))]
     ax.legend(hs, labels[:len(srcs)] + ['comb-over (as built)', 'openEMS'], loc='lower left', ncol=2, frameon=False, fontsize=9, labelcolor=INK)
-    ax.set_ylabel('Directivity |S31| − |S41| (dB)', color=INK2, fontsize=10); ax.set_xlabel('Frequency (GHz)', color=INK2, fontsize=10)
+    ax.set_ylabel(f'Directivity |S{c}| − |S{i_}| (dB)', color=INK2, fontsize=10); ax.set_xlabel('Frequency (GHz)', color=INK2, fontsize=10)
     ax.set_ylim(-10, 50)
-    ax.set_title('15 dB couplers on 0.508 mm RO4350B: directivity', color=INK, fontsize=11, loc='left')
+    ax.set_title(opt('--title', '15 dB couplers on 0.508 mm RO4350B: directivity'), color=INK, fontsize=11, loc='left')
+    fig.tight_layout(); fig.savefig(out, dpi=130, facecolor=SURF)
+
+
+def polys(out, src, *args):
+    import json
+    opt = lambda k, d: args[args.index(k) + 1] if k in args else d
+    items = json.load(open(src))
+    fig, ax = plt.subplots(figsize=(8, 5), facecolor=SURF)
+    ax.set_facecolor(SURF)
+    for it in items:
+        ax.add_patch(Polygon(it['pts'], closed=True, fc=COPPER if it.get('role') != 'feed' else '#d8b27e', ec='#8a5a20', lw=0.4))
+    ax.autoscale(); ax.set_aspect('equal')
+    if opt('--xlim', None): ax.set_xlim(*map(float, opt('--xlim', '').split(',')))
+    if opt('--ylim', None): ax.set_ylim(*map(float, opt('--ylim', '').split(',')))
+    for sp in ax.spines.values(): sp.set_visible(False)
+    ax.tick_params(colors=INK2, labelsize=9); ax.set_xlabel('x (mm)', color=INK2, fontsize=10); ax.set_ylabel('y (mm)', color=INK2, fontsize=10)
+    ax.set_title(opt('--title', ''), color=INK, fontsize=11, loc='left')
     fig.tight_layout(); fig.savefig(out, dpi=130, facecolor=SURF)
 
 
 if __name__ == '__main__':
     cmd, out, *args = sys.argv[1:]
-    {'geometry': geometry, 'directivity': directivity}[cmd](out, *args)
+    {'geometry': geometry, 'directivity': directivity, 'polys': polys}[cmd](out, *args)
