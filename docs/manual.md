@@ -240,6 +240,7 @@ Use exactly one of these. Lines are numbered 1..N in the order used by `A`/`B`.
 | `C [ … ]` and `L [ … ]` | general | Per-unit-length Maxwell capacitance (F/m) and inductance (H/m) matrices. This is the form a 2-D field solver gives; `node solver/cli.mjs` computes them for N strips (§10). |
 | `geom msl` + `W …` + `S …` | `.substrate` | Coupled microstrip given by strip widths and gaps (§4.6). A symmetric pair (scalar W and S) uses the closed-form model; lists `W [w1 w2 …]`, `S [s12 s23 …]` (or one S for all gaps) give N lines through the field solver. Also accepted inline: `cline K geom=msl W=0.88mm S=0.1mm`, `W=[0.8mm 1mm 0.8mm]`. |
 | `geom msl` pair + `fingers wf= lf= p= Ze= Zo= ee= eo=` | `.substrate`, an openEMS extraction | A finger-loaded (interdigital) coupled pair (#41, §4.6): W and S are the backbones; fingers of width wf and length lf on each inner edge, one per pitch p. The section's modes are the four values given, from `tools/fingerdesign.mjs`; comb-over has no model of its own for the fingers. |
+| `geom msl` N lines + `fingers wf= lf= p= [lfo=]` + `C […]` + `L […]` | `.substrate`, an openEMS extraction | N finger-loaded lines (§4.6): fingers on every edge that faces a neighbour (`lfo`: also on the outer lines' outer edges). The section's C and L are the matrices given, from `tools/fingerdesign3.mjs`. |
 
 Matrices are written `[a b c; d e f; g h i]`, with rows separated by `;` and entries by spaces or commas. They must be square and symmetric, and C must be positive definite.
 
@@ -411,6 +412,21 @@ end
 ```
 
 comb-over has no model of its own for the fingers. The section's even/odd impedances and effective permittivities are the values on the line, from an openEMS extraction (`tools/fingerdesign.mjs`). They hold only for that substrate and those dimensions, at frequencies where a cell is short against the wavelength. The loss Q is the bare backbones'. The tip gap S − lf and the side gap p/2 − wf must be positive, and are checked against the substrate's minimum spacing. The `coupler` layout draws whole cells from the section's A end, and notes any remainder. The fingers go into the layout, the KiCad footprint and the openEMS export, which sizes its edge cell from them.
+
+**N finger-loaded lines.** For three or more lines (`W=[…] S=[…]`) the `fingers` line takes `wf`, `lf` and `p`, and optionally `lfo` for fingers on the outer lines' outer edges. Odd lines carry their fingers at x = (k + ¼)p and even lines at (k + ¾)p, so every gap intermeshes. The section's electrical model is its C and L matrices, given in the same block (from `tools/fingerdesign3.mjs`, which de-embeds the modes from two lengths and fits C and L to both). The geometry gives the layout and, through the field solver's bare lines, the loss Q. Each gap's tip gap is checked.
+
+```
+cline K geom=msl W=[0.8844mm 0.8607mm 0.8844mm] S=[0.9113mm 0.9113mm]
+  fingers wf=0.13mm lf=0.5423mm p=1mm lfo=0.4761mm
+  C [1.21e-10 -1.9e-11 …; …]
+  L [3.0e-07 4.6e-08 …; …]
+  len 8mm
+  A o1 c o3
+  B o1b cb o3b
+end
+```
+
+A three-line coupler driven on its centre line excites only the two mirror-symmetric modes. The outer pair then acts as one line terminated in Z0/2 (its two ports in parallel), and the centre line as one terminated in Z0. Match and isolation are perfect when the two symmetric modes have equal velocities and Z = Zc in that subspace meets (Z11 + Z13)/Z22 = 1 and ((Z11 + Z13)/2 · Z22 − Z12²) = Z0²/2. The coupling to each outer port is then 20 log(k/√2), with k = Z12/√((Z11 + Z13)/2 · Z22). Matching each line's own impedance to Z0 does not achieve this (worked example 15).
 
 ### 4.7 Discontinuities
 
@@ -849,6 +865,7 @@ Hovering a copper shape in the preview shows its net and width.
 
 ```
 .layout coupler K                         # 4-port coupled-line coupler (with fingers, if the section has them: §4.6)
+.layout coupler3 K                        # 3-line coupler, centre line straight through (§4.6, worked example 15)
 .layout schiffman CS TREF                 # C-section (far ends joined) + reference line
 .layout marchand S1 S2                    # two coupled sections, grounded secondaries
 .layout comb [cap=smd-0603]               # comb-line resonator array (from Realise in microstrip)
@@ -872,11 +889,13 @@ Hovering a copper shape in the preview shows its net and width.
 | `vias` (marchand) | 2 | grounding vias at each grounded end |
 | `stub` (comb, interdigital) | 1 mm | length of feed-width line from the resonator edge that belongs to the part |
 | `cap` (comb) | `smd-0603` | how ideal loading capacitors in the netlist are realised: `smd-0402`/`0603`/`0805`, `trimmer`, `printed` |
+| `taper` (coupler3) | 0.2 mm | longest taper from each line's width to its feed's, right at the section's end |
 
 **What the templates do:**
 
 - **Coordinates.** Everything is in millimetres, with the y axis pointing down as in KiCad.
 - **Port feeds.** Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.
+- **Leaving a 3-line section (`coupler3`).** Each line first tapers (at most `taper=`) to its feed width, right at the section's end. The outer lines then turn straight away (90°) to their ports' row. A centre-driven 3-line coupler is matched for Z0 terminations at the section itself, so a run at a line's own width there detunes it. The side-by-side run before the turn is still coupled; the as-built netlist models it as a 3-line (`K_ea`, `K_eb`). With 45° arms, or outer feeds running beside the centre feed, openEMS showed 25–50 % more coupled length than a netlist of separate lines.
 - **Leaving a coupled line.** A feed first runs diagonally (45°) at the coupled-line width. As soon as it is clear of its neighbour by the coupling gap, a linear taper of length max(w<sub>f</sub>, 3|w<sub>f</sub> − W|) widens it to the feed width w<sub>f</sub>. The taper replaces an abrupt width step and belongs to the part (§8.2). The as-built netlist models it as three stepped sections.
 - **Connectors.** An edge-launch SMA at every port (§8.4).
 - **Ground.** The back of the board is a full ground pour.
@@ -1196,6 +1215,8 @@ Line admittances use coth and csch of γℓ, written so that they lose no precis
 | `node tools/fingercoupler.mjs gen\|cmp DIR --fit CASE [--long CASE_n2 --cells N]` | The 10 dB coupler's layout with a finger-loaded section, for openEMS, and comb-over's model of it from the extracted C, L; `cmp` tabulates both against the plain coupler. |
 | `node tools/fingerctxfit.mjs DIR_SHORT DIR_LONG` | Two finger couplers of different length: εe, εo de-embedded from the pair, then Ze, Zo and an end network fitted to both. |
 | `node tools/capcoupler.mjs design\|gen …` | A coupled-line coupler with a capacitor across the gap at each end of the section: `design` sizes W, S and the capacitor in comb-over; `gen DIR` writes the openEMS case (ideal lumped capacitors) (worked example 14, §6). |
+| `node tools/fingerdesign3.mjs DIR [--C 20 --Wo --Wc --G --lf --lfo --wf --p]` | Finger-loaded 3-line coupler design against openEMS (#41, stage 3): outer and centre widths, gap and finger lengths for a centre-to-outer coupling, centre-input match and equal symmetric-mode velocities. Each point is two 6-port openEMS sections; the modes are de-embedded from the pair (`tools/fingerbloch.py`) and the 3×3 C, L fitted to both (`tools/fingerlibN.mjs`). |
+| `node tools/fingercoupler3.mjs gen\|cmp DIR …` | A 3-line coupler for openEMS built outside the layout templates (arm angle, feed offset and taper as options), with its model; used to find the junction coupling that `.layout coupler3` now avoids and models. |
 | `python3 tools/fingerfig.py geometry\|directivity OUT.png …` | Figures for worked example 14: the finger-loaded pair's geometry, and two couplers' directivity from `--compare --csv` files (needs matplotlib). |
 | `python3 tools/oemsfig.py CMP.csv OUT.png [--title T]` | Figure of an openEMS comparison from `--compare --csv` (needs matplotlib). |
 | `npm run docs` | Rebuilds these HTML documentation pages from the Markdown in `docs/` (`npm test` fails if they are out of date). |
