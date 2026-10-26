@@ -65,10 +65,10 @@ export function routeOrtho(pts0, { W, mitre = 'none', sub, name = 'R', a = 'a', 
   let node = a;
   for (let i = 0; i < dirs.length; i++) {
     const len = dirs[i][2] - (i > 0 ? h : 0) - (i < dirs.length - 1 ? h : 0);
-    if (len < -1e-9) throw new Error(`route: segment ${i + 1} (${r6(dirs[i][2])} mm) is shorter than its bends need (${r6(dirs[i][2] - len)} mm)`);
+    if (len < -1e-6) throw new Error(`route: segment ${i + 1} (${r6(dirs[i][2])} mm) is shorter than its bends need (${r6(dirs[i][2] - len)} mm)`);
     segLen.push(Math.max(len, 0));
     const end = i === dirs.length - 1 ? b : `${name}_${i + 1}e`;
-    if (len > 1e-9) lines.push(`T${name}_${i + 1} ${node} ${end} W=${r6(W)}mm len=${r6(len)}mm`);
+    if (len > 1e-6) lines.push(`T${name}_${i + 1} ${node} ${end} W=${r6(W)}mm len=${r6(len)}mm`);
     else lines.push(`wire ${node} ${end}`);
     if (i < dirs.length - 1) { const nx = `${name}_${i + 2}s`; lines.push(`bend ${name}_B${i + 1} ${end} ${nx} W=${r6(W)}mm mitre=${mitre}`); node = nx; }
   }

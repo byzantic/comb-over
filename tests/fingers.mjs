@@ -71,6 +71,14 @@ check('fingers that do not fit the pitch, or reach the other backbone, are refus
   check('coupler3 layout: the as-built netlist keeps the section (fingers, C, L) and models the side-by-side run at each end as a coupled 3-line', ab.sections.filter(s => s.N === 3).length === 3 && /fingers wf=0.13mm/.test(L.netlist) && /cline K_ea geom=msl model=field/.test(L.netlist));
   const plain = buildLayout(parseNetlist(readFileSync(new URL('../examples/coupler3-20dB-ro4350b.cir', import.meta.url), 'utf8')));
   check('coupler3 layout: the plain 3-line coupler lays out without fingers or errors', plain.errors.length === 0 && plain.items.filter(i => /^line/.test(i.label ?? '')).every(i => i.pts.length === 4));
+  // #61: the outer lines' turns are optimally mitred bends, in the core (so KiCad keeps the mitres) and in both netlists
+  const turns = L.items.filter(i => /^turns /.test(i.label ?? ''));
+  const coreTurns = L.core.pads.every(p => p.node === 'c' || p.node === 'cb' || p.polys.some(P => turns.some(t => t.pts === P)));
+  check('coupler3 layout (#61): four mitred turn pairs, on the outer lines\' core pads; the as-built and core netlists carry 8 bends mitre=opt', turns.length === 4 && turns.every(t => t.pts.length === 10) && coreTurns
+    && (L.netlist.match(/^bend .* mitre=opt$/gm) ?? []).length === 8 && (L.core.netlist.match(/^bend .* mitre=opt$/gm) ?? []).length === 8 && parseNetlist(L.core.netlist).ports.length === 6);
+  const sq = buildLayout(parseNetlist(src.replace(/^(\.layout coupler3 K.*)$/m, '$1 mitre=none')));
+  check('coupler3 layout (#61): mitre=none gives square corners (the layout before #61), without design-rule errors', sq.errors.length === 0 && sq.items.filter(i => /^turns /.test(i.label ?? '')).every(t => t.pts.length === 8) && (sq.netlist.match(/^bend .* mitre=none$/gm) ?? []).length === 8);
+  check('coupler3 layout (#61): other mitre values are refused', throws(() => buildLayout(parseNetlist(src.replace(/^(\.layout coupler3 K.*)$/m, '$1 mitre=45'))), /mitre=45/));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
