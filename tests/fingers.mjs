@@ -58,5 +58,20 @@ check('fingers that do not fit the pitch, or reach the other backbone, are refus
   check('fingerArray: fingers reaching across a gap are refused, per gap', throws(() => fingerArray({ W: [1, 1, 1], G: [0.6, 0.3], wf: 0.13, lf: [0.4, 0.35], p: 1, n: 2 }), /gap 2/));
 }
 
+{
+  // stage 3 in the netlist and the coupler3 layout
+  const src = readFileSync(new URL('../examples/coupler3-20dB-fingers-ro4350b.cir', import.meta.url), 'utf8'), d = parseNetlist(src), K = d.sections[0];
+  check('netlist: three finger-loaded lines take the section\'s C and L as given, the geometry for the layout', K.N === 3 && K.geom.kind === 'mslN' && K.geom.fingers.lfo > 0 && K.C[0][1] < 0 && K.L[0][1] > 0);
+  const bad = (from, to, re) => throws(() => parseNetlist(src.replace(from, to)), re);
+  check('netlist: N-line fingers without C and L, or reaching across a gap, are refused', bad(/^  C .*\n  L .*\n/m, '', /need the section's C and L/) && bad('lf=0.5423mm', 'lf=0.95mm', /across gap 1/));
+  const L = buildLayout(d), lines = L.items.filter(i => i.role === 'core' && /^line/.test(i.label));
+  check('coupler3 layout: three outlines with their fingers (8 per facing edge, and with lfo 8 on each outer line\'s outer edge: 16 on every line), no design-rule errors', lines.map(i => i.pts.length).join() === [68, 68, 68].join() && L.errors.length === 0);
+  check('coupler3 layout: six ports, the KiCad core carries every finger (48) on six pads in three tie groups', L.items.filter(i => i.type === 'port').length === 6 && L.core.pads.length === 6 && L.core.ties.length === 3 && L.core.pads.flatMap(p => p.polys).filter(P => P.length === 4 && Math.abs(Math.abs(P[1][0] - P[0][0]) - 0.13) < 1e-6).length === 48);
+  const ab = parseNetlist(L.netlist);
+  check('coupler3 layout: the as-built netlist keeps the section (fingers, C, L) and models the side-by-side run at each end as a coupled 3-line', ab.sections.filter(s => s.N === 3).length === 3 && /fingers wf=0.13mm/.test(L.netlist) && /cline K_ea geom=msl model=field/.test(L.netlist));
+  const plain = buildLayout(parseNetlist(readFileSync(new URL('../examples/coupler3-20dB-ro4350b.cir', import.meta.url), 'utf8')));
+  check('coupler3 layout: the plain 3-line coupler lays out without fingers or errors', plain.errors.length === 0 && plain.items.filter(i => /^line/.test(i.label ?? '')).every(i => i.pts.length === 4));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
