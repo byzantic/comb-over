@@ -2,6 +2,7 @@
 // into a board layout, plus an "as built" netlist that includes the feed lines the layout adds.
 //
 //   .layout coupler K [pitch=10mm] [feed=5mm] [margin=4mm]
+//   .layout coupler3 K [pitch=10mm] [feed=5mm] [margin=4mm] [taper=0.2mm]   (three coupled lines, #41)
 //   .layout schiffman CS TREF [pitch=..] [feed=..] [margin=..]
 //   .layout marchand S1 S2 [pitch=..] [feed=..] [margin=..] [gap=0.5mm] [drill=0.3mm] [vias=2]
 //
@@ -203,6 +204,110 @@ function coupler(d, [name], o) {
     notes.push(`${FG.n} finger cells of ${r4(FG.p)} mm (tip gap ${r4(S - FG.lf)} mm, side gap ${r4(FG.p / 2 - FG.wf)} mm); the section's modes are as given on its fingers line (an openEMS extraction)`);
     const rem = L - FG.n * FG.p;
     if (rem > 1e-3) notes.push(`the section is ${r4(rem)} mm longer than ${FG.n} whole cells: that remainder is drawn without fingers, but the netlist gives the whole length the fingers' modes`);
+  }
+  return { outline, items, dims, netlist, core, notes };
+}
+
+// ---------------------------------------------------------------- 3-line coupler (#41, stage 3)
+// .layout coupler3 K [pitch=..] [feed=..] [margin=..] [taper=0.2mm]
+// A symmetric 3-line section K (cline geom=msl W=[Wo Wc Wo] S=[G G], optionally with fingers): the centre line runs
+// straight through to its two ports; the outer lines turn straight away (90°) to ports a pitch above and below. At
+// each end every line first tapers (taper=, short) to the port's microstrip width: a centre-driven coupler's match and
+// isolation hold for Z0 terminations at the section itself, so every stretch at a line's own width between the
+// section and the feeds detunes it. The short side-by-side run where the lines leave the section (taper and the
+// straight before the turn) is still coupled and is modelled as a 3-line; with 45° arms, or feeds a few mm apart,
+// openEMS showed 25–50 % more coupled length than the netlist had.
+function coupler3(d, [name], o) {
+  const K = d.sections.find(x => x.name === name);
+  if (!K) throw new Error(`.layout: no section named "${name}"`);
+  const g = K.geom;
+  if (!g || g.kind !== 'mslN' || g.W.length !== 3) throw new Error(`.layout coupler3: section ${name} must be three coupled microstrip lines (cline … geom=msl W=[Wo Wc Wo] S=[G G])`);
+  const W = g.W.map(mm), S = g.S.map(mm), L = mm(K.len), f0 = g.f0;
+  if (Math.abs(W[0] - W[2]) > 1e-6 || Math.abs(S[0] - S[1]) > 1e-6) throw new Error('.layout coupler3: the lines must be mirror-symmetric (W=[Wo Wc Wo], S=[G G])');
+  const nodes = [0, 1, 2].map(i => [K.ends.A[i], K.ends.B[i]]);
+  const P = nodes.map(([a, b], i) => [needPort(d, a, `line ${i + 1} end A`), needPort(d, b, `line ${i + 1} end B`)]);
+  const total = W[0] + W[1] + W[2] + S[0] + S[1], ys = []; { let y = -total / 2; for (let i = 0; i < 3; i++) { ys.push(y + W[i] / 2); y += W[i] + (S[i] ?? 0); } }
+  const pitch = o.pitch ?? 10, feedLen = o.feed ?? 5, margin = o.margin ?? 4, LtMax = o.taper ?? 0.2, dh = 0.2;
+  if (pitch <= Math.abs(ys[0]) + W[0] + 1) throw new Error(`.layout coupler3: pitch ${pitch} mm is too small for the line spacing`);
+  // fingers (#41): whole cells from the A end
+  const fg = g.fingers, FG = fg ? { wf: mm(fg.wf), lf: mm(fg.lf), p: mm(fg.p), lfo: mm(fg.lfo ?? 0), n: Math.floor(L / mm(fg.p) + 1e-6) } : null;
+  if (FG && FG.n < 1) throw new Error(`.layout coupler3: the section (${r4(L)} mm) is shorter than one finger pitch (${r4(FG.p)} mm)`);
+  const items = [], dims = [], nl = [], core = { pads: [], vias: [], ties: [], refs: [], nl: [] };
+  const yp = [-pitch, 0, pitch], ends = { A: [], B: [] };
+  // the straight before the outer lines turn (per end): longer where outer-edge fingers sit near the end, so the turned
+  // feed clears them by the minimum space,
+  const sp = (d.substrate.fab.minSpace ?? 0) * 1e3, wfO = feedWidth(d, P[0][0].z, f0);
+  // at least half the feed width, so the turned feed's inner corner meets the taper's end (no notch under the corner)
+  const dhEnd = (side) => { let h = Math.max(dh, wfO / 2);
+    if (FG && FG.lfo > 0) { const near = side < 0 ? 0.25 * FG.p - FG.wf / 2 : L - ((FG.n - 1 + 0.25) * FG.p + FG.wf / 2); h = Math.max(h, wfO / 2 - LtMax - near + Math.max(sp, 0.1)); }
+    return r4(h); };
+  const DH = { [-1]: dhEnd(-1), [1]: dhEnd(1) };
+  for (let i = 0; i < 3; i++) {
+    const y = ys[i], [nA, nB] = nodes[i], [pA, pB] = P[i], lo = y - W[i] / 2, hi = y + W[i] / 2;
+    const wfA = feedWidth(d, pA.z, f0), wfB = feedWidth(d, pB.z, f0);
+    // the line: one outline, fingers on the edges that face a neighbour (and, with lfo, the outer lines' outer edges)
+    let poly = rect(0, lo, L, hi), fpolys = [];
+    if (FG) {
+      const xs = Array.from({ length: FG.n }, (_, k) => r4((k + (i % 2 === 0 ? 0.25 : 0.75)) * FG.p));
+      const add = (yEdge, dir, lf) => { poly = spliceFingers(poly.map(q => q.map(r4)), r4(yEdge), r4(yEdge + dir), xs, FG.wf, lf, 1e-3);
+        xs.forEach(x => fpolys.push({ x, poly: rect(x - FG.wf / 2, Math.min(yEdge, yEdge + dir * lf), x + FG.wf / 2, Math.max(yEdge, yEdge + dir * lf)) })); };
+      if (i < 2) add(hi, 1, FG.lf);
+      if (i > 0) add(lo, -1, FG.lf);
+      if (FG.lfo > 0 && i === 0) add(lo, -1, FG.lfo);
+      if (FG.lfo > 0 && i === 2) add(hi, 1, FG.lfo);
+    }
+    items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: poly, width: W[i], label: `line ${i + 1}`, role: 'core' });
+    const ta = taper([0, y], [-1, 0], W[i], wfA, LtMax), tb = taper([L, y], [1, 0], W[i], wfB, LtMax);
+    for (const t of [ta, tb]) if (t.poly) items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: t.poly, width: W[i], label: `taper ${i + 1}`, role: 'core' });
+    // KiCad core: the line split at mid-length (fingers on the half that holds their centre), the tapers on their ends
+    const halves = splitConductor(d, [[0, y], [L, y]], W[i], nA, nB);
+    for (const { x, poly: fp } of fpolys) halves[x < L / 2 ? 0 : 1].polys.push(fp);
+    if (ta.poly) halves[0].polys.push(ta.poly);
+    if (tb.poly) halves[1].polys.push(tb.poly);
+    core.pads.push(...halves);
+    core.ties.push([portNum(d, nA), portNum(d, nB)]);
+    core.refs.push(refOf(d, nA, ta.T, [-1, 0], wfA, wfA), refOf(d, nB, tb.T, [1, 0], wfB, wfB));
+    // the board feeds: a short straight, then (outer lines) straight away to the port's row, then out to the edge
+    for (const [side, t, wf, node, pt] of [[-1, ta, wfA, nA, pA], [1, tb, wfB, nB, pB]]) {
+      const h1 = DH[side], x1 = t.T[0], xe = (side < 0 ? 0 : L) + side * (LtMax + h1 + dh + feedLen);
+      const path = i === 1 ? [[xe, y], [x1, y]] : [[xe, yp[i]], [x1 + side * (h1 + dh), yp[i]], [x1 + side * h1, yp[i]], [x1 + side * h1, y], [x1, y]];
+      const clean = dedupe(path);
+      items.push({ type: 'poly', layer: 'F.Cu', net: nA, pts: pathPolygon(clean, wf), width: wf, label: `feed ${node}`, role: 'feed', node, path: clean });
+      items.push({ type: 'port', name: node, net: nA, x: xe, y: yp[i], dir: [side, 0], width: wf, z0: pt.z });
+      (side < 0 ? ends.A : ends.B)[i] = { node, t, wf, h1, len: pathLength(clean) - h1 };
+    }
+  }
+  // as-built netlist: feeds (from the edge to the end of the straight before the turn), the side-by-side stretch (taper
+  // + dh) as a coupled 3-line at the mean of line and feed widths with the centre spacings kept, the section
+  const sideBySide = (tag, E, toK) => {
+    const Wm = E.map((e, i) => (W[i] + e.wf) / 2), Sm = [0, 1].map(j => r4(S[j] - (Wm[j] - W[j]) / 2 - (Wm[j + 1] - W[j + 1]) / 2)), Ls = r4(Math.max(...E.map(e => e.t.Lt)) + E[0].h1);
+    const far = E.map(e => `${e.node}_s`);
+    return [`cline ${name}_${tag} geom=msl model=field W=[${Wm.map(w => `${r4(w)}mm`).join(' ')}] S=[${Sm.map(v => `${v}mm`).join(' ')}]`, `  len ${Ls}mm`, `  A ${tag === 'ea' ? far.join(' ') : toK.join(' ')}`, `  B ${tag === 'ea' ? toK.join(' ') : far.join(' ')}`, 'end'];
+  };
+  const kA = nodes.map(([a]) => `${a}_k`), kB = nodes.map(([, b]) => `${b}_k`);
+  const mat = (M) => `[${M.map(r => r.map(v => v.toPrecision(8)).join(' ')).join('; ')}]`;
+  const fgLines = FG ? [`  fingers wf=${r4(FG.wf)}mm lf=${r4(FG.lf)}mm p=${r4(FG.p)}mm${FG.lfo > 0 ? ` lfo=${r4(FG.lfo)}mm` : ''}`, `  C ${mat(K.C)}`, `  L ${mat(K.L)}`] : [];
+  const coupled = [`cline ${name} geom=msl W=[${W.map(w => `${r4(w)}mm`).join(' ')}] S=[${S.map(v => `${r4(v)}mm`).join(' ')}]`, ...fgLines, `  len ${r4(L)}mm`, `  A ${kA.join(' ')}`, `  B ${kB.join(' ')}`, 'end',
+    ...sideBySide('ea', ends.A, kA), ...sideBySide('eb', ends.B, kB)];
+  for (const E of [ends.A, ends.B]) for (const e of E) nl.push(`T${e.node}_f ${e.node} ${e.node}_s W=${r4(e.wf)}mm len=${r4(e.len)}mm`);
+  // the core netlist ends at the tapers (its reference planes): the side-by-side stretch in it is the taper only
+  const coreEnds = (tag, E, toK) => { const Wm = E.map((e, i) => (W[i] + e.wf) / 2), Sm = [0, 1].map(j => r4(S[j] - (Wm[j] - W[j]) / 2 - (Wm[j + 1] - W[j + 1]) / 2)), Lt = r4(Math.max(...E.map(e => e.t.Lt)));
+    if (!(Lt > 0)) return E.map((e, i) => `wire ${e.node} ${toK[i]}`);
+    return [`cline ${name}_${tag} geom=msl model=field W=[${Wm.map(w => `${r4(w)}mm`).join(' ')}] S=[${Sm.map(v => `${v}mm`).join(' ')}]`, `  len ${Lt}mm`, `  A ${tag === 'ea' ? E.map(e => e.node).join(' ') : toK.join(' ')}`, `  B ${tag === 'ea' ? toK.join(' ') : E.map(e => e.node).join(' ')}`, 'end']; };
+  const coreK = coupled.slice(0, coupled.indexOf('end') + 1);
+  core.netlist = coreNetlist(d, 'coupler3', [...coreK, ...coreEnds('ea', ends.A, kA), ...coreEnds('eb', ends.B, kB)]);
+  const xr = L + LtMax + DH[1] + dh + feedLen, xl = -(LtMax + DH[-1] + dh + feedLen);
+  const outline = rect(xl, -pitch - margin, xr, pitch + margin);
+  items.unshift({ type: 'zone', layer: 'B.Cu', net: 'GND', pts: outline });
+  dims.push({ a: [0, ys[0] - W[0] / 2 - 1.2], b: [L, ys[0] - W[0] / 2 - 1.2], text: `L ${r4(L)} mm` });
+  dims.push({ a: [L / 2, ys[2] + W[2] / 2 + 1.4], b: [L / 2, ys[2] + W[2] / 2 + 1.4], text: `W ${r4(W[0])} / ${r4(W[1])} / ${r4(W[0])} · S ${r4(S[0])} mm`, dy: 0.6 });
+  const netlist = [...header(d, 'coupler3'), '# The side-by-side run where the lines leave the section is a coupled 3-line (K_ea, K_eb); the 90° turns are not modelled.',
+    ...d.ports.map(p => `port ${p.node} ${p.z}`), ...coupled, ...nl, ...analysisLines(d)].join('\n') + '\n';
+  const notes = [`ports on a ${pitch} mm pitch; the outer lines turn straight away from the section; feeds ${feedLen} mm`];
+  if (FG) {
+    notes.push(`${FG.n} finger cells of ${r4(FG.p)} mm (tip gap ${r4(S[0] - FG.lf)} mm, side gap ${r4(FG.p / 2 - FG.wf)} mm)${FG.lfo > 0 ? `, outer-edge fingers ${r4(FG.lfo)} mm` : ''}; the section's C, L are as given (an openEMS extraction)`);
+    const rem = L - FG.n * FG.p;
+    if (rem > 1e-3) notes.push(`the section is ${r4(rem)} mm longer than ${FG.n} whole cells: that remainder is drawn without fingers, but the netlist gives the whole length the fingers' C and L`);
   }
   return { outline, items, dims, netlist, core, notes };
 }
@@ -998,7 +1103,7 @@ const comb = (d, _, o) => resonatorArray(d, 'comb', o);
 const interdigital = (d, _, o) => resonatorArray(d, 'interdigital', o);
 const hairpin = (d, _, o) => resonatorArray(d, 'hairpin', o);
 
-const TEMPLATES = { coupler, schiffman, marchand, comb, interdigital, hairpin, edgecoupled, duplexer, wilkinson: wilkinsonT, branchline: branchlineT };
+const TEMPLATES = { coupler, coupler3, schiffman, marchand, comb, interdigital, hairpin, edgecoupled, duplexer, wilkinson: wilkinsonT, branchline: branchlineT };
 export const templateNames = Object.keys(TEMPLATES);
 
 // Build the layout for a parsed netlist with a .layout statement. Returns the layout with DRC results.

@@ -133,12 +133,14 @@ export function parseNetlist(text, overrides = {}) {
         case 'w': block.W = evList(args, ln); break;
         case 's': block.S = evList(args, ln); break;
         case 'model': block.model = String(args[0] || '').toLowerCase(); break;
-        case 'fingers': {   // finger-loaded coupled microstrip (#41): wf= lf= p= (geometry), Ze= Zo= ee= eo= (from openEMS)
+        case 'fingers': {   // finger-loaded coupled microstrip (#41): wf= lf= p= [lfo=] (geometry); a pair's modes Ze= Zo= ee= eo=,
+          // or the section's C and L matrices (N lines), from an openEMS extraction
           const fg = { line: ln };
           for (const x of args) { const k = kv(x); if (!k) fail(ln, `fingers: expected key=value, got "${x}"`); const key = k[0].toLowerCase();
-            if (!['wf', 'lf', 'p', 'ze', 'zo', 'ee', 'eo'].includes(key)) fail(ln, `fingers: unknown option ${k[0]} (wf, lf, p, Ze, Zo, ee, eo)`);
+            if (!['wf', 'lf', 'p', 'lfo', 'ze', 'zo', 'ee', 'eo'].includes(key)) fail(ln, `fingers: unknown option ${k[0]} (wf, lf, p, lfo, Ze, Zo, ee, eo)`);
             fg[key] = ev(k[1], ln); }
-          for (const k of ['wf', 'lf', 'p', 'ze', 'zo', 'ee', 'eo']) if (!(fg[k] > 0)) fail(ln, `fingers: ${k} must be given and > 0 (the modal values come from an openEMS extraction, tools/fingerdesign.mjs)`);
+          for (const k of ['wf', 'lf', 'p']) if (!(fg[k] > 0)) fail(ln, `fingers: ${k} must be given and > 0`);
+          if (fg.lfo != null && !(fg.lfo >= 0)) fail(ln, 'fingers: lfo must be ≥ 0');
           block.fingers = fg; break;
         }
         case 'a': block.A = args; block.Aline = ln; break;
@@ -366,6 +368,9 @@ export function parseNetlist(text, overrides = {}) {
   // ---- build sections ----
   for (const b of pendingSections) {
     const ln = b.line;
+    // a finger-loaded section (#41) may carry its extracted C and L next to its geometry
+    const fingerCL = !!(b.fingers && b.spec?.kind === 'cl');
+    if (fingerCL) b.spec = null;
     if (b.W != null && b.spec?.kind !== 'msl1') {
       if (b.spec) fail(ln, `${b.name}: give either a geometry (W, S) or electrical line constants, not both`);
       if (b.geom && b.geom !== 'msl') fail(ln, `${b.name}: geometry "${b.geom}" not supported (only msl, coupled microstrip)`);
@@ -373,9 +378,9 @@ export function parseNetlist(text, overrides = {}) {
       const vec = Array.isArray(b.W) || Array.isArray(b.S);
       if (b.model === 'closed' && vec) fail(ln, `${b.name}: the closed-form model is for a symmetric pair (scalar W and S); use model=field for W=[…] S=[…]`);
       b.spec = { kind: vec || b.model === 'field' ? 'mslN' : 'msl2' };
-      if (b.fingers && b.spec.kind !== 'msl2') fail(b.fingers.line, `${b.name}: fingers need a symmetric pair (scalar W and S, closed-form model)`);
+      if (b.fingers && b.spec.kind === 'mslN' && !fingerCL) fail(b.fingers.line, `${b.name}: fingers on N lines need the section's C and L matrices (from tools/fingerdesign3.mjs)`);
     } else if (b.geom && b.W == null) fail(ln, `${b.name}: geom ${b.geom} needs W and S`);
-    if (b.fingers && b.spec?.kind !== 'msl2') fail(b.fingers.line, `${b.name}: fingers need geom=msl W= S= (the backbones)`);
+    if (b.fingers && !['msl2', 'mslN'].includes(b.spec?.kind)) fail(b.fingers.line, `${b.name}: fingers need geom=msl W= S= (the backbones)`);
     if (b.model && b.W == null) fail(ln, `${b.name}: model= applies to a geometry (W and S)`);
     if (!b.spec) fail(ln, `${b.name}: no line parameters (Zeo, Y0, Z0, Cn, Cg/Cm, C+L, or W and S)`);
     const f0 = b.f0 ?? fref;
@@ -398,6 +403,14 @@ export function parseNetlist(text, overrides = {}) {
         const Ce = fl.C[0][0] + fl.C[0][1], Co = fl.C[0][0] - fl.C[0][1], C0e = fl.C0[0][0] + fl.C0[0][1], C0o = fl.C0[0][0] - fl.C0[0][1];
         geom = { kind: 'msl2', model: 'field', W: W[0], S: S[0], Ze: 1 / (C0 * Math.sqrt(Ce * C0e)), Zo: 1 / (C0 * Math.sqrt(Co * C0o)), epse: Ce / C0e, epso: Co / C0o, f0 };
       } else geom = { kind: 'mslN', model: 'field', W, S, epsEff: fl.epsEff, f0 };
+      if (b.fingers) {
+        // N finger-loaded lines (#41): fingers on every edge facing a neighbour (lfo: also the outer lines' outer edges)
+        const fg = b.fingers, tip = S.map(g => g - fg.lf), side = fg.p / 2 - fg.wf;
+        tip.forEach((t, i) => { if (!(t > 0)) fail(fg.line, `${b.name}: fingers ${fg.lf * 1e3} mm long reach the other line across gap ${i + 1} (${S[i] * 1e3} mm)`); });
+        if (!(side > 0)) fail(fg.line, `${b.name}: fingers ${fg.wf * 1e3} mm wide do not fit a ${fg.p * 1e3} mm pitch`);
+        geom = { ...geom, bare: { epsEff: fl.epsEff }, fingers: { wf: fg.wf, lf: fg.lf, p: fg.p, lfo: fg.lfo ?? 0, tip: Math.min(...tip), tips: tip, side, overlap: Math.min(...S.map(g => 2 * fg.lf - g)) } };
+        for (const w of fabCheck({ W: fg.wf, S: Math.min(side, ...tip) }, d.substrate)) { const m = `${b.name}: fingers: ${w}`; if (!d.warnings.includes(m)) d.warnings.push(m); }
+      }
     }
     if (b.spec.kind === 'msl1' || b.spec.kind === 'msl2') {
       if (!d.substrate) fail(ln, `${b.name}: a physical geometry (W=) needs a .substrate statement`);
@@ -419,11 +432,14 @@ export function parseNetlist(text, overrides = {}) {
           if (b.fingers) {
             // finger-loaded (#41): the section's modes as given (an openEMS extraction); the loss Q is the backbones'
             const fg = b.fingers, tip = b.S - fg.lf, side = fg.p / 2 - fg.wf;
+            if (!fingerCL) for (const k of ['ze', 'zo', 'ee', 'eo']) if (!(fg[k] > 0)) fail(fg.line, `fingers: ${k} must be given and > 0 (the modal values come from an openEMS extraction, tools/fingerdesign.mjs), or give the section's C and L`);
             if (!(tip > 0)) fail(fg.line, `${b.name}: fingers ${fg.lf * 1e3} mm long reach the other backbone across S = ${b.S * 1e3} mm`);
             if (!(side > 0)) fail(fg.line, `${b.name}: fingers ${fg.wf * 1e3} mm wide do not fit a ${fg.p * 1e3} mm pitch`);
-            CL = fromEvenOdd(fg.ze, fg.zo, fg.ee, fg.eo);
-            geom = { ...geom, Ze: fg.ze, Zo: fg.zo, epse: fg.ee, epso: fg.eo, bare: { Ze: c.Ze, Zo: c.Zo, epse: c.epse, epso: c.epso },
-              fingers: { wf: fg.wf, lf: fg.lf, p: fg.p, tip, side, overlap: 2 * fg.lf - b.S } };
+            if (!fingerCL) {
+              CL = fromEvenOdd(fg.ze, fg.zo, fg.ee, fg.eo);
+              geom = { ...geom, Ze: fg.ze, Zo: fg.zo, epse: fg.ee, epso: fg.eo };
+            }
+            geom = { ...geom, bare: { Ze: c.Ze, Zo: c.Zo, epse: c.epse, epso: c.epso }, fingers: { wf: fg.wf, lf: fg.lf, p: fg.p, lfo: fg.lfo ?? 0, tip, side, overlap: 2 * fg.lf - b.S } };
             warn(fabCheck({ W: fg.wf, S: Math.min(tip, side) }, d.substrate).map(w => `fingers: ${w}`));
           }
           if (!b.Qset) {
@@ -441,6 +457,12 @@ export function parseNetlist(text, overrides = {}) {
       for (let i = 0; i < M.length; i++) for (let j = 0; j < i; j++) if (Math.abs(M[i][j] - M[j][i]) > 1e-9 * (Math.abs(M[i][j]) + Math.abs(M[j][i]) + 1e-300)) fail(ln, `${b.name}: ${what} not symmetric`);
       return M;
     };
+    if (fingerCL) {
+      // the extracted C, L replace the bare lines' (the geometry stays for the layout and the loss Q)
+      const C = sym(b.Cmat ?? fail(ln, `${b.name}: need both C and L matrices`), 'C'), L = sym(b.Lmat ?? fail(ln, `${b.name}: need both C and L matrices`), 'L');
+      if (C.length !== CL.C.length || L.length !== CL.C.length) fail(ln, `${b.name}: C and L must be ${CL.C.length}×${CL.C.length} for ${CL.C.length} lines`);
+      CL = { C, L };
+    }
     if (!CL) try {
       switch (b.spec.kind) {
         case 'zeo': {
