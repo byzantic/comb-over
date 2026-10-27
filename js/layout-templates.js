@@ -227,7 +227,7 @@ function coupler3(d, [name], o) {
   const nodes = [0, 1, 2].map(i => [K.ends.A[i], K.ends.B[i]]);
   const P = nodes.map(([a, b], i) => [needPort(d, a, `line ${i + 1} end A`), needPort(d, b, `line ${i + 1} end B`)]);
   const total = W[0] + W[1] + W[2] + S[0] + S[1], ys = []; { let y = -total / 2; for (let i = 0; i < 3; i++) { ys.push(y + W[i] / 2); y += W[i] + (S[i] ?? 0); } }
-  const pitch = o.pitch ?? 10, feedLen = o.feed ?? 5, margin = o.margin ?? 4, LtMax = o.taper ?? 0.2, dh = 0.2, mitre = o.mitre ?? 'opt';
+  const pitch = o.pitch ?? 10, feedLen = o.feed ?? 5, margin = o.margin ?? 4, LtMax = o.taper ?? 0.2, dh = 0.2, mitre = o.mitre ?? 'none';
   if (!['opt', 'none'].includes(mitre)) throw new Error(`.layout coupler3: mitre=${mitre} (use opt or none)`);
   if (pitch <= Math.abs(ys[0]) + W[0] + 1) throw new Error(`.layout coupler3: pitch ${pitch} mm is too small for the line spacing`);
   // fingers (#41): whole cells from the A end
@@ -265,14 +265,15 @@ function coupler3(d, [name], o) {
     for (const { x, poly: fp } of fpolys) halves[x < L / 2 ? 0 : 1].polys.push(fp);
     if (ta.poly) halves[0].polys.push(ta.poly);
     if (tb.poly) halves[1].polys.push(tb.poly);
-    // the outer lines' turns (#61): a short straight, 90° away to the port's row, 90° back out; optimally mitred by
-    // default (mitre=none: square corners, as before #61). The turns are part of the core (pads), so the KiCad copper
-    // keeps the mitres; the feeds are the straights from the second turn's reference plane to the edge.
+    // the outer lines' turns (#61): a short straight, 90° away to the port's row, 90° back out; square by default,
+    // optimally mitred with mitre=opt (better outer-port match at the top of the band, worse centre-input directivity
+    // on worked example 15). The turns are part of the core (pads), so the KiCad copper keeps their shape; the feeds
+    // are the straights from the second turn's reference plane to the edge.
     for (const [side, t, wf, node, pt, half] of [[-1, ta, wfA, nA, pA, 0], [1, tb, wfB, nB, pB, 1]]) {
       // an optimal mitre's cut runs 2MW along each edge from the outer corner, more than W/2 past the inner corner:
       // the straights either side of the turns are long enough that the cut ends on them (not in the taper or feed)
       const cutW = mitre === 'opt' ? 2 * bendLC({ W: wfO / 1e3, h: d.substrate.dielectric.h, er: d.substrate.dielectric.er, mitre }).mitre * wfO : 0, ext = Math.max(wfO / 2, cutW - wfO / 2);
-      const r6 = (v) => +v.toFixed(6), h1 = Math.max(DH[side], ext), x1 = t.T[0], hs = Math.max(0, h1 - wfO / 2), xr = r6(x1 + side * (h1 + ext)), xe = r6(xr + side * feedLen);
+      const r6 = (v) => +v.toFixed(6), h1 = DH[side] >= ext - 1e-5 ? DH[side] : ext, x1 = t.T[0], hs = Math.max(0, h1 - wfO / 2), xr = r6(x1 + side * (h1 + ext)), xe = r6(x1 + side * (h1 + Math.max(dh + feedLen, ext + 1)));
       let r0, rt = null, rlines = [];
       if (i === 1) {
         r0 = [r6(x1 + side * h1), y];
