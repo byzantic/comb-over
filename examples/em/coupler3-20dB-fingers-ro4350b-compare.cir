@@ -28,12 +28,12 @@ cline K_ea geom=msl model=field W=[0.9787mm 0.9669mm 0.9787mm] S=[0.8111mm 0.811
 end
 wire o1_s o1_t_1e
 bend o1_t_B1 o1_t_1e o1_t_2s W=1.073002mm mitre=none
-To1_t_2 o1_t_2s o1_t_2e W=1.073002mm len=6.606648mm
+To1_t_2 o1_t_2s o1_t_2e W=1.073002mm len=6.606647mm
 bend o1_t_B2 o1_t_2e o1_t_3s W=1.073002mm mitre=none
 wire o1_t_3s o1_r
 wire o3_s o3_t_1e
 bend o3_t_B1 o3_t_1e o3_t_2s W=1.073002mm mitre=none
-To3_t_2 o3_t_2s o3_t_2e W=1.073002mm len=6.606648mm
+To3_t_2 o3_t_2s o3_t_2e W=1.073002mm len=6.606647mm
 bend o3_t_B2 o3_t_2e o3_t_3s W=1.073002mm mitre=none
 wire o3_t_3s o3_r
 cline K_eb geom=msl model=field W=[0.9787mm 0.9669mm 0.9787mm] S=[0.8111mm 0.8111mm]
@@ -43,12 +43,12 @@ cline K_eb geom=msl model=field W=[0.9787mm 0.9669mm 0.9787mm] S=[0.8111mm 0.811
 end
 wire o1b_s o1b_t_1e
 bend o1b_t_B1 o1b_t_1e o1b_t_2s W=1.073002mm mitre=none
-To1b_t_2 o1b_t_2s o1b_t_2e W=1.073002mm len=6.606648mm
+To1b_t_2 o1b_t_2s o1b_t_2e W=1.073002mm len=6.606647mm
 bend o1b_t_B2 o1b_t_2e o1b_t_3s W=1.073002mm mitre=none
 wire o1b_t_3s o1b_r
 wire o3b_s o3b_t_1e
 bend o3b_t_B1 o3b_t_1e o3b_t_2s W=1.073002mm mitre=none
-To3b_t_2 o3b_t_2s o3b_t_2e W=1.073002mm len=6.606648mm
+To3b_t_2 o3b_t_2s o3b_t_2e W=1.073002mm len=6.606647mm
 bend o3b_t_B2 o3b_t_2e o3b_t_3s W=1.073002mm mitre=none
 wire o3b_t_3s o3b_r
 To1_f o1 o1_r W=1.073mm len=1.6635mm

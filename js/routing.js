@@ -59,7 +59,13 @@ export function routeOrtho(pts0, { W, mitre = 'none', sub, name = 'R', a = 'a', 
   }
   const e = pts[pts.length - 1];
   L.push([e[0] + nN[0] * h, e[1] + nN[1] * h]); R.push([e[0] - nN[0] * h, e[1] - nN[1] * h]);
-  const poly = [...L, ...R.reverse()].map(([x, y]) => [r6(x), r6(y)]);
+  // repeated vertices (a turn right at the path's end, where the inner corner meets the end's edge) are dropped:
+  // KiCad 9 removes them when it re-saves a pad, so the footprint would not round-trip (#61)
+  let poly = [...L, ...R.reverse()].map(([x, y]) => [r6(x), r6(y)])
+    .filter((p, k, a) => { const q = a[(k + 1) % a.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 2e-6; });
+  // and so are vertices in the middle of a straight edge
+  poly = poly.filter((p, k, a) => { const o = a[(k + a.length - 1) % a.length], q = a[(k + 1) % a.length];
+    return Math.abs((p[0] - o[0]) * (q[1] - p[1]) - (p[1] - o[1]) * (q[0] - p[0])) > 1e-9; });
   // netlist: segment lengths between reference planes
   const lines = [], segLen = [];
   let node = a;

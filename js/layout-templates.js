@@ -273,7 +273,7 @@ function coupler3(d, [name], o) {
       // an optimal mitre's cut runs 2MW along each edge from the outer corner, more than W/2 past the inner corner:
       // the straights either side of the turns are long enough that the cut ends on them (not in the taper or feed)
       const cutW = mitre === 'opt' ? 2 * bendLC({ W: wfO / 1e3, h: d.substrate.dielectric.h, er: d.substrate.dielectric.er, mitre }).mitre * wfO : 0, ext = Math.max(wfO / 2, cutW - wfO / 2);
-      const r6 = (v) => +v.toFixed(6), h1 = DH[side] >= ext - 1e-5 ? DH[side] : ext, x1 = t.T[0], hs = Math.max(0, h1 - wfO / 2), xr = r6(x1 + side * (h1 + ext)), xe = r6(x1 + side * (h1 + Math.max(dh + feedLen, ext + 1)));
+      const r6 = (v) => +v.toFixed(6), h1 = Math.max(DH[side], ext), x1 = t.T[0], hs = Math.max(0, h1 - wfO / 2), xr = r6(x1 + side * (h1 + ext)), xe = r6(x1 + side * (h1 + Math.max(dh + feedLen, ext + 1)));
       let r0, rt = null, rlines = [];
       if (i === 1) {
         r0 = [r6(x1 + side * h1), y];
