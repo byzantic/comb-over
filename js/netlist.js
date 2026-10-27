@@ -223,6 +223,10 @@ export function parseNetlist(text, overrides = {}) {
         if (LEN.has(key)) opts[key] = ev(k[1], ln) * 1e3;          // layout works in millimetres
         else if (RAW.has(key)) opts[key] = ev(k[1], ln);
         else if (STR.has(key)) opts[key] = k[1].toLowerCase();
+        else if (key === 'name') {   // the KiCad part and library name (#22): kept as written
+          if (!/^[A-Za-z0-9_.+-]+$/.test(k[1])) fail(ln, `.layout name=${k[1]}: use letters, digits and _ . + - only`);
+          opts.name = k[1];
+        }
         else fail(ln, `unknown .layout option "${k[0]}"`);
       }
       d.layout = { type: t[0].toLowerCase(), sections: names, opts, line: ln + 1 };

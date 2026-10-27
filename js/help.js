@@ -60,7 +60,7 @@ end</pre>
 data twin of every S trace; <code>z=</code> renormalises. Interpolated in magnitude and unwrapped phase; blank outside the file's range (manual §5.1).</p>
 
 <h4>Layout and KiCad</h4>
-<pre>.layout coupler K | schiffman CS TREF | marchand S1 S2  [pitch=..] [feed=..] [margin=..] [connector=..] [launch=matched|library]
+<pre>.layout coupler K | schiffman CS TREF | marchand S1 S2  [pitch=..] [feed=..] [margin=..] [connector=..] [launch=matched|library] [name=PART]
 .layout comb [cap=smd-0603] [stub=1mm] | interdigital      # tapped resonator arrays from "Realise in microstrip"
 .layout hairpin | edgecoupled                            # hairpin and edge-coupled filters (#38)
 .layout duplexer                                         # two filters on a manifold, from tools/synth.mjs (#40)

@@ -146,5 +146,29 @@ for (const [file, f0, nPorts, gnd] of [['coupler-10dB-ro4350b.cir', 5e9, 4, fals
   check('zip entries are under the root folder', names.includes('root/a.txt') && names.includes('root/b/c.txt'));
 }
 
+{
+  // several parts in one project (manual §8.7): a part name on the .layout line, and the core netlists combined
+  const { combine } = await import('../js/combine.js');
+  const src = ex('coupler-10dB-ro4350b.cir').replace(/^(\.layout coupler K.*)$/m, '$1 name=CPL10_5G');
+  const L = buildLayout(parseNetlist(src)), lib = componentLibrary(L, { source: src });
+  check('.layout name= names the part and its library (case kept); the README gives the feed widths', lib.lib === 'CPL10_5G' && lib.name === 'CPL10_5G' && 'CPL10_5G.pretty/CPL10_5G.kicad_mod' in lib.files
+    && /Feed widths at the reference planes: in 1\.073 mm \(50 ohm\)/.test(lib.files['README.txt']));
+  check('.layout name= with other characters is refused', (() => { try { parseNetlist(src.replace('name=CPL10_5G', 'name=a/b')); return false; } catch (e) { return /name=a\/b/.test(e.message); } })());
+  const c3 = buildLayout(parseNetlist(ex('coupler3-20dB-fingers-ro4350b.cir')));
+  const r = combine([{ prefix: 'A', text: L.core.netlist }, { prefix: 'B', text: c3.core.netlist }], { title: 'cascade', ports: ['A.in', 'A.cpl', 'A.iso', 'B.o1', 'B.o1b', 'B.cb', 'B.o3', 'B.o3b'] });
+  const sys = parseNetlist(r.text + 'Tlink A_thru B_c W=1.073mm len=10mm\n');
+  const F = Float64Array.from([5e9]), rs = solve(sys, F), ra = solve(parseNetlist(L.core.netlist), F), rb = solve(parseNetlist(c3.core.netlist), F);
+  check('combine: the two cores with a 10 mm track give in → o1 within 0.1 dB of thru(A) + coupling(B) at 5 GHz, and A\'s coupling unchanged',
+    sys.ports.length === 8 && near(db(rs, 4, 1, 0), db(ra, 2, 1, 0) + db(rb, 1, 3, 0), 0.1) && near(db(rs, 2, 1, 0), db(ra, 3, 1, 0), 0.05), `${db(rs, 4, 1, 0).toFixed(3)} vs ${(db(ra, 2, 1, 0) + db(rb, 1, 3, 0)).toFixed(3)}`);
+  const br = ex('branchline-2g4-ro4350b-1524.cir'), bc = buildLayout(parseNetlist(br)).core.netlist, two = combine([{ prefix: 'P', text: bc }, { prefix: 'Q', text: bc }], { ports: ['P.p1', 'P.p2', 'P.p3', 'P.p4'] });
+  const r1 = solve(parseNetlist(bc), F), r2 = solve(parseNetlist(two.text), F);
+  check('combine: .param names are prefixed where expressions use them (a branch-line core twice, the first alone gives the same S)', /^\.param P_wse = /m.test(two.text) && /W=Q_wse len=Q_lse/.test(two.text)
+    && [1, 2, 3, 4].every(i => near(db(r1, i, 1, 0), db(r2, i, 1, 0), 1e-9)));
+  const bad = (f, re) => { try { f(); return false; } catch (e) { return re.test(e.message); } };
+  check('combine: parts on different substrates, a repeated prefix, or an unknown port are refused',
+    bad(() => combine([{ prefix: 'A', text: L.core.netlist }, { prefix: 'B', text: bc }]), /one netlist has one substrate/) && bad(() => combine([{ prefix: 'A', text: bc }, { prefix: 'A', text: bc }]), /used twice/)
+    && bad(() => combine([{ prefix: 'A', text: bc }], { ports: ['A.zz'] }), /has no port zz/));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

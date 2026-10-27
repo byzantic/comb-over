@@ -47,8 +47,11 @@ const sanitize = (s) => String(s).replace(/[^A-Za-z0-9_.+-]+/g, '_').replace(/^_
 const fmtF = (f) => (f >= 1e9 ? `${(f / 1e9).toFixed(2).replace('.', 'G')}` : `${(f / 1e6).toFixed(0)}M`);
 
 // e.g. COUPLER_5G00_jlc-ro4350b-0.508
+// A name given on export (--name), or on the .layout line (name=), replaces it: two parts of one template, f0 and
+// substrate (a 10 dB and a 20 dB coupler, say) would otherwise share a library name.
 export function partName(layout, { name } = {}) {
   if (name) return sanitize(name);
+  if (layout.opts?.name) return sanitize(layout.opts.name);
   const f0 = layout.core?.f0 ?? layout.f0;
   return sanitize(`${layout.type.toUpperCase()}_${f0 ? fmtF(f0) + '_' : ''}${layout.substrate.id}`);
 }
@@ -233,6 +236,7 @@ export function componentLibrary(layout, opts = {}) {
     '  - Pins: ' + sym.pins.map(p => `${p.num}=${p.name}`).join(', ') + '.',
     '  - Reference planes (dashed on F.Fab) are where the feeds attach. Attach each feed at its pad end with',
     '    the port impedance width; the feed length then adds to the core model in the .cir.',
+    ...((layout.core?.refs ?? []).length ? ['  - Feed widths at the reference planes: ' + layout.core.refs.map(r => `${r.node} ${+r.wFeed.toFixed(4)} mm (${num(r.z0)} ohm)`).join(', ') + '.'] : []),
     `  - Rule area "RF keepout": no copper pour on F.Cu within ${num(fp.keepout)} mm of the copper.`,
     `  - Solder mask: ${opts.mask === 'covered' ? 'covers the conductors (the model assumes bare lines)' : 'opened over the conductors, matching the model (no mask dielectric)'}.`,
     '  - The ground plane is the board\'s (B.Cu); the footprint has no back-side copper.',
