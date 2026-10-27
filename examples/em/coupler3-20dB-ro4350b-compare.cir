@@ -6,7 +6,7 @@
 .substrate jlc-ro4350b-0.508
 # ports at the openEMS measurement planes (the feeds shortened by 3/3/3/3/3/3 mm); the openEMS result overlays every S trace
 .data em coupler3-20dB-ro4350b-openems.s6p overlay
-# The side-by-side run where the lines leave the section is a coupled 3-line (K_ea, K_eb); the 90° turns are not modelled.
+# The side-by-side run where the lines leave the section is a coupled 3-line (K_ea, K_eb); the outer lines' 90° turns are bends (mitre=none).
 port o1 50
 port o1b 50
 port c 50
@@ -23,16 +23,36 @@ cline K_ea geom=msl model=field W=[1.0995mm 1.0748mm 1.0995mm] S=[0.6274mm 0.627
   A o1_s c_s o3_s
   B o1_k c_k o3_k
 end
+wire o1_s o1_t_1e
+bend o1_t_B1 o1_t_1e o1_t_2s W=1.073002mm mitre=none
+To1_t_2 o1_t_2s o1_t_2e W=1.073002mm len=6.675998mm
+bend o1_t_B2 o1_t_2e o1_t_3s W=1.073002mm mitre=none
+wire o1_t_3s o1_r
+wire o3_s o3_t_1e
+bend o3_t_B1 o3_t_1e o3_t_2s W=1.073002mm mitre=none
+To3_t_2 o3_t_2s o3_t_2e W=1.073002mm len=6.675998mm
+bend o3_t_B2 o3_t_2e o3_t_3s W=1.073002mm mitre=none
+wire o3_t_3s o3_r
 cline K_eb geom=msl model=field W=[1.0995mm 1.0748mm 1.0995mm] S=[0.6274mm 0.6274mm]
   len 0.7365mm
   A o1b_k cb_k o3b_k
   B o1b_s cb_s o3b_s
 end
-To1_f o1 o1_s W=1.073mm len=10.4855mm
+wire o1b_s o1b_t_1e
+bend o1b_t_B1 o1b_t_1e o1b_t_2s W=1.073002mm mitre=none
+To1b_t_2 o1b_t_2s o1b_t_2e W=1.073002mm len=6.675998mm
+bend o1b_t_B2 o1b_t_2e o1b_t_3s W=1.073002mm mitre=none
+wire o1b_t_3s o1b_r
+wire o3b_s o3b_t_1e
+bend o3b_t_B1 o3b_t_1e o3b_t_2s W=1.073002mm mitre=none
+To3b_t_2 o3b_t_2s o3b_t_2e W=1.073002mm len=6.675998mm
+bend o3b_t_B2 o3b_t_2e o3b_t_3s W=1.073002mm mitre=none
+wire o3b_t_3s o3b_r
+To1_f o1 o1_r W=1.073mm len=1.6635mm
 Tc_f c c_s W=1.073mm len=2.2mm
-To3_f o3 o3_s W=1.073mm len=10.4855mm
-To1b_f o1b o1b_s W=1.073mm len=10.4855mm
+To3_f o3 o3_r W=1.073mm len=1.6635mm
+To1b_f o1b o1b_r W=1.073mm len=1.6635mm
 Tcb_f cb cb_s W=1.073mm len=2.2mm
-To3b_f o3b o3b_s W=1.073mm len=10.4855mm
+To3b_f o3b o3b_r W=1.073mm len=1.6635mm
 .plot ylim=-60,0 db(S33) db(S43) db(S13) db(S23)
 .plot title=Directivity_(dB) db(S13/S23)
