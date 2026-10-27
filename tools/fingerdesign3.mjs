@@ -7,7 +7,9 @@
 // antiphase) only affects outer-to-outer isolation and the outer ports' match.
 //   node tools/fingerdesign3.mjs DIR [--C 20 --Z0 50 --f0 5e9 --Wo 1 --Wc 1 --G 0.6 --lf 0.4 --lfo 0.5 --wf 0.13 --p 1 --n 6 --n2 10 --min 0.09 --iters 10 --match centre|diag]
 // Variables Wo, Wc, G, lf and lfo (fingers on the outer lines' outer edges); four targets, so each step is the
-// minimum-norm Newton step. --lfo 0 holds the outer edges bare (inner fingers only, #62): four variables, a Newton step.
+// minimum-norm Newton step. The outer-edge fingers are needed (#62): the centre line carries fingers on both edges, the
+// outer lines on one, and without lfo the centre is the slower line by about 11 % whatever Wo, Wc, G and lf are.
+// --lfo 0 holds the outer edges bare (inner fingers only): four variables, a Newton step.
 // Each evaluation: openEMS cases of n and n2 cells (tools/fingerlibN.mjs), the symmetric modes de-embedded from the pair
 // (Bloch), and the section's 3×3 C, L fitted to both (feeds from the 2-D field solver).
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -53,7 +55,14 @@ function symModes(C, L) {
   const Mu = M.map(r => r.reduce((s, v, k) => s + v * u[k], 0)), Mw = M.map(r => r.reduce((s, v, k) => s + v * w[k], 0));
   const a = Mu[0], b = Mw[0], c = Mu[1], d = Mw[1];   // [[a b],[c d]] in the basis (u, w)
   const tr = a + d, det = a * d - b * c, disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
-  return [tr / 2 - disc, tr / 2 + disc].map(l => { const x = b !== 0 ? [b, l - a] : [l - d, c]; return { eps: l, pi: x[0] * x[1] < 0 }; });
+  // which is "π": the mode with the larger share on the outer lines. Where the two modes are well mixed (the designed
+  // coupler) that is the one with the centre opposed to the outer pair; where they barely mix (inner fingers only, #62:
+  // an outer-line mode and a centre-line mode) the sign of the small component flips as the design moves, so a sign
+  // test swaps the labels and the velocity residual jumps. Each eigenvector is taken from the better-conditioned row.
+  const ms = [tr / 2 - disc, tr / 2 + disc].map(l => { const r1 = [b, l - a], r2 = [l - d, c], x = Math.hypot(...r1) >= Math.hypot(...r2) ? r1 : r2;
+    return { eps: l, outer: Math.abs(x[0]) / (Math.abs(x[0]) + Math.abs(x[1])) }; });
+  const iPi = ms[0].outer >= ms[1].outer ? 0 : 1;
+  return ms.map((m, i) => ({ eps: m.eps, pi: i === iPi }));
 }
 // comb-over's centre-to-outer coupling of a λ/4 section (at the symmetric modes' mean velocity) between Z0 ports
 function coupling(C, L, epsMean) {
