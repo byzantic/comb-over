@@ -86,7 +86,47 @@
 <td>within 2.4 %; −19.9 dB</td>
 </tr>
 </tbody></table></div>
-<p>The search was stopped at the best point, not driven to the tolerance. Near it the velocity residual moves by ±1 % from point to point, which is about the extraction&#39;s noise. Whether the outer-edge fingers are needed is open: the search shortened them steadily (0.6 → 0.48 mm), and longer ones moved the modes apart.</p>
+<p>The search was stopped at the best point, not driven to the tolerance. Near it the velocity residual moves by ±1 % from point to point, which is about the extraction&#39;s noise. <strong>Are the outer-edge fingers needed?</strong> Yes (#62). The centre line carries fingers on both edges, the outer lines on one only, so the inner fingers load the centre about twice as heavily. The outer-edge fingers make up the outer lines&#39; share. Without them, the two symmetric modes come apart as an outer-line mode and a centre-line mode that barely mix, and the centre line is the slower by about 11 %. <code>fingerdesign3 --lfo 0</code> searched with inner fingers only, from the design above (openEMS, symmetric-mode εeff, outer-line / centre-line mode):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>inner fingers only</th>
+<th>εeff</th>
+<th>mismatch</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>the design above, outer-edge fingers removed</td>
+<td>3.28 / 3.65</td>
+<td>−10.9 %</td>
+</tr>
+<tr>
+<td>Wo + 0.05 mm</td>
+<td>3.28 / 3.65</td>
+<td>−10.9 %</td>
+</tr>
+<tr>
+<td>Wc + 0.05 mm</td>
+<td>3.27 / 3.64</td>
+<td>−10.5 %</td>
+</tr>
+<tr>
+<td>G + 0.04 mm</td>
+<td>3.27 / 3.64</td>
+<td>−10.8 %</td>
+</tr>
+<tr>
+<td>lf + 0.03 mm</td>
+<td>3.31 / 3.73</td>
+<td>−12.1 %</td>
+</tr>
+<tr>
+<td>with the outer-edge fingers (the design)</td>
+<td>3.60 / 3.66</td>
+<td>−1.7 %</td>
+</tr>
+</tbody></table></div>
+<p>The widths and the gap barely move the mismatch, and longer inner fingers widen it. An inner-only design would need different finger lengths on the outer and centre lines, which the geometry does not offer. Their length is not a simple loading knob, though. In the #41 search, 0.6 → 0.7 mm at one point took the mismatch from −9.9 % to −11.8 %, where the modes were well mixed. So the length is left to the search, which settled on 0.48 mm.</p>
 <h2 id="3-the-layout-what-openems-showed-about-the-ends"><a class="anchor" href="#3-the-layout-what-openems-showed-about-the-ends" aria-hidden="true">#</a>3. The layout: what openEMS showed about the ends</h2>
 <p>A first 3-line test structure took the outer lines away at 45° and ran their 50 Ω feeds beside the centre feed, about 2 mm apart. In openEMS it coupled 3–4 dB more strongly at 1 GHz than its netlist, and its coupling peaked near 3 GHz instead of 5. The extraction was not at fault: on a straight 3-line run, the 2-D solver&#39;s C and L reproduce openEMS&#39;s centre-to-outer coupling within 0.3–0.7 dB.</p>
 <p>The extra coupling came from the ends, in two ways:</p>

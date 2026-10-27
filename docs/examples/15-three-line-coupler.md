@@ -42,7 +42,18 @@ Matching each line's own impedance to Z0 instead is not enough. It gives S33 −
 | symmetric modes, εeff | 2.57 / 3.14 | 3.595 / 3.656 (1.7 %) |
 | match conditions; coupling | met; −20.0 dB | within 2.4 %; −19.9 dB |
 
-The search was stopped at the best point, not driven to the tolerance. Near it the velocity residual moves by ±1 % from point to point, which is about the extraction's noise. Whether the outer-edge fingers are needed is open: the search shortened them steadily (0.6 → 0.48 mm), and longer ones moved the modes apart.
+The search was stopped at the best point, not driven to the tolerance. Near it the velocity residual moves by ±1 % from point to point, which is about the extraction's noise. **Are the outer-edge fingers needed?** Yes (#62). The centre line carries fingers on both edges, the outer lines on one only, so the inner fingers load the centre about twice as heavily. The outer-edge fingers make up the outer lines' share. Without them, the two symmetric modes come apart as an outer-line mode and a centre-line mode that barely mix, and the centre line is the slower by about 11 %. `fingerdesign3 --lfo 0` searched with inner fingers only, from the design above (openEMS, symmetric-mode εeff, outer-line / centre-line mode):
+
+| inner fingers only | εeff | mismatch |
+|---|---|---|
+| the design above, outer-edge fingers removed | 3.28 / 3.65 | −10.9 % |
+| Wo + 0.05 mm | 3.28 / 3.65 | −10.9 % |
+| Wc + 0.05 mm | 3.27 / 3.64 | −10.5 % |
+| G + 0.04 mm | 3.27 / 3.64 | −10.8 % |
+| lf + 0.03 mm | 3.31 / 3.73 | −12.1 % |
+| with the outer-edge fingers (the design) | 3.60 / 3.66 | −1.7 % |
+
+The widths and the gap barely move the mismatch, and longer inner fingers widen it. An inner-only design would need different finger lengths on the outer and centre lines, which the geometry does not offer. Their length is not a simple loading knob, though. In the #41 search, 0.6 → 0.7 mm at one point took the mismatch from −9.9 % to −11.8 %, where the modes were well mixed. So the length is left to the search, which settled on 0.48 mm.
 
 ## 3. The layout: what openEMS showed about the ends
 
