@@ -73,17 +73,17 @@ Exported from the netlists through `.layout coupler3`, with no connectors and a 
 
 | openEMS, centre input | 1 GHz | 2 GHz | 3 GHz | 4 GHz | 5 GHz | 6 GHz | 7 GHz |
 |---|---|---|---|---|---|---|---|
-| directivity: plain (dB) | 13.8 | 12.3 | 10.9 | 9.6 | 7.1 | 3.0 | −2.5 |
-| directivity: fingers (dB) | 32.6* | 32.9* | 35.8* | 41.0* | 43.1* | **27.7** | 19.5 |
-| coupling S13, fingers: comb-over / openEMS (dB) | −30.9 / −30.6 | −25.2 / −25.0 | −22.3 / −22.3 | −20.8 / −20.9 | −20.1 / **−20.4** | −20.1 / −20.6 | −20.8 / −21.5 |
-| centre match S33, fingers (dB) | −44.8 | −40.5 | −38.5 | −37.1 | −35.2 | −32.4 | −29.3 |
+| directivity: plain (dB) | 14.2 | 12.9 | 11.5 | 10.2 | 7.6 | 3.5 | −1.8 |
+| directivity: fingers (dB) | 30.2* | 33.2* | 37.5* | 43.7* | 39.9* | **27.3** | 19.4 |
+| coupling S13, fingers: comb-over / openEMS (dB) | −30.9 / −30.5 | −25.2 / −25.0 | −22.3 / −22.3 | −20.8 / −20.9 | −20.1 / **−20.4** | −20.1 / −20.6 | −20.8 / −21.5 |
+| centre match S33, fingers (dB) | −45.0 | −40.6 | −38.5 | −37.1 | −35.4 | −32.8 | −29.7 |
 
-\* From 1 to 5 GHz the finger coupler's isolation is −58 to −63 dB. Below about −45 dB it moves with the mesh: on the 8-cell version, halving the edge cell moved such figures by up to 10 dB and the coupling by less than 0.1 dB. Read these as "above about 30 dB", not as the numbers given.
+\* From 1 to 5 GHz the finger coupler's isolation is −58 to −65 dB. Below about −45 dB it moves with the mesh: on the 8-cell version, halving the edge cell moved such figures by up to 10 dB and the coupling by less than 0.1 dB. Read these as "above about 30 dB", not as the numbers given.
 
 - **Centring (#60).** The extracted C and L hold for any whole number of cells at the 1 mm pitch, so the length was chosen without new openEMS runs. With 8 cells (8.0 mm) the coupling peaked near 4.0 GHz in openEMS. comb-over's as-built netlist puts the peak at 5 GHz for about 6.6 mm. openEMS runs about 8–9 % electrically longer than the netlist on this coupler (4.0 against 4.3 GHz at 8 cells), so 6 cells (6.0 mm) were chosen. openEMS then peaks at 5.0 GHz, at −20.4 dB. The design's coupling target (−20 dB at the section's own λ/4) did not need changing.
-- **Coupling.** comb-over agrees with openEMS within 0.3 dB to 5 GHz on the finger coupler, 0.5–0.7 dB at 6–7 GHz. On the plain one it agrees within 0.75 dB to 5 GHz, 1.2–2.1 dB at 6–7 GHz. Both are as built, through `coupler3`.
+- **Coupling.** comb-over agrees with openEMS within 0.3 dB to 5 GHz on the finger coupler, 0.5–0.7 dB at 6–7 GHz. On the plain one it agrees within 0.65 dB to 5 GHz, 0.9–1.7 dB at 6–7 GHz. Both are as built, through `coupler3`.
 - **Directivity.** The fingers lift it from 7 dB to above 30 dB at 5 GHz, and to at least 27 dB from 1 to 6 GHz. comb-over predicts less (15–20 dB). Its as-built netlist treats the side-by-side runs at the ends as bare coupled lines, and their mode mismatch then dominates its isolation figure. So comb-over's directivity for this layout is a lower bound, not an upper one as in example 14.
-- **Match.** The centre port is −35 dB at 5 GHz in openEMS (comb-over −40 dB), and −29 dB at 7 GHz.
+- **Match.** The centre port is −35 dB at 5 GHz in openEMS (comb-over −40 dB), and −30 dB at 7 GHz.
 - **Mesh.** The plain coupler's default edge cell, a third of its 0.61 mm gap, is not converged: at 0.1 mm its coupling moved by 0.5–0.7 dB. Its committed result uses `--fine 0.1`. The finger coupler's committed result uses half its default edge cell.
 
 ## 5. Driving an outer line (#61)
@@ -106,25 +106,25 @@ Both leakages are already about 14 dB or more below the coupling. So outer-input
 | openEMS, outer input | 1 GHz | 2 GHz | 3 GHz | 4 GHz | 5 GHz | 6 GHz | 7 GHz |
 |---|---|---|---|---|---|---|---|
 | coupling to the centre S31, fingers (dB) | −31.0 | −25.2 | −22.4 | −20.8 | −20.2 | −20.2 | −21.0 |
-| leakage S51, fingers: comb-over / openEMS (dB) | −45.5 / −48.3 | −39.5 / −43.2 | −36.6 / −40.5 | −35.5 / −38.0 | −35.3 / −36.2 | −35.6 / −35.3 | −36.1 / −34.6 |
-| far-end leakage S61, fingers (dB) | −54.6 | −53.1 | −48.7 | −47.4 | −50.2 | below −60 | −47.7 |
-| outer match S11, fingers (dB) | −37.6 | −28.9 | −54.4 | −32.2 | −37.4 | −24.2 | −19.2 |
-| outer match S11, plain (dB) | −25.2 | −25.4 | −39.8 | −31.3 | −48.5 | −24.2 | −27.1 |
-| leakage S51, plain (dB) | −45.0 | −38.3 | −36.3 | −35.0 | −34.7 | −35.1 | −35.2 |
+| leakage S51, fingers: comb-over / openEMS (dB) | −45.5 / −48.0 | −39.5 / −43.3 | −36.6 / −40.5 | −35.5 / −37.9 | −35.3 / −36.2 | −35.6 / −35.3 | −36.1 / −34.6 |
+| far-end leakage S61, fingers (dB) | −54.8 | −53.2 | −48.7 | −47.5 | −50.5 | below −60 | −47.5 |
+| outer match S11, fingers (dB) | −38.3 | −29.0 | −53.6 | −33.4 | −37.6 | −23.5 | −19.0 |
+| outer match S11, plain (dB) | −25.9 | −25.8 | −36.8 | −40.5 | −33.4 | −23.6 | −30.2 |
+| leakage S51, plain (dB) | −45.1 | −38.5 | −36.4 | −35.0 | −34.5 | −34.7 | −34.7 |
 
 - **Coupling and isolation** are the centre input's, as the symmetry says: in the 6-port, S31 and S13 differ by at most 0.4 dB, which is openEMS's reciprocity error here, and S41 and S23 by less than the isolation's mesh noise.
 - **Leakage.** S51 is about −35 dB at 5–7 GHz on both couplers, close to comb-over's figure for the section.
-- **Match.** The outer port is the weak point: −24 dB at 6 GHz and −19 dB at 7 GHz on the finger coupler, against the centre port's −32 and −29 dB. The difference is the two square 90° turns on each outer line: each reflects −20 dB at 7 GHz in comb-over's bend model. The as-built netlist now models them as `bend` elements (#61). With them it reproduces the size of openEMS's S11 peaks, about −20 to −25 dB, but not the frequencies of its ripple.
+- **Match.** The outer port is the weak point: −23 dB at 6 GHz and −19 dB at 7 GHz on the finger coupler, against the centre port's −33 and −30 dB. The difference is the two square 90° turns on each outer line: each reflects −20 dB at 7 GHz in comb-over's bend model. The as-built netlist now models them as `bend` elements (#61). With them it reproduces the size of openEMS's S11 peaks, about −20 to −25 dB, but not the frequencies of its ripple.
 
 **Mitred turns** (`.layout coupler3 K mitre=opt`). An optimal mitre on the 1.07 mm feed cuts 1.2 mm along each edge. So the straight before the first turn grows from 0.54 to 0.66 mm, and the cut faces the centre line. For the finger coupler, openEMS gives:
 
 | openEMS, fingers | 4 GHz | 5 GHz | 6 GHz | 7 GHz |
 |---|---|---|---|---|
-| outer match S11: square / mitred (dB) | −32 / −29 | −37 / −27 | −24 / −29 | −19 / −33 |
-| centre-input directivity: square / mitred (dB) | 41 / 31 | 43 / 25 | 28 / 21 | 20 / 17 |
+| outer match S11: square / mitred (dB) | −33 / −29 | −38 / −27 | −23 / −29 | −19 / −33 |
+| centre-input directivity: square / mitred (dB) | 44 / 31 | 40 / 25 | 27 / 21 | 19 / 17 |
 | coupling S13: square / mitred (dB) | −20.9 / −21.2 | −20.4 / −20.7 | −20.6 / −20.7 | −21.5 / −21.4 |
 
-The mitre lifts the outer port's worst-case match over 1–7 GHz from −19 to −27 dB. It costs the centre input 7–18 dB of directivity at 4–6 GHz and 0.3 dB of coupling at 5 GHz, and the plain coupler shows the same pattern. The outer match also stays near −27 dB, not the −37 dB or better the netlist predicts for mitred turns. So the remaining reflection comes from the ends of the coupled section, not from the turns. Square turns stay the default, and `mitre=opt` is there for an outer-input application that needs the match at the top of the band.
+The mitre lifts the outer port's worst-case match over 1–7 GHz from −19 to −27 dB. It costs the centre input 6–15 dB of directivity at 4–6 GHz and 0.3 dB of coupling at 5 GHz, and the plain coupler shows the same pattern. The outer match also stays near −27 dB, not the −37 dB or better the netlist predicts for mitred turns. So the remaining reflection comes from the ends of the coupled section, not from the turns. Square turns stay the default, and `mitre=opt` is there for an outer-input application that needs the match at the top of the band.
 
 ## 6. Limits
 
