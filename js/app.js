@@ -10,7 +10,7 @@ import { design, returnLossDb } from './synth.js';
 import { evalRealStr } from './expr.js';
 import { buildLayout } from './layout-templates.js';
 import { toSVG } from './layout.js';
-import { componentLibrary, boardProject, zip } from './kicad.js';
+import { componentLibrary, boardProject, zip, partName } from './kicad.js';
 import { setSubstrate, setLayout, detectLayouts, toMicrostrip } from './netlist-edit.js';
 import { realiseCaps } from './synth-caps.js';
 import { listPresets, makeSubstrate } from './substrates.js';
@@ -135,6 +135,7 @@ function layoutControls(d, L) {
     ${num('pitch', 'Pitch mm', 'Port spacing on an edge (blank: from the connector)')}
     ${num('feed', 'Feed mm', 'Straight feed length at each port (blank: connector pad + launch + 1 mm)')}
     ${num('margin', 'Margin mm', 'Board margin (blank: from the connector)')}
+    <label title="KiCad part and library name (blank: template, f0 and substrate). Give each part on one board its own name."><span>Part name</span><input id="lo-name" type="text" spellcheck="false" placeholder="${esc(L ? partName({ ...L, opts: { ...L.opts, name: undefined } }) : 'auto')}" value="${esc(lo?.opts?.name ?? '')}"></label>
     <label class="check" title="Overlay the response of the layout as built (feeds, tapers, connector pads, vias, open ends) as dashed traces"><input id="lo-phys" type="checkbox"${state.physical ? ' checked' : ''}> Physical view</label>
   </div>`;
 }
@@ -147,9 +148,11 @@ function wireLayoutControls(d) {
     for (const k of ['pitch', 'feed', 'margin']) { const v = $(`lo-${k}`).value; opts[k] = v === '' ? null : +v; }
     opts.connector = $('lo-conn').value === 'amphenol-132289' ? null : $('lo-conn').value;   // default omitted
     opts.launch = $('lo-launch').value === 'matched' ? null : $('lo-launch').value;
+    const nm = $('lo-name').value.trim().replace(/[^A-Za-z0-9_.+-]+/g, '_');
+    opts.name = nm || null;
     applyText(setLayout(editor.value, { type, sections: secs.split(','), opts }));
   };
-  for (const id of ['lo-type', 'lo-conn', 'lo-launch', 'lo-pitch', 'lo-feed', 'lo-margin']) $(id)?.addEventListener('change', rewrite);
+  for (const id of ['lo-type', 'lo-conn', 'lo-launch', 'lo-pitch', 'lo-feed', 'lo-margin', 'lo-name']) $(id)?.addEventListener('change', rewrite);
   // new substrate: keep each section's impedances and re-synthesise its W/S for the new substrate
   $('lo-sub').addEventListener('change', () => {
     const v = $('lo-sub').value; if (!v) return;

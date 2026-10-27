@@ -890,6 +890,7 @@ Hovering a copper shape in the preview shows its net and width.
 | `stub` (comb, interdigital) | 1 mm | length of feed-width line from the resonator edge that belongs to the part |
 | `cap` (comb) | `smd-0603` | how ideal loading capacitors in the netlist are realised: `smd-0402`/`0603`/`0805`, `trimmer`, `printed` |
 | `taper` (coupler3) | 0.2 mm | longest taper from each line's width to its feed's, right at the section's end |
+| `name` | template, f0 and substrate | the KiCad part and library name (§8.2, §8.7): letters, digits and `_ . + -`, case kept |
 | `mitre` (coupler3) | `none` | the outer lines' 90° turns: `none` square corners, `opt` optimally mitred (Douville & James, §4.7; worked example 15 §5 has the trade-off) |
 
 **What the templates do:**
@@ -970,9 +971,9 @@ The zip holds one folder:
 | `LIB.kicad_sym` | symbol, one pin per port (plus GND for the Marchand); its Footprint field is `LIB:PART` |
 | `fp-lib-table`, `sym-lib-table` | project library tables using `${KIPRJMOD}`: put them next to your `.kicad_pro`, or add the library under Preferences → Manage Libraries |
 | `PART.cir` | the **core netlist**: the part alone, with its ports at the reference planes |
-| `README.txt` | the pin list, substrate and notes |
+| `README.txt` | the pin list, the feed width at each reference plane, the substrate and notes |
 
-The part name carries the template, f0 and substrate, e.g. `COUPLER_5G00_jlc-ro4350b-0.508`, because the copper is only right on that stack-up. The library name is the same as the part name.
+The part name carries the template, f0 and substrate, e.g. `COUPLER_5G00_jlc-ro4350b-0.508`, because the copper is only right on that stack-up. The library name is the same as the part name. Name a part yourself with `name=` on the `.layout` line, the **Part name** field or `--name`. Several parts on one board need that (§8.7).
 
 **What is in the footprint:**
 
@@ -1130,6 +1131,83 @@ The footprints are `RES_<pkg>` (series) and `RES_<pkg>_GND<n>V` (termination). `
 
 **Not exported:** edge connectors (the feeds stop at the board edge), copper thickness in the field solution (the sheets are zero-thickness), solder mask, and parts other than chip R and C.
 
+### 8.7 Several parts in one project
+
+comb-over makes one part per netlist. A system — a coupler sampling a line, then a filter, then a divider — is built in KiCad from several part libraries (§8.2), and simulated by combining the parts' core netlists.
+
+**Before you export**
+
+- **One stack-up.** Design every part for the board on the same `.substrate`, overrides included. A part's copper is only right on its own stack-up, and the footprints cannot tell. Parts on different stack-ups need separate boards joined by cable.
+- **A name per part.** The default part and library name is template, f0 and substrate, so a 10 dB and a 20 dB coupler at 5 GHz on one board would both be `COUPLER_5G00_jlc-ro4350b-0.508`. Give each part its own name with `name=` on its `.layout` line, the **Part name** field in the layout panel, or `--name` on the command line:
+
+  ```
+  .layout coupler K name=CPL10_5G
+  ```
+
+  Names may use letters, digits and `_ . + -`. Because `name=` is in the netlist, every later export gets the same name.
+- **Keep the sources.** Keep each part's netlist with the board, under version control. Every footprint records a hash of the netlist it came from (a footprint property, and `README.txt`), so you can tell which netlist a footprint came from.
+
+**Project layout**
+
+```
+myradio/
+  myradio.kicad_pro  myradio.kicad_sch  myradio.kicad_pcb
+  fp-lib-table  sym-lib-table      one entry per part (below)
+  comb-over/
+    CPL10_5G.cir  BPF2G4.cir       the parts' netlists (the sources)
+    system.cir                     the combined simulation (below)
+  lib/
+    CPL10_5G/                      each part's KiCad library zip, unpacked
+      CPL10_5G.pretty/  CPL10_5G.kicad_sym  CPL10_5G.cir  README.txt
+    BPF2G4/
+```
+
+Each zip's own `fp-lib-table` and `sym-lib-table` expect the part's files next to the `.kicad_pro`. With one folder per part, merge their entries into the project's tables with the folder in the path:
+
+```
+(fp_lib_table
+	(version 7)
+	(lib (name "CPL10_5G")(type "KiCad")(uri "${KIPRJMOD}/lib/CPL10_5G/CPL10_5G.pretty")(options "")(descr "comb-over part"))
+	(lib (name "BPF2G4")(type "KiCad")(uri "${KIPRJMOD}/lib/BPF2G4/BPF2G4.pretty")(options "")(descr "comb-over part"))
+)
+```
+
+`sym-lib-table` is the same with `.kicad_sym` files. Alternatively, add them under Preferences → Manage Footprint (Symbol) Libraries, on the Project Specific Libraries tab. Keep each library's nickname equal to its part name: each symbol's Footprint field is `NAME:NAME`.
+
+To change a part, edit its netlist, export it again into the same folder, and run Tools → Update Footprints from Library in the board editor.
+
+**Board setup.** A library part brings only its own copper and its RF keepout. The stack-up, fab rules, ground pours, stitching and fence vias, and edge connectors come with a part's **KiCad project** export (§8.3). So a convenient start is one part's board project, extended with the others. Take its Board Setup (stack-up, net class, `.kicad_dru` rules) and its connector footprints, and copy its via fence along your own tracks.
+
+**Schematic and tracks**
+
+- **Symbols.** Each part's symbol has one pin per port (pin list in `README.txt`). Filters also have GND, and comb-line filters a pin per untapped resonator for its loading capacitor. Wire the ports between parts as ordinary nets.
+- **Tracks.** Route between parts from the pad ends (the reference planes, dashed on F.Fab), at the feed width in each part's `README.txt` ("Feed widths at the reference planes"). Set that width in a net class for the RF nets, since the default track width is the fab minimum. `node tools/mscalc.mjs --sub ID --z0 50 --f F` gives the same width for a track of your own.
+- **Spacing.** The core netlists assume nothing else nearby. Keep parts and tracks outside one another's RF keepout (max(3h, 1 mm)), so that no coupling arises that the simulation lacks.
+- **Corners.** comb-over models 90° bends only (`bend`, §4.7). Route with 90° corners where the simulation should include them, or accept 45° corners as unmodelled; on short 50 Ω tracks they are usually minor.
+- **Loading capacitors** (comb-line). The part holds the resonator array only. The capacitor footprints (`CAP_…`), their placement on each open end and their values are in the part's board export (§8.3). `node tools/kicad.mjs --caps SUBSTRATE --out DIR` writes the footprints alone.
+
+**Simulating the system.** `tools/combine.mjs` joins the parts' core netlists (`lib/PART/PART.cir`) into one netlist:
+
+```sh
+node tools/combine.mjs A=lib/CPL10_5G/CPL10_5G.cir B=lib/C3F20_5G/C3F20_5G.cir \
+  --port A.in --port A.cpl --port A.iso --port B.o1 --port B.o1b --port B.cb --port B.o3 --port B.o3b \
+  --title "10 dB coupler, then a 3-line 20 dB coupler" --out comb-over/system.cir
+```
+
+- **Names.** Every node, element, section and `.param` of a part gets its prefix (`in` → `A_in`, `K` → `A_K`). A part's `.param … tune` stays tunable in the system.
+- **Ports.** The parts' ports become ordinary nodes, listed in a comment per part. `--port PREFIX.node[:Z]` makes the system's ports, in order.
+- **Kept from the first part:** `.freq` and `.ref`. The `.substrate` must be the same for every part, or the tool refuses. `.plot` and `.goal` lines are dropped.
+
+Then add the tracks between the parts at the end, as `T` lines of the feed width and routed length, with a `bend` per 90° corner:
+
+```
+Tlink A_thru B_c W=1.073mm len=10mm
+```
+
+For this pair, a 10 dB coupler whose through port feeds the 3-line 20 dB coupler of worked example 15 over 10 mm of track, the system gives in → o1 −20.65 dB at 5 GHz. The two parts' own responses add to −20.61 dB, the difference being the track's loss. The coupler's own coupling is unchanged at −10.14 dB.
+
+The system netlist has the limits of its parts' core netlists (§8.1), and also lacks any coupling between parts or tracks, and corners other than the `bend`s you add. The openEMS export (§8.6) works on one `.layout` only, so check a critical neighbourhood by laying the parts out as close as on the board. To change a part, change its own netlist and export it again; tuning it inside the system netlist does not change its copper.
+
 ## 9. The model, its assumptions and limits
 
 ### 9.1 Section admittance matrix
@@ -1207,6 +1285,7 @@ Line admittances use coth and csch of γℓ, written so that they lose no precis
 | `node tools/layout.mjs FILE.cir [--svg F] [--netlist F] [--json F]` | Builds the `.layout` of a netlist, reports the board size and design-rule results, and writes the SVG preview, the as-built netlist or the layout data (§8.1). Exits with code 2 if the layout breaks a design rule. |
 | `node tools/synth.mjs SPEC.json\|JSON [--substrate ID] [--cap ideal\|smd-0603\|…\|trimmer] [--out FILE.cir]` | Filter synthesis headless: the dialog's design, and with `--substrate` its **Realise in microstrip** (§7.6). The report goes to stderr; exits with code 1 on warnings. |
 | `node tools/kicad.mjs FILE.cir --out DIR [--board] [--zip] [--mask covered] [--keepout MM] [--name PART] [--no-top-pour] [--via-pitch MM]` | Writes the `.layout` core as a self-contained KiCad 9 library (§8.2), or with `--board` the whole KiCad project (§8.3). |
+| `node tools/combine.mjs A=PART.cir B=PART.cir … [--port A.node[:Z] …] [--title T] [--out FILE]` | Joins parts' core netlists into one system netlist, each part's names prefixed (§8.7). |
 | `node tools/divider.mjs SPEC.json\|JSON [--substrate ID] [--coupled true\|false] [--gap MM] [--pitch MM] [--pkg 0603] [--out FILE.cir]` | Power dividers and hybrids (§7.9): the ideal design, or with `--substrate` the microstrip Wilkinson or branch-line with its layout line. |
 | `node tools/openems.mjs FILE.cir --out DIR [--fmin HZ] [--fmax HZ] [--excite all\|N] [--fine MM] [--zfine MM] [--nz N] [--end X] [--lossless] [--run]` | openEMS model of the `.layout` and the comparison netlist (§8.6). `--compare DIR\|FILE.cir [--at F1,…] [--port N] [--csv FILE]` tabulates the result against comb-over. |
 | `node tools/emtrim.mjs SPEC.json --substrate ID --out DIR [--rounds 4] [--target -20] [--e24]` | Trims a compact Wilkinson against openEMS by output space mapping (§7.9). Needs openEMS. |
