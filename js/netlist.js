@@ -215,7 +215,7 @@ export function parseNetlist(text, overrides = {}) {
       if (d.layout) fail(ln, 'only one .layout statement is allowed');
       const t = toks.slice(1), names = [], opts = {};
       if (!t.length) fail(ln, '.layout TEMPLATE SECTION… [pitch=..] [feed=..] [margin=..]');
-      const LEN = new Set(['pitch', 'feed', 'margin', 'gap', 'drill', 'stub']), RAW = new Set(['vias']), STR = new Set(['connector', 'launch', 'cap']);
+      const LEN = new Set(['pitch', 'feed', 'margin', 'gap', 'drill', 'stub']), RAW = new Set(['vias']), STR = new Set(['connector', 'launch', 'cap', 'mitre']);
       for (const x of t.slice(1)) {
         const k = kv(x);
         if (!k) { names.push(x); continue; }

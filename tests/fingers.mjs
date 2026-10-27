@@ -71,6 +71,16 @@ check('fingers that do not fit the pitch, or reach the other backbone, are refus
   check('coupler3 layout: the as-built netlist keeps the section (fingers, C, L) and models the side-by-side run at each end as a coupled 3-line', ab.sections.filter(s => s.N === 3).length === 3 && /fingers wf=0.13mm/.test(L.netlist) && /cline K_ea geom=msl model=field/.test(L.netlist));
   const plain = buildLayout(parseNetlist(readFileSync(new URL('../examples/coupler3-20dB-ro4350b.cir', import.meta.url), 'utf8')));
   check('coupler3 layout: the plain 3-line coupler lays out without fingers or errors', plain.errors.length === 0 && plain.items.filter(i => /^line/.test(i.label ?? '')).every(i => i.pts.length === 4));
+  // #61: the outer lines' turns are bends in both netlists and part of the core (so KiCad keeps their shape); square by
+  // default, optimally mitred with mitre=opt
+  const turnsOf = (Lx) => Lx.items.filter(i => /^turns /.test(i.label ?? ''));
+  const inCore = (Lx) => Lx.core.pads.every(p => p.node === 'c' || p.node === 'cb' || p.polys.some(P => turnsOf(Lx).some(t => t.pts === P)));
+  const nBends = (txt, m) => (txt.match(new RegExp(`^bend .* mitre=${m}$`, 'gm')) ?? []).length;
+  check('coupler3 layout (#61): by default four square turn pairs (one rectangle each: the turns sit at the ends of their straights) on the outer lines\' core pads; the as-built and core netlists carry 8 bends mitre=none', turnsOf(L).length === 4 && turnsOf(L).every(t => t.pts.length === 4) && inCore(L)
+    && nBends(L.netlist, 'none') === 8 && nBends(L.core.netlist, 'none') === 8 && parseNetlist(L.core.netlist).ports.length === 6);
+  const mt = buildLayout(parseNetlist(src.replace(/^(\.layout coupler3 K.*)$/m, '$1 mitre=opt')));
+  check('coupler3 layout (#61): mitre=opt gives optimally mitred turns, in the core and as 8 bends mitre=opt, without design-rule errors', mt.errors.length === 0 && turnsOf(mt).every(t => t.pts.length === 8) && inCore(mt) && nBends(mt.netlist, 'opt') === 8 && nBends(mt.core.netlist, 'opt') === 8);
+  check('coupler3 layout (#61): other mitre values are refused', throws(() => buildLayout(parseNetlist(src.replace(/^(\.layout coupler3 K.*)$/m, '$1 mitre=45'))), /mitre=45/));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

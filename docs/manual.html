@@ -1514,6 +1514,11 @@ end
 <td>0.2 mm</td>
 <td>longest taper from each line&#39;s width to its feed&#39;s, right at the section&#39;s end</td>
 </tr>
+<tr>
+<td><code>mitre</code> (coupler3)</td>
+<td><code>none</code></td>
+<td>the outer lines&#39; 90° turns: <code>none</code> square corners, <code>opt</code> optimally mitred (Douville &amp; James, §4.7; worked example 15 §5 has the trade-off)</td>
+</tr>
 </tbody></table></div>
 <p><strong>What the templates do:</strong></p>
 <ul>
@@ -1521,7 +1526,7 @@ end
 </li>
 <li><p><strong>Port feeds.</strong> Each port gets a feed of its reference impedance (50 Ω → the microstrip width on the substrate). The feed runs to the board edge, where an edge-launch SMA connector attaches.</p>
 </li>
-<li><p><strong>Leaving a 3-line section (<code>coupler3</code>).</strong> Each line first tapers (at most <code>taper=</code>) to its feed width, right at the section&#39;s end. The outer lines then turn straight away (90°) to their ports&#39; row. A centre-driven 3-line coupler is matched for Z0 terminations at the section itself, so a run at a line&#39;s own width there detunes it. The side-by-side run before the turn is still coupled; the as-built netlist models it as a 3-line (<code>K_ea</code>, <code>K_eb</code>). With 45° arms, or outer feeds running beside the centre feed, openEMS showed 25–50 % more coupled length than a netlist of separate lines.</p>
+<li><p><strong>Leaving a 3-line section (<code>coupler3</code>).</strong> Each line first tapers (at most <code>taper=</code>) to its feed width, right at the section&#39;s end. The outer lines then turn straight away (90°) to their ports&#39; row. A centre-driven 3-line coupler is matched for Z0 terminations at the section itself, so a run at a line&#39;s own width there detunes it. The side-by-side run before the turn is still coupled; the as-built netlist models it as a 3-line (<code>K_ea</code>, <code>K_eb</code>), up to the first turn&#39;s centre. The two turns of each outer line are <code>bend</code> elements in both netlists and part of the KiCad core (#61). They are square by default; <code>mitre=opt</code> mitres them optimally, and lengthens the straights either side so the mitre&#39;s cut ends on them. On the 20 dB couplers of worked example 15, mitring improved the outer ports&#39; match at 6–7 GHz but cost the centre input directivity, so it is not the default. With 45° arms, or outer feeds running beside the centre feed, openEMS showed 25–50 % more coupled length than a netlist of separate lines.</p>
 </li>
 <li><p><strong>Leaving a coupled line.</strong> A feed first runs diagonally (45°) at the coupled-line width. As soon as it is clear of its neighbour by the coupling gap, a linear taper of length max(w<sub>f</sub>, 3|w<sub>f</sub> − W|) widens it to the feed width w<sub>f</sub>. The taper replaces an abrupt width step and belongs to the part (§8.2). The as-built netlist models it as three stepped sections.</p>
 </li>

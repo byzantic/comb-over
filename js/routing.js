@@ -59,16 +59,22 @@ export function routeOrtho(pts0, { W, mitre = 'none', sub, name = 'R', a = 'a', 
   }
   const e = pts[pts.length - 1];
   L.push([e[0] + nN[0] * h, e[1] + nN[1] * h]); R.push([e[0] - nN[0] * h, e[1] - nN[1] * h]);
-  const poly = [...L, ...R.reverse()].map(([x, y]) => [r6(x), r6(y)]);
+  // repeated vertices (a turn right at the path's end, where the inner corner meets the end's edge) are dropped:
+  // KiCad 9 removes them when it re-saves a pad, so the footprint would not round-trip (#61)
+  let poly = [...L, ...R.reverse()].map(([x, y]) => [r6(x), r6(y)])
+    .filter((p, k, a) => { const q = a[(k + 1) % a.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 2e-6; });
+  // and so are vertices in the middle of a straight edge
+  poly = poly.filter((p, k, a) => { const o = a[(k + a.length - 1) % a.length], q = a[(k + 1) % a.length];
+    return Math.abs((p[0] - o[0]) * (q[1] - p[1]) - (p[1] - o[1]) * (q[0] - p[0])) > 1e-9; });
   // netlist: segment lengths between reference planes
   const lines = [], segLen = [];
   let node = a;
   for (let i = 0; i < dirs.length; i++) {
     const len = dirs[i][2] - (i > 0 ? h : 0) - (i < dirs.length - 1 ? h : 0);
-    if (len < -1e-9) throw new Error(`route: segment ${i + 1} (${r6(dirs[i][2])} mm) is shorter than its bends need (${r6(dirs[i][2] - len)} mm)`);
+    if (len < -1e-5) throw new Error(`route: segment ${i + 1} (${r6(dirs[i][2])} mm) is shorter than its bends need (${r6(dirs[i][2] - len)} mm)`);
     segLen.push(Math.max(len, 0));
     const end = i === dirs.length - 1 ? b : `${name}_${i + 1}e`;
-    if (len > 1e-9) lines.push(`T${name}_${i + 1} ${node} ${end} W=${r6(W)}mm len=${r6(len)}mm`);
+    if (len > 1e-5) lines.push(`T${name}_${i + 1} ${node} ${end} W=${r6(W)}mm len=${r6(len)}mm`);
     else lines.push(`wire ${node} ${end}`);
     if (i < dirs.length - 1) { const nx = `${name}_${i + 2}s`; lines.push(`bend ${name}_B${i + 1} ${end} ${nx} W=${r6(W)}mm mitre=${mitre}`); node = nx; }
   }

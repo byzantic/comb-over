@@ -27,8 +27,8 @@
   <main class="doc">
     <h1>15. A three-line coupler with fingers</h1>
 <p>A three-line coupler sends a sample of the signal on its centre line to both outer lines. On microstrip it has the same problem as a pair, more strongly: the modes travel at different speeds, so its directivity is poor. The plain 20 dB design below has symmetric modes at εeff 2.57 and 3.14, 20 % apart, and 7 dB directivity at 5 GHz in openEMS. Fingers between the lines bring the two modes that a centre-line signal excites to within 1.7 %, and the directivity to at least 27 dB from 1 to 6 GHz, with coupling centred at 5 GHz.</p>
-<p>This example extends worked example 14 to three lines. It covers the match conditions for a centre-driven coupler, the 3-line extraction and design, and the <code>coupler3</code> layout. That layout is shaped by what openEMS showed about the coupling around the section&#39;s ends.</p>
-<p>Netlists: <a href="../../index.html?example=coupler3-20dB-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler3-20dB-ro4350b.cir</code></a> (plain) · <a href="../../index.html?example=coupler3-20dB-fingers-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler3-20dB-fingers-ro4350b.cir</code></a> (finger-loaded) · results: <a href="../../examples/em/"><code>examples/em/</code></a> · issue #41. The design needs openEMS (<code>OPENEMS_PYTHON</code>) and numpy.</p>
+<p>This example extends worked example 14 to three lines. It covers the match conditions for a centre-driven coupler, the 3-line extraction and design, and the <code>coupler3</code> layout. That layout is shaped by what openEMS showed about the coupling around the section&#39;s ends. Section 5 covers driving an outer line.</p>
+<p>Netlists: <a href="../../index.html?example=coupler3-20dB-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler3-20dB-ro4350b.cir</code></a> (plain) · <a href="../../index.html?example=coupler3-20dB-fingers-ro4350b.cir" title="Open this netlist in the designer" class="designer-link"><code>examples/coupler3-20dB-fingers-ro4350b.cir</code></a> (finger-loaded) · results: <a href="../../examples/em/"><code>examples/em/</code></a> · issues #41, #60, #61. The design needs openEMS (<code>OPENEMS_PYTHON</code>) and numpy.</p>
 <h2 id="1-what-a-centre-input-needs"><a class="anchor" href="#1-what-a-centre-input-needs" aria-hidden="true">#</a>1. What a centre input needs</h2>
 <p>The lines are mirror-symmetric (outer, centre, outer). A signal on the centre line excites only the two mirror-symmetric modes:</p>
 <ul>
@@ -97,8 +97,8 @@
 <p>So <code>.layout coupler3</code> (manual §8.1):</p>
 <ul>
 <li><strong>Ends:</strong> tapers each line to its feed width right at the section&#39;s end. A centre-driven coupler&#39;s match conditions hold for Z0 terminations at the section itself: with the lines&#39; own ~56 Ω widths carried to the feeds, S33 was −12 dB.</li>
-<li><strong>Outer lines:</strong> turn straight away, 90°, to ports a pitch above and below.</li>
-<li><strong>As-built netlist:</strong> models the short side-by-side run before the turn as a coupled 3-line (<code>K_ea</code>, <code>K_eb</code>).</li>
+<li><strong>Outer lines:</strong> turn straight away, 90°, to ports a pitch above and below. The turns are square by default (section 5 has the mitred alternative).</li>
+<li><strong>As-built netlist:</strong> models the short side-by-side run before the turn as a coupled 3-line (<code>K_ea</code>, <code>K_eb</code>), up to the first turn&#39;s centre, and each turn as a <code>bend</code>.</li>
 </ul>
 <p><figure><img src="../img/ex15-layout.png" alt="The coupler3 layout around the finger-loaded section" loading="lazy"><figcaption>The coupler3 layout around the finger-loaded section</figcaption></figure></p>
 <pre><code class="language-sh">node tools/kicad.mjs examples/coupler3-20dB-fingers-ro4350b.cir --out kicad/ --board
@@ -122,59 +122,187 @@
 </thead>
 <tbody><tr>
 <td>directivity: plain (dB)</td>
-<td>14.1</td>
-<td>12.6</td>
-<td>11.2</td>
-<td>9.8</td>
-<td>7.1</td>
-<td>3.0</td>
-<td>−2.3</td>
+<td>14.2</td>
+<td>12.9</td>
+<td>11.5</td>
+<td>10.2</td>
+<td>7.6</td>
+<td>3.5</td>
+<td>−1.8</td>
 </tr>
 <tr>
 <td>directivity: fingers (dB)</td>
-<td>32.9*</td>
-<td>33.4*</td>
-<td>37.0*</td>
-<td>43.3*</td>
-<td>40.0*</td>
-<td><strong>27.1</strong></td>
-<td>19.2</td>
+<td>30.2*</td>
+<td>33.2*</td>
+<td>37.5*</td>
+<td>43.7*</td>
+<td>39.9*</td>
+<td><strong>27.3</strong></td>
+<td>19.4</td>
 </tr>
 <tr>
 <td>coupling S13, fingers: comb-over / openEMS (dB)</td>
 <td>−30.9 / −30.5</td>
 <td>−25.2 / −25.0</td>
-<td>−22.4 / −22.3</td>
+<td>−22.3 / −22.3</td>
 <td>−20.8 / −20.9</td>
 <td>−20.1 / <strong>−20.4</strong></td>
 <td>−20.1 / −20.6</td>
-<td>−20.9 / −21.5</td>
+<td>−20.8 / −21.5</td>
 </tr>
 <tr>
 <td>centre match S33, fingers (dB)</td>
 <td>−45.0</td>
 <td>−40.6</td>
 <td>−38.5</td>
-<td>−37.0</td>
-<td>−35.3</td>
+<td>−37.1</td>
+<td>−35.4</td>
 <td>−32.8</td>
 <td>−29.7</td>
 </tr>
 </tbody></table></div>
-<p>* From 1 to 5 GHz the finger coupler&#39;s isolation is −58 to −64 dB. Below about −45 dB it moves with the mesh: on the 8-cell version, halving the edge cell moved such figures by up to 10 dB and the coupling by less than 0.1 dB. Read these as &quot;above about 30 dB&quot;, not as the numbers given.</p>
+<p>* From 1 to 5 GHz the finger coupler&#39;s isolation is −58 to −65 dB. Below about −45 dB it moves with the mesh: on the 8-cell version, halving the edge cell moved such figures by up to 10 dB and the coupling by less than 0.1 dB. Read these as &quot;above about 30 dB&quot;, not as the numbers given.</p>
 <ul>
 <li><strong>Centring (#60).</strong> The extracted C and L hold for any whole number of cells at the 1 mm pitch, so the length was chosen without new openEMS runs. With 8 cells (8.0 mm) the coupling peaked near 4.0 GHz in openEMS. comb-over&#39;s as-built netlist puts the peak at 5 GHz for about 6.6 mm. openEMS runs about 8–9 % electrically longer than the netlist on this coupler (4.0 against 4.3 GHz at 8 cells), so 6 cells (6.0 mm) were chosen. openEMS then peaks at 5.0 GHz, at −20.4 dB. The design&#39;s coupling target (−20 dB at the section&#39;s own λ/4) did not need changing.</li>
-<li><strong>Coupling.</strong> comb-over agrees with openEMS within 0.3 dB to 5 GHz on the finger coupler, 0.5–0.6 dB at 6–7 GHz, and within 0.7 dB on the plain one. Both are as built, through <code>coupler3</code>.</li>
-<li><strong>Directivity.</strong> The fingers lift it from 7 dB to above 30 dB at 5 GHz, and to at least 27 dB from 1 to 6 GHz. comb-over predicts less (15–19 dB). Its as-built netlist treats the side-by-side runs at the ends as bare coupled lines, and their mode mismatch then dominates its isolation figure. So comb-over&#39;s directivity for this layout is a lower bound, not an upper one as in example 14.</li>
-<li><strong>Match.</strong> The centre port is −35 dB at 5 GHz in openEMS (comb-over −41 dB), and −30 dB at 7 GHz.</li>
+<li><strong>Coupling.</strong> comb-over agrees with openEMS within 0.3 dB to 5 GHz on the finger coupler, 0.5–0.7 dB at 6–7 GHz. On the plain one it agrees within 0.65 dB to 5 GHz, 0.9–1.7 dB at 6–7 GHz. Both are as built, through <code>coupler3</code>.</li>
+<li><strong>Directivity.</strong> The fingers lift it from 7 dB to above 30 dB at 5 GHz, and to at least 27 dB from 1 to 6 GHz. comb-over predicts less (15–20 dB). Its as-built netlist treats the side-by-side runs at the ends as bare coupled lines, and their mode mismatch then dominates its isolation figure. So comb-over&#39;s directivity for this layout is a lower bound, not an upper one as in example 14.</li>
+<li><strong>Match.</strong> The centre port is −35 dB at 5 GHz in openEMS (comb-over −40 dB), and −30 dB at 7 GHz.</li>
 <li><strong>Mesh.</strong> The plain coupler&#39;s default edge cell, a third of its 0.61 mm gap, is not converged: at 0.1 mm its coupling moved by 0.5–0.7 dB. Its committed result uses <code>--fine 0.1</code>. The finger coupler&#39;s committed result uses half its default edge cell.</li>
 </ul>
-<h2 id="5-limits"><a class="anchor" href="#5-limits" aria-hidden="true">#</a>5. Limits</h2>
+<h2 id="5-driving-an-outer-line-61"><a class="anchor" href="#5-driving-an-outer-line-61" aria-hidden="true">#</a>5. Driving an outer line (#61)</h2>
+<p>Here the input is an outer line, port 1, with the other ports terminated in Z0.</p>
+<p><strong>What depends on what.</strong> An outer-line signal splits into half the symmetric excitation and half the antisymmetric (outer lines in antiphase). The centre line sees only the symmetric half. So by reciprocity and the mirror:</p>
+<ul>
+<li><strong>Coupling and isolation are the centre input&#39;s.</strong> S31 = S13 and S41 = S23.</li>
+<li><strong>The antisymmetric mode affects only the rest.</strong> It sets the outer port&#39;s match S11, the leakage to the other outer line at the same end (S51) and at the far end (S61).</li>
+</ul>
+<p><strong>The antisymmetric mode.</strong> The design search did not set it. From the section&#39;s C and L, Za = Z11 − Z13 = 48.8 Ω and εeff = 3.53, 2–5 % below the symmetric modes. The section alone, between Z0 terminations, shows what each property does at 5 GHz:</p>
+<ul>
+<li><strong>Leakage S51</strong> is set by Za: −36 dB at 48.8 Ω, −45 dB at 50 Ω.</li>
+<li><strong>Far-end leakage S61</strong> is set by the mode&#39;s speed: −39 dB now, −44 dB at the π mode&#39;s speed.</li>
+<li><strong>S11, S31 and S41</strong> are unchanged by either.</li>
+</ul>
+<p>Both leakages are already about 14 dB or more below the coupling. So outer-input use needs no new design targets. Za = Z0 would be the target if S51 matters.</p>
+<p><strong>Result</strong> (openEMS, <code>.layout coupler3</code>, port 1):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>openEMS, outer input</th>
+<th>1 GHz</th>
+<th>2 GHz</th>
+<th>3 GHz</th>
+<th>4 GHz</th>
+<th>5 GHz</th>
+<th>6 GHz</th>
+<th>7 GHz</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>coupling to the centre S31, fingers (dB)</td>
+<td>−31.0</td>
+<td>−25.2</td>
+<td>−22.4</td>
+<td>−20.8</td>
+<td>−20.2</td>
+<td>−20.2</td>
+<td>−21.0</td>
+</tr>
+<tr>
+<td>leakage S51, fingers: comb-over / openEMS (dB)</td>
+<td>−45.5 / −48.0</td>
+<td>−39.5 / −43.3</td>
+<td>−36.6 / −40.5</td>
+<td>−35.5 / −37.9</td>
+<td>−35.3 / −36.2</td>
+<td>−35.6 / −35.3</td>
+<td>−36.1 / −34.6</td>
+</tr>
+<tr>
+<td>far-end leakage S61, fingers (dB)</td>
+<td>−54.8</td>
+<td>−53.2</td>
+<td>−48.7</td>
+<td>−47.5</td>
+<td>−50.5</td>
+<td>below −60</td>
+<td>−47.5</td>
+</tr>
+<tr>
+<td>outer match S11, fingers (dB)</td>
+<td>−38.3</td>
+<td>−29.0</td>
+<td>−53.6</td>
+<td>−33.4</td>
+<td>−37.6</td>
+<td>−23.5</td>
+<td>−19.0</td>
+</tr>
+<tr>
+<td>outer match S11, plain (dB)</td>
+<td>−25.9</td>
+<td>−25.8</td>
+<td>−36.8</td>
+<td>−40.5</td>
+<td>−33.4</td>
+<td>−23.6</td>
+<td>−30.2</td>
+</tr>
+<tr>
+<td>leakage S51, plain (dB)</td>
+<td>−45.1</td>
+<td>−38.5</td>
+<td>−36.4</td>
+<td>−35.0</td>
+<td>−34.5</td>
+<td>−34.7</td>
+<td>−34.7</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><strong>Coupling and isolation</strong> are the centre input&#39;s, as the symmetry says: in the 6-port, S31 and S13 differ by at most 0.4 dB, which is openEMS&#39;s reciprocity error here, and S41 and S23 by less than the isolation&#39;s mesh noise.</li>
+<li><strong>Leakage.</strong> S51 is about −35 dB at 5–7 GHz on both couplers, close to comb-over&#39;s figure for the section.</li>
+<li><strong>Match.</strong> The outer port is the weak point: −23 dB at 6 GHz and −19 dB at 7 GHz on the finger coupler, against the centre port&#39;s −33 and −30 dB. The difference is the two square 90° turns on each outer line: each reflects −20 dB at 7 GHz in comb-over&#39;s bend model. The as-built netlist now models them as <code>bend</code> elements (#61). With them it reproduces the size of openEMS&#39;s S11 peaks, about −20 to −25 dB, but not the frequencies of its ripple.</li>
+</ul>
+<p><strong>Mitred turns</strong> (<code>.layout coupler3 K mitre=opt</code>). An optimal mitre on the 1.07 mm feed cuts 1.2 mm along each edge. So the straight before the first turn grows from 0.54 to 0.66 mm, and the cut faces the centre line. For the finger coupler, openEMS gives:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>openEMS, fingers</th>
+<th>4 GHz</th>
+<th>5 GHz</th>
+<th>6 GHz</th>
+<th>7 GHz</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>outer match S11: square / mitred (dB)</td>
+<td>−33 / −29</td>
+<td>−38 / −27</td>
+<td>−23 / −29</td>
+<td>−19 / −33</td>
+</tr>
+<tr>
+<td>centre-input directivity: square / mitred (dB)</td>
+<td>44 / 31</td>
+<td>40 / 25</td>
+<td>27 / 21</td>
+<td>19 / 17</td>
+</tr>
+<tr>
+<td>coupling S13: square / mitred (dB)</td>
+<td>−20.9 / −21.2</td>
+<td>−20.4 / −20.7</td>
+<td>−20.6 / −20.7</td>
+<td>−21.5 / −21.4</td>
+</tr>
+</tbody></table></div>
+<p>The mitre lifts the outer port&#39;s worst-case match over 1–7 GHz from −19 to −27 dB. It costs the centre input 6–15 dB of directivity at 4–6 GHz and 0.3 dB of coupling at 5 GHz, and the plain coupler shows the same pattern. The outer match also stays near −27 dB, not the −37 dB or better the netlist predicts for mitred turns. So the remaining reflection comes from the ends of the coupled section, not from the turns. Square turns stay the default, and <code>mitre=opt</code> is there for an outer-input application that needs the match at the top of the band.</p>
+<h2 id="6-limits"><a class="anchor" href="#6-limits" aria-hidden="true">#</a>6. Limits</h2>
 <ul>
 <li><strong>The design was not driven to tolerance.</strong> The search stopped at its best point, with the symmetric modes 1.7 % apart. The centring is by cell count, which steps the band by about 0.3–0.6 GHz per cell; a finer adjustment needs a different pitch and a new extraction.</li>
 <li><strong>Per design.</strong> Each design point is two 6-port openEMS runs, about 10 minutes. A design takes a few hours.</li>
-<li><strong>Outer ports.</strong> Driving an outer line also excites the antisymmetric mode, whose speed and impedance are not designed here. Only the centre input is characterised.</li>
-<li><strong>The 90° turns are not modelled</strong> in the netlist. The 45° and 90° turns tried gave similar coupling within about 1 dB in openEMS.</li>
+<li><strong>Outer ports.</strong> The antisymmetric mode is not designed (section 5): Za is 2.4 % low, which sets S51 near −36 dB, and the outer ports&#39; match is −19 dB at 7 GHz.</li>
+<li><strong>The turns&#39; model.</strong> The 90° turns are <code>bend</code> elements on their own; the coupling between a turn and the centre line is not modelled. The 45° and 90° turns tried gave similar coupling within about 1 dB in openEMS.</li>
 </ul>
 
 <nav class="pager"><a href="14-finger-coupler.html">← 14. A velocity-equalised coupler with fingers</a><a class="next" href="../manual.html">Manual →</a></nav>
